@@ -49,6 +49,8 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
     return () => view?.removeEventListener('drop', drop as any);
   }, []);
 
+  // Senden-Knopf darf dem Textfeld den Fokus nicht wegnehmen, sonst klappt am Handy die Tastatur zu
+  const keepKeyboard = (e: React.SyntheticEvent) => { if (document.activeElement === ta.current) e.preventDefault(); };
   const send = async () => {
     const t = text.trim();
     if (disabled) return onError('Messenger ist gerade nicht verbunden.');
@@ -206,12 +208,12 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
           {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
           {ai?.features.voice && !editing && !files.length && text.trim() && (
-            <button className="icon-btn tool speak-btn" onClick={sendAsVoice} disabled={speaking} title="Als Sprachnachricht in deiner Stimme senden" aria-label="Als Sprachnachricht senden">
+            <button className="icon-btn tool speak-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={sendAsVoice} disabled={speaking} title="Als Sprachnachricht in deiner Stimme senden" aria-label="Als Sprachnachricht senden">
               {speaking ? <span className="spinner" /> : <Icon name="speak" />}
             </button>
           )}
           {hasContent || editing ? (
-            <button className="send-btn" onClick={send} aria-label="Senden"><Icon name={editing ? 'check' : 'send'} /></button>
+            <button className="send-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => { if (isTouch() && document.activeElement === ta.current) ta.current?.focus(); send(); }} aria-label="Senden"><Icon name={editing ? 'check' : 'send'} /></button>
           ) : (
             <button className="send-btn mic" onClick={startRec} aria-label="Sprachnachricht aufnehmen"><Icon name="mic" /></button>
           )}

@@ -79,6 +79,8 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
   const send = () => {
     if (!draft) return;
     const d = draft, r = replyTo?.remoteId;
+    // War die Tastatur offen, bleibt sie offen: Fokus noch im selben Tipp ins normale Eingabefeld legen
+    if (document.activeElement?.matches('textarea, input')) document.querySelector<HTMLTextAreaElement>('.composer-wrap textarea')?.focus();
     setDraft(null); setTask(''); onDone();
     (d.mode === 'voice' ? api.ai.voice(chat.id, d.text, r) : api.send(chat.id, withBot(d.text), r)).catch((e: any) => onError(e.message));
   };
@@ -114,7 +116,7 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
           <button className="btn ghost small" disabled={!!busy} onClick={() => compose(draft.mode)} title="Neu formulieren"><Icon name="refresh" size={16} /></button>
           {draft.mode === 'voice' && <button className="btn ghost small" disabled={!!busy} onClick={listen}>{busy === 'listen' ? <span className="spinner" /> : <Icon name="play" size={16} />} Anhören</button>}
           <span className="grow" />
-          <button className="btn primary small" disabled={!draft.text.trim() || !!busy} onClick={send}>
+          <button className="btn primary small" disabled={!draft.text.trim() || !!busy} onPointerDown={(e) => e.preventDefault()} onMouseDown={(e) => e.preventDefault()} onClick={send}>
             {busy === 'send' ? <span className="spinner" /> : <Icon name="send" size={16} />} Senden
           </button>
         </div>
