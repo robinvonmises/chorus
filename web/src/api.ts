@@ -173,27 +173,59 @@ export const enc = encodeURIComponent;
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
 
 /** WebSocket mit automatischem Wiederverbinden */
-export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online: boolean) => void, onUnauthorized: () => void) {
+export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online: boolean) => void, onUnauthorized: () => void, onReconnect?: () => void) {
   let ws: WebSocket | null = null;
   let closed = false;
   let delay = 1000;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let opened = false;
+  let hiddenAt = 0;
   const open = () => {
+    if (timer) { clearTimeout(timer); timer = null; }
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    ws = new WebSocket(`${proto}://${location.host}/api/ws`);
-    ws.onopen = () => { delay = 1000; onStatus(true); sendVisibility(); };
-    ws.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch { /* ignore */ } };
-    ws.onclose = (e) => {
+    const sock = new WebSocket(`${proto}://${location.host}/api/ws`);
+    ws = sock;
+    sock.onopen = () => {
+      delay = 1000; onStatus(true); sendVisibility();
+      // Nach einer Unterbrechung verpasste Nachrichten nachholen
+      if (opened) onReconnect?.();
+      opened = true;
+    };
+    sock.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch { /* ignore */ } };
+    sock.onclose = (e) => {
+      if (ws !== sock) return; // schon durch eine neue Verbindung ersetzt
       onStatus(false);
       if (closed) return;
       if (e.code === 4401) { onUnauthorized(); return; }
-      setTimeout(open, delay);
+      timer = setTimeout(open, delay);
       delay = Math.min(delay * 2, 15000);
     };
   };
+  // Zurück aus dem Hintergrund: iOS hält die Verbindung eingefroren und meldet oft nicht, dass sie tot ist.
+  // Deshalb nach einer Pause sofort neu verbinden; das holt auch alles nach, was in der Zwischenzeit kam.
+  const wake = () => {
+    if (document.visibilityState === 'hidden') { hiddenAt = Date.now(); return; }
+    if (closed) return;
+    const away = hiddenAt ? Date.now() - hiddenAt : 0;
+    hiddenAt = 0;
+    if (!ws || ws.readyState > 1 || away > 3000) {
+      const old = ws; ws = null;
+      if (old) { old.onclose = null; old.onmessage = null; try { old.close(); } catch { /* egal */ } }
+      delay = 1000;
+      open();
+    }
+  };
   // Dem Server sagen, ob die App gerade sichtbar ist: dann kommt keine Push-Benachrichtigung
   const sendVisibility = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', visible: document.visibilityState === 'visible' })); };
-  document.addEventListener('visibilitychange', sendVisibility);
+  const onVis = () => { sendVisibility(); wake(); };
+  document.addEventListener('visibilitychange', onVis);
   window.addEventListener('pagehide', sendVisibility);
+  window.addEventListener('pageshow', wake);
+  window.addEventListener('online', wake);
   open();
-  return () => { closed = true; document.removeEventListener('visibilitychange', sendVisibility); window.removeEventListener('pagehide', sendVisibility); ws?.close(); };
+  return () => {
+    closed = true; if (timer) clearTimeout(timer);
+    document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', sendVisibility);
+    window.removeEventListener('pageshow', wake); window.removeEventListener('online', wake); ws?.close();
+  };
 }
