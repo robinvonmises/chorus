@@ -1,1 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#4f46e5"/><path d="M118 190a62 62 0 0 1 62-62h92a62 62 0 0 1 62 62v20a62 62 0 0 1-62 62h-58l-50 40v-44a62 62 0 0 1-46-60z" fill="#a5b4fc"/><path d="M178 262a62 62 0 0 1 62-62h92a62 62 0 0 1 62 62v20a62 62 0 0 1-46 60v44l-50-40h-58a62 62 0 0 1-62-62z" fill="#fff"/><circle cx="246" cy="272" r="13" fill="#4f46e5"/><circle cx="286" cy="272" r="13" fill="#4f46e5"/><circle cx="326" cy="272" r="13" fill="#4f46e5"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366f1"/><stop offset="1" stop-color="#4338ca"/></linearGradient>
+<filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#1e1b4b" flood-opacity=".28"/></filter></defs><rect width="512" height="512" rx="112" fill="url(#bg)"/>
+<g transform="translate(256 256) scale(1) translate(-256 -256)">
+  <g fill="#c7d2fe">
+    <rect x="78" y="104" width="262" height="196" rx="78"/>
+    <path d="M112 262 L104 352 L188 290 Z" stroke="#c7d2fe" stroke-width="10" stroke-linejoin="round"/>
+  </g>
+  <g fill="#ffffff" filter="url(#sh)">
+    <rect x="166" y="196" width="272" height="204" rx="82"/>
+    <path d="M394 360 L412 448 L322 388 Z" stroke="#fff" stroke-width="10" stroke-linejoin="round"/>
+  </g>
+  <g fill="#4f46e5"><circle cx="248" cy="298" r="17"/><circle cx="302" cy="298" r="17"/><circle cx="356" cy="298" r="17"/></g>
+</g></svg>
