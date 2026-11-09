@@ -149,6 +149,7 @@ input, textarea { font: inherit; color: inherit; }
 .chat-head-main { flex: 1; min-width: 0; display: grid; }
 .chat-head-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-head-main small { color: var(--ink-3); font-size: 12px; }
+.chat-head .ai-compose { margin-right: -16px; }
 .menu-wrap { position: relative; }
 .menu { position: absolute; top: 44px; min-width: 200px; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 10; display: grid; }
 .menu.right { right: 0; }
