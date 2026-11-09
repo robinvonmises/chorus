@@ -283,8 +283,20 @@ export class SignalAdapter implements Adapter {
     return { quoteTimestamp: ts, quoteAuthor: author };
   }
 
+  /** Bricht die Verbindung zum Signal-Server mitten im Senden ab (SocketException), einmal kurz warten und neu versuchen. */
+  private async sendRetry(params: Record<string, unknown>, timeout?: number) {
+    try {
+      return await this.call<{ timestamp: number }>('send', params, timeout);
+    } catch (e: any) {
+      if (!/SocketException|Closed unexpectedly|Connection reset/i.test(String(e?.message ?? e))) throw e;
+      console.warn(`[signal] Senden abgebrochen (${e?.message}), neuer Versuch`);
+      await new Promise((r) => setTimeout(r, 3000));
+      return this.call<{ timestamp: number }>('send', params, timeout);
+    }
+  }
+
   async sendText(chat: string, text: string, replyTo?: string | null) {
-    const r = await this.call<{ timestamp: number }>('send', { ...this.target(chat), message: text, ...this.quote(replyTo) });
+    const r = await this.sendRetry({ ...this.target(chat), message: text, ...this.quote(replyTo) });
     return `${r.timestamp}:${this.me}`;
   }
 
@@ -296,7 +308,7 @@ export class SignalAdapter implements Adapter {
     const path = join(dir, f.name.replace(/[\/\\]/g, '_') || 'datei');
     writeFileSync(path, f.data, { mode: 0o600 });
     try {
-      const r = await this.call<{ timestamp: number }>('send', { ...this.target(chat), message: caption ?? '', attachments: [path], ...this.quote(replyTo) }, 10 * 60_000);
+      const r = await this.sendRetry({ ...this.target(chat), message: caption ?? '', attachments: [path], ...this.quote(replyTo) }, 10 * 60_000);
       return `${r.timestamp}:${this.me}`;
     } finally {
       rmSync(dir, { recursive: true, force: true });
