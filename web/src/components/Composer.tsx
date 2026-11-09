@@ -202,10 +202,10 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
         <div className={`composer ${text.trim() && !tools ? 'compact' : ''}`}>
           <button className="icon-btn tools-toggle" onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
+          {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
           <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
-          {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
           {ai?.features.voice && !editing && !files.length && text.trim() && (
             <button className="icon-btn tool speak-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={sendAsVoice} disabled={speaking} title="Als Sprachnachricht in deiner Stimme senden" aria-label="Als Sprachnachricht senden">
