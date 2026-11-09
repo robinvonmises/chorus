@@ -128,6 +128,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <small><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}{!connected && ' · nicht verbunden'}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autopilot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
         </div>
         </button>
+        <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>
         <div className="menu-wrap">
           <button className="icon-btn" onClick={() => setHeadMenu((v) => !v)} aria-label="Chat-Menü"><Icon name="more" /></button>
           {headMenu && <div className="menu-catcher" onClick={() => setHeadMenu(false)} onTouchStart={() => setHeadMenu(false)} />}
@@ -167,7 +168,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <AiPanel chat={chat} replyTo={replyTo} onClose={() => setAiOpen(false)} onError={flash}
             onUse={(text) => { setInject({ text, n: Date.now() }); setAiOpen(false); }} />
         </div>}
-        <Composer chat={chat} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject} onAi={() => setAiOpen((v) => !v)} aiOpen={aiOpen}
+        <Composer chat={chat} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
