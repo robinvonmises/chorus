@@ -225,7 +225,9 @@ export class Hub {
     const fileId = this.store.storeFile(file.data);
     const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';
     const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec }]);
-    await this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo));
+    // Nicht auf den Messenger warten: Die Nachricht steht ab jetzt im Chat und zeigt selbst „wird gesendet“, „gesendet“ oder „fehlgeschlagen“.
+    this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
+      .catch((e) => console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`));
   }
 
   async react(messageId: string, emoji: string | null) {

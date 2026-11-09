@@ -66,7 +66,8 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.ai = new Ai(store);
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
     hub.subscribe((e) => broadcast(ctx, e));
-    hub.subscribe((e) => { if (e.type === 'notify') push.notify(store, e.chat, e.message); });
+    // Push nur, wenn die App gerade nirgends offen und sichtbar ist. Sonst zeigt die App selbst einen dezenten Hinweis.
+    hub.subscribe((e) => { if (e.type === 'notify' && !appVisible(ctx)) push.notify(store, e.chat, e.message); });
     await hub.startAll();
     if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
       await hub.addAccount('demo', 'Demo', {});
@@ -637,6 +638,12 @@ app.get('/api/search', async (req) => {
 });
 
 // ---------- Live-Ereignisse ----------
+/** Sockets, deren App gerade im Vordergrund ist (meldet der Browser per visibilitychange) */
+const visibleSockets = new WeakSet<object>();
+function appVisible(c: Ctx) {
+  for (const ws of c.sockets) if (ws.readyState === 1 && visibleSockets.has(ws)) return true;
+  return false;
+}
 function broadcast(c: Ctx, e: unknown) {
   const s = JSON.stringify(e);
   for (const ws of c.sockets) if (ws.readyState === 1) ws.send(s);
@@ -647,6 +654,12 @@ app.register(async (f) => {
     if (!c) { socket.close(4401, 'Nicht angemeldet'); return; }
     c.sockets.add(socket);
     socket.on('close', () => c.sockets.delete(socket));
+    socket.on('message', (d) => {
+      try {
+        const m = JSON.parse(String(d));
+        if (m?.type === 'visibility') { if (m.visible) visibleSockets.add(socket); else visibleSockets.delete(socket); }
+      } catch { /* ignorieren */ }
+    });
     const ping = setInterval(() => socket.readyState === 1 && socket.ping(), 25_000);
     socket.on('close', () => clearInterval(ping));
   });
@@ -664,7 +677,7 @@ if (existsSync(WEB_DIR)) {
 app.setErrorHandler((err: any, _req, reply) => {
   const code = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
   if (code >= 500) app.log.error(err);
-  reply.code(code).send({ error: err.message ?? 'Fehler' });
+  reply.code(code).send({ error: err.message || (code >= 500 ? 'Unbekannter Fehler auf dem Server' : 'Fehler') });
 });
 
 for (const p of registry.all()) {

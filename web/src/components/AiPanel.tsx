@@ -48,7 +48,7 @@ export function AiPanel({ chat, replyTo, onClose, onUse, onError }: {
         <CloseBtn onClose={onClose} />
       </div>
       {!ai ? <p className="muted">Lade …</p>
-        : tab === 'write' ? <WriteTab chat={chat} replyTo={replyTo} busy={busy} run={run} voiceOk={ai.features.voice} dictateOk={ai.features.transcribe} openSettings={openSettings} onError={onError} />
+        : tab === 'write' ? <WriteTab chat={chat} replyTo={replyTo} busy={busy} run={run} voiceOk={ai.features.voice} dictateOk={ai.features.transcribe} openSettings={openSettings} onError={onError} onDone={onClose} />
         : !chat.aiEnabled ? <OptIn chat={chat} busy={busy} run={run} what={tab === 'auto' ? 'Der Autopilot' : 'Zusammenfassen und Vorschläge'} />
         : tab === 'overview' ? <OverviewTab chat={chat} busy={busy} run={run} onUse={onUse} />
         : <AutoTab chat={chat} onError={onError} />}
@@ -63,8 +63,8 @@ function CloseBtn({ onClose }: { onClose: () => void }) {
 type Run = (what: Busy, fn: () => Promise<void>) => Promise<void>;
 
 /** Reiter „Schreiben“: Auftrag tippen oder sprechen, als Text oder Sprachnachricht */
-function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, onError }: {
-  chat: Chat; replyTo: Message | null; busy: Busy; run: Run; voiceOk: boolean; dictateOk: boolean; openSettings: () => void; onError: (t: string) => void;
+function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, onError, onDone }: {
+  chat: Chat; replyTo: Message | null; busy: Busy; run: Run; voiceOk: boolean; dictateOk: boolean; openSettings: () => void; onError: (t: string) => void; onDone: () => void;
 }) {
   const [task, setTask] = useState('');
   const [mode, setMode] = useState<'text' | 'voice'>(voiceOk ? 'voice' : 'text');
@@ -75,11 +75,13 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
   useEffect(() => { const el = ta.current; if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 120) + 'px'; } }, [task]);
 
   const compose = (m = mode) => task.trim() && run('compose', async () => setDraft({ text: (await api.ai.compose(chat.id, task, m)).text, mode: m }));
-  const send = () => draft && run('send', async () => {
-    if (draft.mode === 'voice') await api.ai.voice(chat.id, draft.text, replyTo?.remoteId);
-    else await api.send(chat.id, withBot(draft.text), replyTo?.remoteId);
-    setDraft(null); setTask('');
-  });
+  // Senden schließt die KI-Leiste sofort, die Nachricht erscheint dann wie gewohnt im Chat
+  const send = () => {
+    if (!draft) return;
+    const d = draft, r = replyTo?.remoteId;
+    setDraft(null); setTask(''); onDone();
+    (d.mode === 'voice' ? api.ai.voice(chat.id, d.text, r) : api.send(chat.id, withBot(d.text), r)).catch((e: any) => onError(e.message));
+  };
   const listen = () => draft && run('listen', async () => {
     const { audio, mime } = await api.ai.preview(chat.id, draft.text);
     await new Audio(`data:${mime};base64,${audio}`).play();
