@@ -2,13 +2,26 @@
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', () => {});
+// Ziel einer angetippten Benachrichtigung. iOS weckt eine eingefrorene App nur langsam auf und verliert dabei
+// manchmal die Nachricht. Deshalb merkt sich der Service Worker das Ziel, und die App fragt beim Aufwachen nach.
+let pendingOpen = null;
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const chat = e.notification.data && e.notification.data.chatId;
+  pendingOpen = chat ? { chat, at: Date.now() } : null;
   e.waitUntil(self.clients.matchAll({ type: 'window' }).then((cs) => {
-    for (const c of cs) { c.focus(); c.postMessage({ openChat: chat }); return; }
-    return self.clients.openWindow('/' + (chat ? '#chat=' + encodeURIComponent(chat) : ''));
+    if (!cs.length) return self.clients.openWindow('/' + (chat ? '#chat=' + encodeURIComponent(chat) : ''));
+    const c = cs.find((x) => x.focused) || cs[0];
+    for (const x of cs) x.postMessage({ openChat: chat });
+    return c.focus().catch(() => {});
   }));
+});
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'pending-open') {
+    const p = pendingOpen && Date.now() - pendingOpen.at < 15000 ? pendingOpen.chat : null;
+    pendingOpen = null;
+    if (p && e.source) e.source.postMessage({ openChat: p });
+  }
 });
 
 // Echte Push-Benachrichtigungen vom Chorus-Server

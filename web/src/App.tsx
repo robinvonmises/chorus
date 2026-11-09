@@ -143,7 +143,15 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     window.addEventListener('hashchange', h);
     const sw = (ev: MessageEvent) => ev.data?.openChat && openChat(ev.data.openChat);
     navigator.serviceWorker?.addEventListener('message', sw);
-    return () => { window.removeEventListener('hashchange', h); navigator.serviceWorker?.removeEventListener('message', sw); };
+    // Beim Aufwachen nachfragen, ob eine Benachrichtigung angetippt wurde (falls die Nachricht unterwegs verloren ging)
+    const ask = () => { if (document.visibilityState === 'visible') navigator.serviceWorker?.controller?.postMessage({ type: 'pending-open' }); };
+    document.addEventListener('visibilitychange', ask);
+    window.addEventListener('focus', ask);
+    ask();
+    return () => {
+      window.removeEventListener('hashchange', h); navigator.serviceWorker?.removeEventListener('message', sw);
+      document.removeEventListener('visibilitychange', ask); window.removeEventListener('focus', ask);
+    };
   }, []);
 
   useEffect(() => {

@@ -38,6 +38,20 @@ if (vv) {
     if (!typing() && touch && maxH - vv.height > 120) set(maxH, false); // schon mit zurückgleiten
     else fit();
   }, 30));
+  // Zurück aus dem Hintergrund (z. B. über eine Benachrichtigung): iOS meldet die Fenstergröße erst verspätet
+  // und lässt oft noch die alte Tastaturhöhe stehen. Deshalb beim Wegwechseln die Tastatur schließen und beim
+  // Zurückkommen sofort die volle Höhe setzen, ohne Animation, damit nichts nachträglich an seinen Platz rutscht.
+  const snap = () => {
+    root.classList.remove('vv-ready');
+    set(maxH || vv.height, false);
+    requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add('vv-ready')));
+  };
+  document.addEventListener('visibilitychange', () => {
+    if (!touch) return;
+    if (document.visibilityState === 'hidden') { (document.activeElement as HTMLElement | null)?.blur?.(); snap(); }
+    else if (!typing()) snap();
+  });
+  window.addEventListener('pageshow', () => { if (touch && !typing()) snap(); });
   vv.addEventListener('resize', fit);
   vv.addEventListener('scroll', fit);
   fit();
