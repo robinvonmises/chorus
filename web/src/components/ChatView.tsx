@@ -117,6 +117,17 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     return out;
   }, [messages]);
 
+  // Wie bei iMessage: Wer im Verlauf mit dem Finger nach unten wischt (also nach oben scrollt), schließt die Tastatur
+  const touchY = useRef<number | null>(null);
+  const touchStart = (e: React.TouchEvent) => { touchY.current = e.touches[0]?.clientY ?? null; };
+  const touchMove = (e: React.TouchEvent) => {
+    const y = e.touches[0]?.clientY;
+    if (touchY.current == null || y == null || y - touchY.current < 12) return;
+    touchY.current = null;
+    const a = document.activeElement as HTMLElement | null;
+    if (a?.matches('textarea, input')) a.blur();
+  };
+
   return (
     <div className="chat-view" data-net={chat.network} onDragOver={(e) => e.preventDefault()}>
       <header className="chat-head">
@@ -145,7 +156,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       </header>
 
       {loadingOld && <div className="loading-old floating">Lade ältere Nachrichten …</div>}
-      <div className="messages" ref={scroller} onScroll={onScroll}>
+      <div className="messages" ref={scroller} onScroll={onScroll} onTouchStart={touchStart} onTouchMove={touchMove}>
         <div className="messages-inner" ref={inner}>
         {!messages && <div className="loading-old">Lade …</div>}
         {messages && !messages.length && <div className="loading-old">Noch keine Nachrichten.</div>}
