@@ -182,6 +182,9 @@ input, textarea { font: inherit; color: inherit; }
 .bubble.media-only .meta { position: absolute; right: 10px; bottom: 8px; background: rgba(0,0,0,.45); color: #fff; padding: 1px 6px; border-radius: 8px; opacity: 1; margin: 0; }
 .st.read { color: #7dd3fc; opacity: 1; }
 .msg.in .st.read { color: var(--accent); }
+/* Gelesen-Haken in der Farbe des Messengers: Signal blau, WhatsApp grün */
+.chat-view[data-net="whatsapp"] .msg.out .st.read { color: #bef264; }
+.chat-view[data-net="signal"] .msg.out .st.read { color: #7dd3fc; }
 .st.failed { color: #fca5a5; opacity: 1; }
 .quote { display: grid; text-align: left; width: 100%; border-left: 3px solid currentColor; padding: 4px 8px; margin: 2px 0 6px; border-radius: 6px; background: rgba(127,127,127,.12); font-size: 13px; }
 .quote span { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
