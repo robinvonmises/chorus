@@ -126,7 +126,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       if (document.visibilityState === 'visible') { if (e.chat.id !== activeRef.current) showBanner(e.chat, e.message); }
       else notify(e.chat, e.message);
     }
-  }, onlineStatus, onLocked), [onLocked]);
+  }, onlineStatus, onLocked, () => refreshRef.current()), [onLocked]);
 
   const [banner, setBanner] = useState<{ chat: Chat; text: string; n: number } | null>(null);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -194,6 +194,24 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     if (again.length) setMessages((m) => new Map(m).set(active, [...again, ...(m.get(active) ?? [])]));
     return again.length > 0;
   }, [active, messages]);
+
+  // Nach dem Wiederverbinden (z. B. App aus dem Hintergrund geholt): Chatliste und offenen Chat frisch laden
+  const refreshRef = useRef<() => void>(() => {});
+  refreshRef.current = () => {
+    api.chats().then((cs) => setChats(new Map(cs.map((c) => [c.id, c])))).catch(() => {});
+    api.accounts().then(setAccounts).catch(() => {});
+    loaded.current.clear(); // andere Chats beim Öffnen neu holen
+    const id = activeRef.current;
+    if (id) {
+      loaded.current.add(id);
+      api.messages(id).then((ms) => setMessages((m) => {
+        const cur = m.get(id);
+        if (cur && cur.length === ms.length && cur.at(-1)?.id === ms.at(-1)?.id && cur.at(-1)?.status === ms.at(-1)?.status) return m;
+        return new Map(m).set(id, ms);
+      })).catch(() => {});
+      if (document.visibilityState === 'visible') api.markRead(id).catch(() => {});
+    }
+  };
 
   const reload = useCallback(async () => {
     const [as, cs] = await Promise.all([api.accounts(), api.sync().catch(() => api.chats())]);
