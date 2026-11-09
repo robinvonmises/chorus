@@ -1,0 +1,425 @@
+import { randomUUID } from 'node:crypto';
+import type { Store } from './db.js';
+import { toOggOpus } from './audio.js';
+import type { Account, AccountStatus, Adapter, AdapterEvents, Attachment, Network, OutgoingFile, Message, Chat } from './types.js';
+
+export type AdapterFactory = (opts: {
+  accountId: string;
+  config: Record<string, unknown>;
+  session: string | null;
+  events: AdapterEvents;
+  dataDir: string;
+}) => Adapter;
+
+export type HubEvent =
+  | { type: 'account'; account: Account }
+  | { type: 'account_removed'; id: string }
+  | { type: 'chat'; chat: Chat }
+  | { type: 'message'; message: Message; replacedId?: string }
+  | { type: 'notify'; chat: Chat; message: Message };
+
+/** Zentrale: hält alle Adapter, speichert Ereignisse, verteilt sie an verbundene Browser */
+export { fixKind } from './kinds.js';
+import { fixKind, sniffKind } from './kinds.js';
+
+const MAX_AUTO_MEDIA = Number(process.env.MAX_AUTO_MEDIA_MB ?? 200) * 1024 * 1024;
+
+export class Hub {
+  private adapters = new Map<string, Adapter>();
+  private statuses = new Map<string, AccountStatus>();
+  private subscribers = new Set<(e: HubEvent) => void>();
+  /** Neue eingehende Nachrichten (für den Autopiloten) */
+  readonly incoming = new Set<(chat: Chat, msg: Message) => void>();
+  /** Eigene Nummern/Namen je Konto (für Erwähnungen) */
+  selfOf(accountId: string): string | undefined { return this.statuses.get(accountId)?.self; }
+
+  constructor(
+    public store: Store,
+    private factories: Partial<Record<Network, AdapterFactory>>,
+    private dataDir: string,
+  ) {}
+
+  subscribe(fn: (e: HubEvent) => void) { this.subscribers.add(fn); return () => this.subscribers.delete(fn); }
+  private emit(e: HubEvent) { for (const s of this.subscribers) { try { s(e); } catch { /* ignore */ } } }
+
+  get availableNetworks(): Network[] { return Object.keys(this.factories) as Network[]; }
+
+  accounts(): Account[] {
+    return this.store.listAccountRows().map((r) => ({
+      id: r.id, network: r.network, label: r.label, createdAt: r.created_at,
+      status: this.statuses.get(r.id) ?? { state: 'disconnected' },
+    }));
+  }
+  private account(id: string): Account | undefined { return this.accounts().find((a) => a.id === id); }
+
+  async startAll() {
+    for (const r of this.store.listAccountRows()) await this.startAccount(r.id).catch((e) => console.error('[hub] start', r.id, e));
+  }
+
+  async stopAll() {
+    clearInterval(this.staleTimer);
+    for (const a of this.adapters.values()) await a.stop().catch(() => {});
+    this.adapters.clear();
+  }
+
+  private makeEvents(accountId: string, network: Network): AdapterEvents {
+    const store = this.store;
+    const chatId = (remote: string) => `${accountId}:${remote}`;
+    return {
+      status: (s) => {
+        const was = this.statuses.get(accountId)?.state;
+        this.statuses.set(accountId, s);
+        if (s.state === 'connected' && was !== 'connected') setTimeout(() => this.queueStaleContacts(accountId), 20_000);
+        const a = this.account(accountId);
+        if (a) this.emit({ type: 'account', account: a });
+      },
+      chat: (c) => {
+        const chat = store.upsertChat({ ...c, accountId, network });
+        this.emit({ type: 'chat', chat });
+      },
+      message: (m) => {
+        const cid = chatId(m.chatRemoteId);
+        if (!store.getChat(cid)) {
+          store.upsertChat({ accountId, network, remoteId: m.chatRemoteId, title: m.senderName || m.chatRemoteId, kind: 'direct', lastTs: 0, lastText: '' });
+        }
+        const { chatRemoteId: _c, ...rest } = m;
+        rest.attachments = rest.attachments.map(fixKind);
+        const prevLastTs = store.getChat(cid)!.lastTs;
+        const { msg, isNew } = store.upsertMessage({ ...rest, chatId: cid });
+        if (isNew) {
+          const preview = previewText(msg);
+          // Ungelesen nur zählen, wenn die Nachricht neuer ist als alles Bekannte (nicht beim Nachladen)
+          store.touchChat(cid, msg.ts, preview, !msg.fromMe && msg.ts > prevLastTs);
+          // Archivierte Chats bleiben im Archiv und melden sich nicht
+          const chat = store.getChat(cid)!;
+          if (!chat.info?.fetchedAt) this.queueContact(cid);
+          this.emit({ type: 'chat', chat });
+          if (!msg.fromMe && Date.now() - msg.ts < 60_000 && !chat.muted && !chat.archived) this.emit({ type: 'notify', chat, message: msg });
+          if (!msg.fromMe && Date.now() - msg.ts < 5 * 60_000) for (const f of this.incoming) { try { f(chat, msg); } catch { /* ignore */ } }
+          if (msg.attachments.some((a) => !a.fileId)) this.queueMedia(msg.id);
+        }
+        this.emit({ type: 'message', message: msg });
+      },
+      messageUpdate: (chatRemote, remoteId, patch) => {
+        // Sonderformen: '<=123' = alle eigenen bis ID 123 (Lesebestätigung), Chat '*' = Chat unbekannt
+        const ids = remoteId.startsWith('<=')
+          ? store.outgoingUpTo(chatId(chatRemote), Number(remoteId.slice(2)))
+          : chatRemote === '*' ? store.findByRemote(accountId, remoteId) : [`${chatId(chatRemote)}:${remoteId}`];
+        for (const id of ids) {
+          const msg = store.patchMessage(id, patch);
+          if (msg) this.emit({ type: 'message', message: msg });
+        }
+      },
+      reactions: (chatRemote, remoteId, reactions) => {
+        const msg = store.patchMessage(`${chatId(chatRemote)}:${remoteId}`, { reactions });
+        if (msg) this.emit({ type: 'message', message: msg });
+      },
+      reactionChange: (chatRemote, remoteId, r, remove) => {
+        const id = `${chatId(chatRemote)}:${remoteId}`;
+        const cur = store.getMessage(id);
+        if (!cur) return;
+        const others = cur.reactions.filter((x) => x.senderId !== r.senderId && !(r.fromMe && x.fromMe));
+        const msg = store.patchMessage(id, { reactions: remove ? others : [...others, r] });
+        if (msg) this.emit({ type: 'message', message: msg });
+      },
+      storeFile: (data) => store.storeFile(data),
+      getMessage: (chatRemote, remoteId) => store.getMessage(`${chatId(chatRemote)}:${remoteId}`),
+      saveSession: (data) => store.saveSession(accountId, data),
+      log: (msg) => console.log(`[${network}:${accountId}] ${msg}`),
+    };
+  }
+
+  async startAccount(id: string) {
+    const row = this.store.getAccountRow(id);
+    if (!row) throw new Error('Konto nicht gefunden');
+    const f = this.factories[row.network];
+    if (!f) throw new Error(`Messenger ${row.network} ist in dieser Version nicht verfügbar`);
+    const old = this.adapters.get(id);
+    if (old) await old.stop().catch(() => {});
+    const adapter = f({ accountId: id, config: JSON.parse(row.config), session: row.session, events: this.makeEvents(id, row.network), dataDir: this.dataDir });
+    this.adapters.set(id, adapter);
+    this.statuses.set(id, { state: 'connecting' });
+    adapter.start().catch((e) => {
+      this.statuses.set(id, { state: 'error', message: String(e?.message ?? e) });
+      const a = this.account(id); if (a) this.emit({ type: 'account', account: a });
+    });
+  }
+
+  async addAccount(network: Network, label: string, config: Record<string, unknown>) {
+    if (!this.factories[network]) throw new Error('Messenger nicht verfügbar');
+    const id = this.store.createAccount(network, label, config);
+    await this.startAccount(id);
+    return this.account(id)!;
+  }
+
+  async removeAccount(id: string) {
+    const a = this.adapters.get(id);
+    if (a) { await a.logout().catch(() => {}); await a.stop().catch(() => {}); }
+    this.adapters.delete(id);
+    this.statuses.delete(id);
+    this.store.deleteAccount(id);
+    this.emit({ type: 'account_removed', id });
+  }
+
+  async input(id: string, field: string, value: string) {
+    const a = this.adapters.get(id);
+    if (!a) throw new Error('Konto läuft nicht');
+    await a.input(field, value);
+  }
+
+  private adapterFor(chat: Chat): Adapter {
+    const a = this.adapters.get(chat.accountId);
+    if (!a) throw new Error('Konto ist nicht verbunden');
+    return a;
+  }
+
+  private chatOrThrow(chatId: string): Chat {
+    const c = this.store.getChat(chatId);
+    if (!c) throw new Error('Chat nicht gefunden');
+    return c;
+  }
+
+  /** Optimistisch: Nachricht sofort anzeigen, dann senden */
+  private pending(chat: Chat, text: string, replyTo: string | null | undefined, attachments: Message['attachments']): Message {
+    const tmp = 'local-' + randomUUID();
+    const { msg } = this.store.upsertMessage({
+      chatId: chat.id, remoteId: tmp, senderId: 'me', senderName: 'Ich', fromMe: true, ts: Date.now(), text,
+      replyToRemoteId: replyTo ?? null, edited: false, deleted: false, attachments, status: 'pending',
+    });
+    this.emit({ type: 'message', message: msg });
+    return msg;
+  }
+
+  private async finish(chat: Chat, tmp: Message, send: () => Promise<string>): Promise<Message | null> {
+    try {
+      const remoteId = await send();
+      const msg = this.store.renameMessage(tmp.id, remoteId, chat.id);
+      if (msg) {
+        const m2 = msg.status === 'pending' ? this.store.patchMessage(msg.id, { status: 'sent' })! : msg;
+        this.emit({ type: 'message', message: m2, replacedId: tmp.id });
+        this.store.touchChat(chat.id, m2.ts, previewText(m2), false);
+        this.emit({ type: 'chat', chat: this.store.getChat(chat.id)! });
+        return m2;
+      }
+      return null;
+    } catch (e) {
+      const msg = this.store.patchMessage(tmp.id, { status: 'failed' });
+      if (msg) this.emit({ type: 'message', message: msg });
+      throw e;
+    }
+  }
+
+  async sendText(chatId: string, text: string, replyTo?: string | null) {
+    const chat = this.chatOrThrow(chatId);
+    const a = this.adapterFor(chat);
+    const tmp = this.pending(chat, text, replyTo, []);
+    return this.finish(chat, tmp, () => a.sendText(chat.remoteId, text, replyTo));
+  }
+
+  async sendFile(chatId: string, file: OutgoingFile, caption?: string, replyTo?: string | null) {
+    const chat = this.chatOrThrow(chatId);
+    const a = this.adapterFor(chat);
+    if (file.voice && !/ogg/.test(file.mime)) {
+      file = { ...file, data: await toOggOpus(file.data), mime: 'audio/ogg', name: file.name.replace(/\.[^.]+$/, '') + '.ogg' };
+    }
+    const fileId = this.store.storeFile(file.data);
+    const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';
+    const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec }]);
+    await this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo));
+  }
+
+  async react(messageId: string, emoji: string | null) {
+    const msg = this.store.getMessage(messageId);
+    if (!msg) throw new Error('Nachricht nicht gefunden');
+    const chat = this.chatOrThrow(msg.chatId);
+    await this.adapterFor(chat).react(chat.remoteId, msg.remoteId, emoji);
+    // Lokal sofort aktualisieren (Adapter meldet ggf. später die echte Liste)
+    const others = msg.reactions.filter((r) => !r.fromMe);
+    const reactions = emoji ? [...others, { emoji, senderId: 'me', fromMe: true }] : others;
+    const m = this.store.patchMessage(messageId, { reactions });
+    if (m) this.emit({ type: 'message', message: m });
+  }
+
+  async edit(messageId: string, text: string) {
+    const msg = this.store.getMessage(messageId);
+    if (!msg || !msg.fromMe) throw new Error('Nur eigene Nachrichten können bearbeitet werden');
+    const chat = this.chatOrThrow(msg.chatId);
+    await this.adapterFor(chat).edit(chat.remoteId, msg.remoteId, text);
+    const m = this.store.patchMessage(messageId, { text, edited: true });
+    if (m) this.emit({ type: 'message', message: m });
+  }
+
+  async delete(messageId: string, forEveryone: boolean) {
+    const msg = this.store.getMessage(messageId);
+    if (!msg) throw new Error('Nachricht nicht gefunden');
+    const chat = this.chatOrThrow(msg.chatId);
+    if (!msg.remoteId.startsWith('local-')) await this.adapterFor(chat).delete(chat.remoteId, msg.remoteId, forEveryone);
+    const m = this.store.patchMessage(messageId, { deleted: true, text: '', attachments: [] });
+    if (m) this.emit({ type: 'message', message: m });
+  }
+
+  async markRead(chatId: string) {
+    const chat = this.chatOrThrow(chatId);
+    this.store.updateChat(chatId, { unread: 0 });
+    this.emit({ type: 'chat', chat: this.store.getChat(chatId)! });
+    const last = this.store.listMessages(chatId, undefined, 1)[0];
+    if (last && !last.fromMe) await this.adapters.get(chat.accountId)?.markRead(chat.remoteId, last.remoteId).catch(() => {});
+  }
+
+  async fetchAttachment(chat: Chat, remoteId: string, index: number, att?: Attachment): Promise<Buffer> {
+    return this.adapterFor(chat).fetchAttachment(chat.remoteId, remoteId, index, att);
+  }
+
+  /** Inhalt eines Anhangs: aus dem Tresor oder einmalig beim Messenger abholen und speichern */
+  // ---------- Medien automatisch sichern ----------
+  // Messenger halten Anhänge nur begrenzt bereit (Signal z. B. etwa 45 Tage). Damit Chorus als Archiv taugt,
+  // werden neue Anhänge im Hintergrund heruntergeladen und verschlüsselt gespeichert.
+  private mediaQueue: string[] = [];
+  private mediaBusy = false;
+  get autoSaveMedia(): boolean { return this.store.getSetting('media', { autoSave: true }).autoSave; }
+  set autoSaveMedia(on: boolean) { this.store.setSetting('media', { autoSave: on }); }
+  private queueMedia(messageId: string) {
+    if (!this.autoSaveMedia) return;
+    this.mediaQueue.push(messageId);
+    if (!this.mediaBusy) this.drainMedia();
+  }
+  private async drainMedia() {
+    this.mediaBusy = true;
+    while (this.mediaQueue.length) {
+      const id = this.mediaQueue.shift()!;
+      const msg = this.store.getMessage(id);
+      if (!msg) continue;
+      for (let i = 0; i < msg.attachments.length; i++) {
+        const a = msg.attachments[i];
+        if (a.fileId || (a.size && a.size > MAX_AUTO_MEDIA)) continue;
+        await this.attachmentData(this.store.getMessage(id) ?? msg, i).catch(() => {});
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    this.mediaBusy = false;
+  }
+
+  async attachmentData(msg: Message, index: number): Promise<Buffer> {
+    const att = msg.attachments[index];
+    if (!att) throw new Error('Anhang nicht gefunden');
+    const cached = att.fileId ? this.store.readFile(att.fileId) : null;
+    if (cached) return cached;
+    const data = await this.fetchAttachment(this.chatOrThrow(msg.chatId), msg.remoteId, index, att);
+    const fileId = this.store.storeFile(data);
+    const cur = this.store.getMessage(msg.id) ?? msg;
+    const fixed = sniffKind(cur.attachments[index] ?? att, data);
+    const m2 = this.store.patchMessage(msg.id, { attachments: cur.attachments.map((a, j) => (j === index ? { ...fixed, fileId, size: data.length } : a)) });
+    if (m2 && fixed.kind !== att.kind) this.emit({ type: 'message', message: m2 });
+    return data;
+  }
+
+  // ---------- Kontaktprofile (Bild, Nummer, Status) ----------
+  // Langsam im Hintergrund, damit kein Messenger wegen zu vieler Anfragen bremst.
+  private contactQueue: string[] = [];
+  private contactBusy = false;
+  queueContact(chatId: string, front = false) {
+    if (this.contactQueue.includes(chatId)) return;
+    if (front) this.contactQueue.unshift(chatId); else this.contactQueue.push(chatId);
+    if (!this.contactBusy) this.drainContacts();
+  }
+  /** Profile ohne Bild öfter neu versuchen (6 h), sonst wöchentlich auffrischen */
+  private staleTimer = setInterval(() => this.queueStaleContacts(), 10 * 60_000);
+  queueStaleContacts(accountId?: string, all = false) {
+    const now = Date.now();
+    for (const c of this.store.listChats()) {
+      if (accountId && c.accountId !== accountId) continue;
+      if (this.statuses.get(c.accountId)?.state !== 'connected') continue;
+      const age = now - (c.info?.fetchedAt ?? 0);
+      // Bild fehlt, ohne dass der Messenger „kein Bild“ gemeldet hat (Fehler, Zeitlimit): nach 20 Min. erneut
+      if (all || age > 7 * 864e5 || (!c.avatar && !c.info?.noAvatar && age > 20 * 60_000)) this.queueContact(c.id);
+    }
+  }
+  private async drainContacts() {
+    this.contactBusy = true;
+    while (this.contactQueue.length) {
+      const id = this.contactQueue.shift()!;
+      await this.refreshContact(id).catch(async (e) => {
+        const c = this.store.getChat(id);
+        if (e?.code === 'gone' && c) { // Chat existiert beim Messenger nicht mehr: erst in 7 Tagen wieder fragen
+          this.store.setChatInfo(id, { ...(c.info ?? {}), fetchedAt: Date.now(), noAvatar: true });
+          return;
+        }
+        console.warn(`[profil] ${c?.network ?? '?'} ${c?.kind ?? ''}: ${e?.message ?? e}`);
+        const wait = Number(e?.seconds) || (/FLOOD|rate-overlimit|429/i.test(String(e?.message)) ? 60 : 0);
+        if (wait) await new Promise((r) => setTimeout(r, Math.min(wait, 600) * 1000)); // Messenger bremst: Pause
+      });
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    this.contactBusy = false;
+  }
+  async refreshContact(chatId: string) {
+    const chat = this.chatOrThrow(chatId);
+    const a = this.adapters.get(chat.accountId);
+    if (!a?.contactInfo || this.statuses.get(chat.accountId)?.state !== 'connected') throw new Error('Der Messenger ist gerade nicht verbunden');
+    const { avatar, ...info } = await a.contactInfo(chat.remoteId, chat.kind);
+    const merged = { ...(chat.info ?? {}), ...info, fetchedAt: Date.now(), noAvatar: avatar === null };
+    if (avatar === undefined) this.store.setChatInfo(chatId, merged);
+    else if (avatar === null) this.store.setChatInfo(chatId, merged, null);
+    else {
+      const same = chat.avatarFileId && this.store.readFile(chat.avatarFileId)?.equals(avatar);
+      this.store.setChatInfo(chatId, merged, same ? chat.avatarFileId! : this.store.storeFile(avatar));
+    }
+    return this.emitChat(chatId)!;
+  }
+  async resync() {
+    for (const [id, a] of this.adapters) if (this.statuses.get(id)?.state === 'connected') await a.resync?.().catch(() => {});
+    this.queueStaleContacts();
+  }
+
+  setTranscript(messageId: string, transcript: string) {
+    const m = this.store.patchMessage(messageId, { transcript });
+    if (m) this.emit({ type: 'message', message: m });
+    return m;
+  }
+
+  emitChat(chatId: string) {
+    const c = this.store.getChat(chatId);
+    if (c) this.emit({ type: 'chat', chat: c });
+    return c;
+  }
+
+  setChatAi(chatId: string, on: boolean) {
+    this.store.updateChat(chatId, { aiEnabled: on });
+    const before = this.store.getChat(chatId);
+    if (!on && before?.autopilot?.on) this.store.setAutopilot(chatId, { ...before.autopilot, on: false });
+    const c = this.store.getChat(chatId);
+    if (c) this.emit({ type: 'chat', chat: c });
+    return c;
+  }
+
+  /** Neuen Chat per Telefonnummer anlegen (Signal, WhatsApp) */
+  async startChat(accountId: string, phoneRaw: string): Promise<Chat> {
+    let phone = phoneRaw.replace(/[\s\-\/()]/g, '');
+    if (phone.startsWith('00')) phone = '+' + phone.slice(2);
+    else if (phone.startsWith('0')) phone = '+49' + phone.slice(1);
+    if (!/^\+\d{7,15}$/.test(phone)) throw Object.assign(new Error('Bitte die Nummer mit Ländervorwahl eingeben, z. B. +49 170 1234567.'), { statusCode: 400 });
+    const a = this.adapters.get(accountId);
+    if (!a) throw new Error('Konto ist nicht verbunden');
+    if (!a.resolvePhone) throw Object.assign(new Error('Bei diesem Messenger geht das nicht über die Nummer. Suche den Kontakt in der Liste.'), { statusCode: 400 });
+    const { remoteId, title } = await a.resolvePhone(phone);
+    const row = this.store.getAccountRow(accountId)!;
+    const existing = this.store.getChat(`${accountId}:${remoteId}`);
+    const chat = existing ?? this.store.upsertChat({ accountId, network: row.network, remoteId, title, kind: 'direct', lastTs: 0, lastText: '' });
+    this.emit({ type: 'chat', chat });
+    return chat;
+  }
+
+  async loadHistory(chatId: string) {
+    const chat = this.chatOrThrow(chatId);
+    const oldest = this.store.oldestMessage(chatId);
+    await this.adapters.get(chat.accountId)?.loadHistory(chat.remoteId, oldest?.remoteId ?? null, 50);
+  }
+}
+
+export function previewText(m: Message): string {
+  if (m.deleted) return 'Nachricht gelöscht';
+  if (m.text) return m.text.slice(0, 200);
+  const a = m.attachments[0];
+  if (!a) return '';
+  return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
+}

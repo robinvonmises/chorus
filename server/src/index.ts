@@ -1,0 +1,736 @@
+import { createRequire } from 'node:module';
+import { Push } from './push.js';
+import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
+import websocket from '@fastify/websocket';
+import cookie from '@fastify/cookie';
+import multipart from '@fastify/multipart';
+import rateLimit from '@fastify/rate-limit';
+import fastifyStatic from '@fastify/static';
+import { randomBytes } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { join, resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Vault } from './vault.js';
+import { ProfileRegistry, type ProfileEntry } from './profiles.js';
+import { Store } from './db.js';
+import { Hub, type AdapterFactory } from './hub.js';
+import type { Network } from './types.js';
+import { telegramFactory } from './adapters/telegram.js';
+import { demoFactory } from './adapters/demo.js';
+import { signalFactory } from './adapters/signal.js';
+import { whatsappFactory } from './adapters/whatsapp.js';
+import { Ai, AiError } from './ai.js';
+import { AutopilotRunner } from './autopilot.js';
+import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
+import { exportZip, slug } from './export.js';
+import * as totp from './totp.js';
+
+const VERSION = '0.1.0';
+const PORT = Number(process.env.PORT ?? 8080);
+const HOST = process.env.HOST ?? '0.0.0.0';
+const require_ = createRequire(import.meta.url);
+let push: Push;
+const DATA_DIR = resolve(process.env.DATA_DIR ?? './data');
+const WEB_DIR = resolve(process.env.WEB_DIR ?? join(dirname(fileURLToPath(import.meta.url)), '../../web/dist'));
+const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 100);
+mkdirSync(DATA_DIR, { recursive: true });
+
+const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory };
+if (process.env.DEMO === '1') factories.demo = demoFactory;
+
+const registry = new ProfileRegistry(DATA_DIR);
+push = new Push(DATA_DIR);
+
+/** Laufzeit eines Profils: Tresor, Messenger, KI, offene Live-Verbindungen */
+interface Ctx {
+  p: ProfileEntry;
+  vault: Vault;
+  hub: Hub | null;
+  ai: Ai | null;
+  autopilot: AutopilotRunner | null;
+  sockets: Set<import('ws').WebSocket>;
+  pendingTotp: { secret: string; sid: string } | null;
+  lastTotpStep: number;
+}
+const ctxs = new Map<string, Ctx>();
+function ctxOf(p: ProfileEntry): Ctx {
+  let c = ctxs.get(p.id);
+  if (c) { c.p = p; return c; }
+  const vault = registry.vault(p);
+  const ctx: Ctx = { p, vault, hub: null, ai: null, autopilot: null, sockets: new Set(), pendingTotp: null, lastTotpStep: 0 };
+  vault.onUnlock(async (dek) => {
+    const dir = registry.dirOf(ctx.p);
+    const store = new Store(dir, dek);
+    const hub = new Hub(store, factories, dir);
+    ctx.hub = hub;
+    ctx.ai = new Ai(store);
+    ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
+    hub.subscribe((e) => broadcast(ctx, e));
+    hub.subscribe((e) => { if (e.type === 'notify') push.notify(store, e.chat, e.message); });
+    await hub.startAll();
+    if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
+      await hub.addAccount('demo', 'Demo', {});
+    }
+  });
+  ctxs.set(p.id, ctx);
+  return ctx;
+}
+/** Sitzung → Profil */
+const sessions = new Map<string, string>();
+
+
+// Nur Proxys im eigenen Netz dürfen die Absenderadresse (X-Forwarded-For) setzen.
+// Sonst könnte jeder die Login-Bremse mit erfundenen Adressen umgehen.
+function trustProxySetting(v = process.env.TRUST_PROXY ?? 'loopback,linklocal,uniquelocal'): boolean | number | string {
+  if (v === 'true') return true;
+  if (v === 'false' || v === '') return false;
+  if (/^\d+$/.test(v)) return Number(v);
+  return v;
+}
+// Letzte Warnungen/Fehler für den Admin-Bereich (ohne Anfrage-Details, damit keine fremden Chat-IDs auftauchen)
+const recentLogs: { t: number; level: number; msg: string }[] = [];
+const logStream = {
+  write(line: string) {
+    process.stdout.write(line);
+    try {
+      const j = JSON.parse(line);
+      if (j.level >= 40) { recentLogs.push({ t: j.time, level: j.level, msg: String(j.msg ?? '') + (j.err?.message ? `: ${j.err.message}` : j.err && typeof j.err === 'string' ? `: ${j.err}` : '') }); if (recentLogs.length > 200) recentLogs.shift(); }
+    } catch { /* ignore */ }
+  },
+};
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logStream }, trustProxy: trustProxySetting() as boolean | string, bodyLimit: 2 * 1024 * 1024 });
+await app.register(cookie);
+await app.register(websocket);
+await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 1 } });
+await app.register(rateLimit, { global: false });
+// Grundschutz für jede Antwort: kein Einbetten in fremde Seiten, kein Raten von Dateitypen, keine Referrer nach außen
+app.addHook('onSend', async (_req, reply, payload) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Referrer-Policy', 'no-referrer');
+  return payload;
+});
+
+// ---------- Hilfen ----------
+function newSession(reply: FastifyReply, req: FastifyRequest, profileId: string) {
+  const sid = randomBytes(32).toString('base64url');
+  sessions.set(sid, profileId);
+  reply.setCookie('sid', sid, { path: '/', httpOnly: true, sameSite: 'strict', secure: req.protocol === 'https' });
+}
+const isHttps = (req: FastifyRequest) => req.protocol === 'https';
+const trustCookie = (c: Ctx) => `trust_${c.p.id}`;
+function trustDevice(reply: FastifyReply, req: FastifyRequest, c: Ctx): string {
+  const token = c.vault.addTrusted(30);
+  reply.setCookie(trustCookie(c), token, { path: '/api/vault', httpOnly: true, sameSite: 'strict', secure: isHttps(req), maxAge: 30 * 86400 });
+  return token;
+}
+
+
+// Login-Bremse: pro Adresse nach 10 Fehlversuchen in 10 Minuten 5 Minuten Pause.
+// Global (gegen Angriffe von vielen Adressen) wird nur gebremst, nicht gesperrt,
+// damit ein Fremder dich nicht aussperren kann.
+const failures = new Map<string, number[]>();
+const blocked = new Map<string, number>();
+const GLOBAL = '*';
+const recent = (k: string) => (failures.get(k) ?? []).filter((t) => t > Date.now() - 10 * 60_000);
+async function guard(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+  if ((blocked.get(req.ip) ?? 0) > Date.now()) {
+    reply.code(429).send({ error: 'Zu viele Fehlversuche. Bitte warte ein paar Minuten.' });
+    return false;
+  }
+  const g = recent(GLOBAL).length;
+  if (g > 20) await new Promise((r) => setTimeout(r, Math.min(10_000, (g - 20) * 250)));
+  return true;
+}
+function failed(req: FastifyRequest) {
+  const now = Date.now();
+  const mine = [...recent(req.ip), now];
+  if (mine.length >= 10) { blocked.set(req.ip, now + 5 * 60_000); failures.delete(req.ip); app.log.warn({ ip: req.ip }, 'Anmeldung für diese Adresse gesperrt: zu viele Fehlversuche'); }
+  else failures.set(req.ip, mine);
+  failures.set(GLOBAL, [...recent(GLOBAL), now].slice(-500));
+  if (failures.size > 10_000) failures.clear();
+}
+
+
+function keyFrom(b64: unknown): Buffer {
+  if (typeof b64 !== 'string') throw Object.assign(new Error('Schlüssel fehlt'), { statusCode: 400 });
+  const k = Buffer.from(b64, 'base64');
+  if (k.length !== 32) throw Object.assign(new Error('Ungültiger Schlüssel'), { statusCode: 400 });
+  return k;
+}
+
+// Zwei-Faktor: jeder Code nur einmal
+function checkTotp(c: Ctx, code: unknown): boolean {
+  const secret = c.vault.totpSecret;
+  if (!secret) return true;
+  const step = totp.verify(secret, code);
+  if (step === null || step <= c.lastTotpStep) return false;
+  c.lastTotpStep = step;
+  return true;
+}
+
+/** Angemeldetes Profil dieser Anfrage (oder null) */
+function authed(req: FastifyRequest): Ctx | null {
+  const pid = req.cookies.sid ? sessions.get(req.cookies.sid) : undefined;
+  const p = registry.get(pid);
+  if (!p) return null;
+  const c = ctxOf(p);
+  return c.vault.unlocked && c.hub ? c : null;
+}
+const C = (req: FastifyRequest) => authed(req)!;
+const H = (req: FastifyRequest) => C(req).hub!;
+const A = (req: FastifyRequest) => C(req).ai!;
+function profileFrom(id: unknown): Ctx {
+  const p = registry.get(typeof id === 'string' ? id : null);
+  if (!p) throw Object.assign(new Error('Profil nicht gefunden'), { statusCode: 404 });
+  return ctxOf(p);
+}
+function needAdmin(req: FastifyRequest) {
+  if (!C(req).p.admin) throw Object.assign(new Error('Nur für Admins'), { statusCode: 403 });
+}
+function publicProfile(p: ProfileEntry) {
+  const v = registry.vault(p);
+  const av = registry.avatarVersion(p);
+  return { id: p.id, name: p.name, initialized: v.initialized, invite: !!p.invite, totp: !!v.totpSecret, kdf: v.kdfParams(), avatar: av ? `/api/profiles/${p.id}/avatar?v=${av}` : null };
+}
+
+// ---------- Öffentliche Routen (Anmeldung) ----------
+app.get('/api/state', async (req) => {
+  const c = authed(req);
+  return {
+    version: VERSION,
+    networks: Object.keys(factories),
+    profiles: registry.all().map(publicProfile),
+    authed: !!c,
+    profile: c ? { id: c.p.id, name: c.p.name, admin: c.p.admin, comfort: c.vault.comfortMode, totp: !!c.vault.totpSecret, avatar: publicProfile(c.p).avatar } : null,
+  };
+});
+
+const strict = { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } };
+
+/** Passwort festlegen: erstes Profil überhaupt, oder ein eingeladenes Profil mit Einladungscode */
+app.post('/api/vault/setup', strict, async (req, reply) => {
+  const { profileId, name, invite, salt, key } = req.body as { profileId?: string; name?: string; invite?: string; salt: string; key: string };
+  const kek = keyFrom(key);
+  let c: Ctx;
+  if (registry.empty) {
+    c = ctxOf(registry.create(name ?? '', { admin: true }).profile);
+  } else {
+    if (!(await guard(req, reply))) return;
+    c = profileFrom(profileId);
+    if (c.vault.initialized) return reply.code(409).send({ error: 'Dieses Profil ist schon eingerichtet' });
+    if (!registry.checkInvite(c.p, invite)) { failed(req); return reply.code(401).send({ error: 'Einladungscode falsch' }); }
+  }
+  const code = c.vault.setup(salt, kek);
+  registry.clearInvite(c.p);
+  newSession(reply, req, c.p.id);
+  return { recoveryCode: code, profileId: c.p.id };
+});
+
+app.post('/api/vault/unlock', strict, async (req, reply) => {
+  const { profileId, key, code, remember, trust } = req.body as { profileId: string; key: string; code?: string; remember?: boolean; trust?: string };
+  const c = profileFrom(profileId);
+  if (!c.vault.initialized) return reply.code(400).send({ error: 'Dieses Profil ist noch nicht eingerichtet' });
+  if (!(await guard(req, reply))) return;
+  const kek = keyFrom(key);
+  if (!c.vault.check(kek)) { failed(req); return reply.code(401).send({ error: 'Passwort falsch' }); }
+  // Vertrauenswürdiges Gerät: per Cookie oder (falls der Browser Cookies verliert, z. B. iOS-Web-App) aus dem lokalen Speicher
+  let trustToken: string | undefined;
+  if (c.vault.totpSecret && !c.vault.isTrusted(req.cookies[trustCookie(c)]) && !c.vault.isTrusted(trust)) {
+    if (!code) return reply.code(401).send({ error: 'Bitte gib den Code aus deiner Authenticator-App ein.', need2fa: true });
+    if (!checkTotp(c, code)) { failed(req); return reply.code(401).send({ error: 'Code falsch oder abgelaufen', need2fa: true }); }
+    if (remember) trustToken = trustDevice(reply, req, c);
+  }
+  c.vault.unlock(kek);
+  newSession(reply, req, c.p.id);
+  return { ok: true, trust: trustToken };
+});
+
+app.post('/api/vault/recover', strict, async (req, reply) => {
+  const { profileId, code, salt, key } = req.body as { profileId: string; code: string; salt: string; key: string };
+  const c = profileFrom(profileId);
+  if (!(await guard(req, reply))) return;
+  if (!c.vault.recover(code, salt, keyFrom(key))) { failed(req); return reply.code(401).send({ error: 'Wiederherstellungscode falsch' }); }
+  c.pendingTotp = null;
+  newSession(reply, req, c.p.id);
+  return { ok: true };
+});
+
+/** Profilbild (öffentlich, für die Profilauswahl bei der Anmeldung) */
+app.get('/api/profiles/:id/avatar', async (req, reply) => {
+  const p = registry.get((req.params as any).id);
+  const f = p && registry.avatarFile(p);
+  if (!f || !existsSync(f)) return reply.code(404).send({ error: 'Kein Bild' });
+  reply.header('Content-Type', 'image/jpeg').header('Cache-Control', 'public, max-age=31536000, immutable');
+  return reply.send(readFileSync(f));
+});
+
+app.post('/api/logout', async (req, reply) => {
+  if (req.cookies.sid) sessions.delete(req.cookies.sid);
+  reply.clearCookie('sid', { path: '/' });
+  return { ok: true };
+});
+
+// ---------- Ab hier nur angemeldet ----------
+app.addHook('preHandler', async (req, reply) => {
+  const url = req.url.split('?')[0];
+  if (!url.startsWith('/api/') || url === '/api/state' || (req.method === 'GET' && /^\/api\/profiles\/[^/]+\/avatar$/.test(url)) || url.startsWith('/api/vault/setup') || url.startsWith('/api/vault/unlock') || url.startsWith('/api/vault/recover') || url === '/api/logout') return;
+  if (!authed(req)) return reply.code(401).send({ error: 'Nicht angemeldet' });
+});
+
+app.post('/api/vault/password', async (req) => {
+  const { salt, key } = req.body as { salt: string; key: string };
+  C(req).vault.changePassword(salt, keyFrom(key));
+  return { ok: true };
+});
+app.post('/api/vault/comfort', async (req) => {
+  const { on } = req.body as { on: boolean };
+  const c = C(req);
+  c.vault.setComfort(!!on);
+  return { comfort: c.vault.comfortMode };
+});
+
+// ---------- Zwei-Faktor einrichten ----------
+app.post('/api/2fa/setup', async (req) => {
+  const c = C(req);
+  const secret = totp.newSecret();
+  c.pendingTotp = { secret, sid: req.cookies.sid! };
+  return { secret, uri: totp.otpauthUri(secret, `${c.p.name} (${req.hostname || 'Chorus'})`) };
+});
+app.post('/api/2fa/enable', strict, async (req, reply) => {
+  const { code } = req.body as { code: string };
+  const c = C(req);
+  if (!c.pendingTotp || c.pendingTotp.sid !== req.cookies.sid) return reply.code(400).send({ error: 'Bitte die Einrichtung neu starten.' });
+  const step = totp.verify(c.pendingTotp.secret, code);
+  if (step === null) return reply.code(400).send({ error: 'Code stimmt nicht. Uhrzeit am Handy prüfen und den aktuellen Code eingeben.' });
+  c.vault.setTotp(c.pendingTotp.secret);
+  c.lastTotpStep = step;
+  c.pendingTotp = null;
+  // Alle anderen Geräte dieses Profils abmelden, sie müssen sich mit Code neu anmelden
+  for (const [sid, pid] of [...sessions]) if (pid === c.p.id && sid !== req.cookies.sid) sessions.delete(sid);
+  return { ok: true, trust: trustDevice(reply, req, c) };
+});
+app.post('/api/2fa/disable', strict, async (req, reply) => {
+  const { code } = req.body as { code: string };
+  const c = C(req);
+  if (!(await guard(req, reply))) return;
+  if (!checkTotp(c, code)) { failed(req); return reply.code(400).send({ error: 'Code falsch oder abgelaufen' }); }
+  c.vault.setTotp(null);
+  reply.clearCookie(trustCookie(c), { path: '/api/vault' });
+  return { ok: true };
+});
+
+// ---------- Profile verwalten ----------
+app.get('/api/profiles', async (req) => {
+  needAdmin(req);
+  return registry.all().map((p) => ({ ...publicProfile(p), admin: p.admin, createdAt: p.createdAt, online: !!ctxs.get(p.id)?.vault.unlocked }));
+});
+app.post('/api/profiles', async (req) => {
+  needAdmin(req);
+  const { profile, invite } = registry.create(String((req.body as any)?.name ?? ''), { withInvite: true });
+  return { profile: publicProfile(profile), invite };
+});
+app.post('/api/profiles/:id/invite', async (req) => {
+  needAdmin(req);
+  return { invite: registry.newInvite((req.params as any).id) };
+});
+app.patch('/api/profiles/:id', async (req) => {
+  const id = (req.params as any).id;
+  const c = C(req);
+  if (!c.p.admin && c.p.id !== id) throw Object.assign(new Error('Nur für Admins'), { statusCode: 403 });
+  return publicProfile(registry.rename(id, String((req.body as any)?.name ?? '')));
+});
+app.put('/api/profiles/:id/avatar', async (req) => {
+  const id = (req.params as any).id;
+  const c = C(req);
+  if (!c.p.admin && c.p.id !== id) throw Object.assign(new Error('Nur für Admins'), { statusCode: 403 });
+  const p = registry.get(id);
+  if (!p) throw Object.assign(new Error('Profil nicht gefunden'), { statusCode: 404 });
+  const part = await req.file();
+  if (!part) throw Object.assign(new Error('Kein Bild'), { statusCode: 400 });
+  const data = await part.toBuffer();
+  // Nur JPEG (der Browser verkleinert und wandelt vorher um), höchstens 512 KB
+  if (data.length > 512 * 1024 || data[0] !== 0xff || data[1] !== 0xd8) throw Object.assign(new Error('Bitte ein Foto (JPEG, max. 512 KB)'), { statusCode: 400 });
+  registry.setAvatar(p, data);
+  return publicProfile(p);
+});
+app.delete('/api/profiles/:id/avatar', async (req) => {
+  const id = (req.params as any).id;
+  const c = C(req);
+  if (!c.p.admin && c.p.id !== id) throw Object.assign(new Error('Nur für Admins'), { statusCode: 403 });
+  const p = registry.get(id);
+  if (!p) throw Object.assign(new Error('Profil nicht gefunden'), { statusCode: 404 });
+  registry.setAvatar(p, null);
+  return publicProfile(p);
+});
+app.delete('/api/profiles/:id', async (req) => {
+  needAdmin(req);
+  const id = (req.params as any).id;
+  if (id === C(req).p.id) throw Object.assign(new Error('Du kannst dein eigenes Profil nicht löschen'), { statusCode: 400 });
+  const other = ctxs.get(id);
+  if (other) {
+    await other.hub?.stopAll(); other.hub?.store.close();
+    for (const ws of other.sockets) ws.close(4401, 'Profil gelöscht');
+    ctxs.delete(id);
+  }
+  for (const [sid, pid] of [...sessions]) if (pid === id) sessions.delete(sid);
+  registry.remove(id);
+  return { ok: true };
+});
+
+app.get('/api/accounts', async (req) => H(req).accounts());
+app.post('/api/accounts', async (req) => {
+  const { network, label, config } = req.body as { network: Network; label: string; config?: Record<string, unknown> };
+  return H(req).addAccount(network, label || network, config ?? {});
+});
+app.delete('/api/accounts/:id', async (req) => { await H(req).removeAccount((req.params as any).id); return { ok: true }; });
+app.post('/api/accounts/:id/restart', async (req) => { await H(req).startAccount((req.params as any).id); return { ok: true }; });
+app.post('/api/accounts/:id/input', async (req) => {
+  const { field, value } = req.body as { field: string; value: string };
+  await H(req).input((req.params as any).id, field, value);
+  return { ok: true };
+});
+
+app.get('/api/chats', async (req) => H(req).store.listChats());
+app.patch('/api/chats/:id', async (req) => {
+  const id = (req.params as any).id;
+  H(req).store.updateChat(id, req.body as any);
+  return H(req).emitChat(id);
+});
+app.post('/api/chats/:id/unread', async (req) => {
+  const id = (req.params as any).id; const h = H(req);
+  const c = h.store.getChat(id); if (!c) return { ok: false };
+  if (!c.unread) h.store.updateChat(id, { unread: 1 });
+  return h.emitChat(id);
+});
+app.post('/api/chats/:id/contact', async (req) => H(req).refreshContact((req.params as any).id));
+app.post('/api/sync', async (req) => { const h = H(req); await h.resync(); return h.store.listChats(); });
+app.get('/api/chats/:id/avatar', async (req, reply) => {
+  const h = H(req);
+  const f = h.store.avatarFileOf((req.params as any).id);
+  const data = f ? h.store.readFile(f) : null;
+  if (!data) return reply.code(404).send({ error: 'Kein Bild' });
+  const png = data[0] === 0x89;
+  reply.header('Content-Type', png ? 'image/png' : data[0] === 0x52 ? 'image/webp' : 'image/jpeg');
+  reply.header('Cache-Control', 'private, max-age=31536000, immutable');
+  return reply.send(data);
+});
+app.put('/api/chats/:id/avatar', async (req, reply) => {
+  const h = H(req); const id = (req.params as any).id;
+  const part = await req.file();
+  const buf = part ? await part.toBuffer() : null;
+  if (!buf || buf.length > 512 * 1024 || buf[0] !== 0xff || buf[1] !== 0xd8) return reply.code(400).send({ error: 'Bitte ein Foto (JPEG, max. 512 KB)' });
+  h.store.setCustomAvatar(id, h.store.storeFile(buf));
+  return h.emitChat(id);
+});
+app.delete('/api/chats/:id/avatar', async (req) => {
+  const h = H(req); const id = (req.params as any).id;
+  h.store.setCustomAvatar(id, null);
+  return h.emitChat(id);
+});
+app.post('/api/chats/:id/read', async (req) => { await H(req).markRead((req.params as any).id); return { ok: true }; });
+app.get('/api/chats/:id/messages', async (req) => {
+  const q = req.query as { before?: string; limit?: string };
+  return H(req).store.listMessages((req.params as any).id, q.before ? Number(q.before) : undefined, Math.min(Number(q.limit ?? 60), 200));
+});
+app.post('/api/chats/:id/history', async (req) => { await H(req).loadHistory((req.params as any).id); return { ok: true }; });
+app.post('/api/chats/:id/send', async (req) => {
+  const { text, replyTo } = req.body as { text: string; replyTo?: string | null };
+  if (!text?.trim()) throw Object.assign(new Error('Leere Nachricht'), { statusCode: 400 });
+  await H(req).sendText((req.params as any).id, text, replyTo);
+  return { ok: true };
+});
+app.post('/api/chats/:id/upload', async (req) => {
+  const part = await req.file();
+  if (!part) throw Object.assign(new Error('Keine Datei'), { statusCode: 400 });
+  let data = await part.toBuffer();
+  const f = part.fields as Record<string, any>;
+  const val = (k: string) => (f[k] && 'value' in f[k] ? String(f[k].value) : undefined);
+  let name = part.filename || 'datei', mime = part.mimetype || 'application/octet-stream';
+  const vEdit = parseVideoEdit(val('video'));
+  if (vEdit) { // gekürzt/zugeschnitten im Video-Editor
+    data = await editVideo(data, vEdit);
+    name = name.replace(/\.[a-z0-9]+$/i, '') + '.mp4'; mime = 'video/mp4';
+  }
+  await H(req).sendFile((req.params as any).id, {
+    data, name, mime,
+    voice: val('voice') === '1', durationSec: val('duration') ? Number(val('duration')) : undefined,
+  }, val('caption'), val('replyTo') || null);
+  return { ok: true };
+});
+
+app.post('/api/messages/:id/react', async (req) => {
+  const { emoji } = req.body as { emoji: string | null };
+  await H(req).react((req.params as any).id, emoji);
+  return { ok: true };
+});
+app.patch('/api/messages/:id', async (req) => {
+  const { text } = req.body as { text: string };
+  await H(req).edit((req.params as any).id, text);
+  return { ok: true };
+});
+app.delete('/api/messages/:id', async (req) => {
+  const everyone = (req.query as any).everyone === '1';
+  await H(req).delete((req.params as any).id, everyone);
+  return { ok: true };
+});
+
+app.post('/api/accounts/:id/start-chat', async (req) => H(req).startChat((req.params as any).id, String((req.body as any)?.phone ?? '')));
+
+// ---------- KI ----------
+function needAi(req: FastifyRequest, chatId: string) {
+  const c = H(req).store.getChat(chatId);
+  if (!c) throw new AiError(404, 'Chat nicht gefunden');
+  if (!c.aiEnabled) throw new AiError(403, 'KI ist für diesen Chat ausgeschaltet.');
+  return c;
+}
+app.get('/api/ai/settings', async (req) => A(req).publicSettings());
+app.put('/api/ai/settings', async (req) => A(req).update(req.body as any));
+app.get('/api/ai/voices', async (req) => A(req).voices());
+app.post('/api/chats/:id/ai', async (req) => {
+  const id = (req.params as any).id;
+  return H(req).setChatAi(id, !!(req.body as any)?.on);
+});
+app.post('/api/chats/:id/ai/summary', async (req) => {
+  const id = (req.params as any).id;
+  needAi(req, id);
+  return { text: await A(req).summarize(id) };
+});
+app.post('/api/chats/:id/ai/suggest', async (req) => {
+  const id = (req.params as any).id;
+  needAi(req, id);
+  const hint = String((req.body as any)?.hint ?? '').slice(0, 500).trim();
+  return { suggestions: await A(req).suggest(id, hint || undefined) };
+});
+/** Autopilot ein/aus, Limit und Hinweise */
+app.put('/api/chats/:id/autopilot', async (req) => {
+  const id = (req.params as any).id;
+  const c = needAi(req, id);
+  if (c.kind === 'channel') throw new AiError(400, 'In Kanälen gibt es keinen Autopiloten.');
+  if (!A(req).publicSettings().features.text) throw new AiError(400, 'Bitte zuerst einen Claude-Schlüssel eintragen.');
+  const b = (req.body ?? {}) as { on?: boolean; max?: number; note?: string; mark?: boolean; reset?: boolean };
+  const cur = c.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
+  const max = Math.max(1, Math.min(50, Math.round(Number(b.max ?? cur.max) || 5)));
+  const turningOn = b.on === true && !cur.on;
+  const used = b.reset || turningOn ? 0 : cur.used;
+  return C(req).autopilot!.set(id, { on: b.on ?? cur.on, max, used, note: String(b.note ?? cur.note).slice(0, 1000), mark: b.mark ?? cur.mark });
+});
+app.post('/api/chats/:id/ai/compose', async (req) => {
+  const id = (req.params as any).id;
+  const c = H(req).store.getChat(id);
+  if (!c) throw new AiError(404, 'Chat nicht gefunden');
+  const b = (req.body ?? {}) as { instruction?: string; mode?: string };
+  const text = await A(req).compose(id, String(b.instruction ?? '').slice(0, 1000), b.mode === 'voice' ? 'voice' : 'text', !!c.aiEnabled);
+  return { text };
+});
+/** Gesprochenen Auftrag abtippen (Aufnahme aus dem Browser) */
+app.post('/api/ai/dictate', async (req) => {
+  const part = await req.file();
+  if (!part) throw new AiError(400, 'Keine Aufnahme');
+  const data = await part.toBuffer();
+  return { text: await A(req).transcribe(data, part.mimetype, part.filename || 'auftrag.webm') };
+});
+/** Text als Sprachnachricht in der eigenen ElevenLabs-Stimme senden */
+app.post('/api/chats/:id/ai/voice', async (req) => {
+  const id = (req.params as any).id;
+  const { text, replyTo, preview } = (req.body ?? {}) as { text?: string; replyTo?: string | null; preview?: boolean };
+  const mp3 = await A(req).speak(String(text ?? ''));
+  if (preview) return { audio: mp3.toString('base64'), mime: 'audio/mpeg' };
+  const { data, durationSec } = await toOggOpusTimed(mp3);
+  await H(req).sendFile(id, { data, name: 'sprachnachricht.ogg', mime: 'audio/ogg', voice: true, durationSec }, undefined, replyTo || null);
+  return { ok: true };
+});
+app.post('/api/messages/:id/transcribe', async (req) => {
+  const h = H(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
+  needAi(req, msg.chatId);
+  const i = msg.attachments.findIndex((a) => a.kind === 'voice' || a.kind === 'audio' || a.kind === 'video');
+  if (i < 0) throw new AiError(400, 'Diese Nachricht enthält keine Sprachnachricht.');
+  const att = msg.attachments[i];
+  const data = await h.attachmentData(msg, i);
+  const text = await A(req).transcribe(data, att.mime, att.name);
+  return h.setTranscript(msg.id, text);
+});
+
+/** Anhang ausliefern; wird bei Bedarf erst beim Messenger abgeholt.
+ *  ?play=1: Audio in einem Format, das jeder Browser abspielt (Opus/OGG → MP3 für Safari/iOS).
+ *  Unterstützt Range-Anfragen (Safari braucht sie für Audio und Video). */
+const playCache = new Map<string, Buffer>();
+// Auch als /api/attachment?m=<id>&i=<n>: Gruppen-IDs (Signal: Base64 mit „/“) überstehen so jeden Reverse Proxy
+app.get('/api/attachment', async (req, reply) => {
+  const q = req.query as { m?: string; i?: string };
+  return serveAttachment(req, reply, String(q.m ?? ''), String(q.i ?? '0'));
+});
+app.get('/api/messages/:id/attachments/:idx', async (req, reply) => {
+  const { id, idx } = req.params as { id: string; idx: string };
+  return serveAttachment(req, reply, id, idx);
+});
+async function serveAttachment(req: FastifyRequest, reply: FastifyReply, id: string, idx: string) {
+  const q = req.query as { download?: string; play?: string };
+  const h = H(req);
+  const msg = h.store.getMessage(id);
+  const i = Number(idx);
+  const att = msg?.attachments[i];
+  if (!msg || !att) return reply.code(404).send({ error: 'Nicht gefunden' });
+  let data: Buffer;
+  try { data = await h.attachmentData(msg, i); }
+  catch (e: any) {
+    req.log.warn({ id, i, err: e?.message }, 'Anhang nicht abrufbar');
+    return reply.code(502).send({ error: 'Anhang konnte nicht vom Messenger geladen werden: ' + (e?.message ?? e) });
+  }
+  let mime = att.mime;
+  if (q.play === '1' && (/ogg|opus|webm|amr|3gpp/i.test(att.mime) || ((att.kind === 'voice' || att.kind === 'audio') && !/mpeg|mp4|aac|m4a|wav/i.test(att.mime)))) {
+    const key = `${C(req).p.id}:${id}:${i}`;
+    let mp3 = playCache.get(key);
+    if (!mp3) {
+      mp3 = await toMp3(data).catch(() => undefined);
+      if (mp3) { playCache.set(key, mp3); if (playCache.size > 50) playCache.delete(playCache.keys().next().value!); }
+    }
+    if (mp3) { data = mp3; mime = 'audio/mpeg'; }
+  }
+  // Anhänge kommen von Fremden: nie als Seite auf unserer Adresse ausführen (HTML/SVG könnten Skripte enthalten)
+  const safeInline = /^(image\/(png|jpe?g|gif|webp|avif|heic|heif|bmp)|video\/|audio\/|application\/pdf$)/i.test(mime);
+  reply.header('Content-Type', safeInline ? mime : 'application/octet-stream');
+  if (!/pdf/i.test(mime)) reply.header('Content-Security-Policy', "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox"); // PDF-Ansicht im Browser verträgt kein sandbox
+  reply.header('Accept-Ranges', 'bytes');
+  reply.header('Cache-Control', 'private, max-age=31536000, immutable');
+  const disp = q.download === '1' || !safeInline ? 'attachment' : 'inline';
+  reply.header('Content-Disposition', `${disp}; filename*=UTF-8''${encodeURIComponent(att.name)}`);
+  const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+  if (range && (range[1] || range[2])) {
+    const size = data.length;
+    let start = range[1] ? Number(range[1]) : size - Number(range[2]);
+    let end = range[1] && range[2] ? Number(range[2]) : size - 1;
+    start = Math.max(0, start); end = Math.min(size - 1, end);
+    if (start > end || start >= size) return reply.code(416).header('Content-Range', `bytes */${size}`).send();
+    reply.code(206).header('Content-Range', `bytes ${start}-${end}/${size}`);
+    return reply.send(data.subarray(start, end + 1));
+  }
+  return reply.send(data);
+}
+
+// ---------- Sicherung / Export ----------
+/** ZIP mit HTML-Seiten und allen Medien. ?chat=<id> für einen Chat, sonst alle Chats. */
+app.get('/api/export', async (req, reply) => {
+  const h = H(req);
+  const chatId = (req.query as any).chat as string | undefined;
+  const chat = chatId ? h.store.getChat(chatId) : null;
+  if (chatId && !chat) return reply.code(404).send({ error: 'Chat nicht gefunden' });
+  const day = new Date().toISOString().slice(0, 10);
+  const name = chat ? `chorus-${slug(chat.title)}-${day}.zip` : `chorus-sicherung-${C(req).p.name}-${day}.zip`;
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    'Content-Type': 'application/zip',
+    'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`,
+    'Cache-Control': 'no-store',
+  });
+  try { await exportZip(h, reply.raw, chat ? [chat.id] : null); }
+  catch (e) { app.log.error(e); reply.raw.destroy(e as Error); }
+});
+app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
+app.put('/api/media', async (req) => { H(req).autoSaveMedia = !!(req.body as any)?.autoSave; return { autoSave: H(req).autoSaveMedia }; });
+
+app.get('/api/search', async (req) => {
+  const q = String((req.query as any).q ?? '').trim();
+  return q.length < 2 ? [] : H(req).store.search(q);
+});
+
+// ---------- Live-Ereignisse ----------
+function broadcast(c: Ctx, e: unknown) {
+  const s = JSON.stringify(e);
+  for (const ws of c.sockets) if (ws.readyState === 1) ws.send(s);
+}
+app.register(async (f) => {
+  f.get('/api/ws', { websocket: true }, (socket, req) => {
+    const c = authed(req);
+    if (!c) { socket.close(4401, 'Nicht angemeldet'); return; }
+    c.sockets.add(socket);
+    socket.on('close', () => c.sockets.delete(socket));
+    const ping = setInterval(() => socket.readyState === 1 && socket.ping(), 25_000);
+    socket.on('close', () => clearInterval(ping));
+  });
+});
+
+// ---------- Oberfläche ----------
+if (existsSync(WEB_DIR)) {
+  await app.register(fastifyStatic, { root: WEB_DIR, wildcard: false });
+  app.setNotFoundHandler((req, reply) => {
+    if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'Nicht gefunden' });
+    return reply.sendFile('index.html');
+  });
+}
+
+app.setErrorHandler((err: any, _req, reply) => {
+  const code = err.statusCode && err.statusCode >= 400 ? err.statusCode : 500;
+  if (code >= 500) app.log.error(err);
+  reply.code(code).send({ error: err.message ?? 'Fehler' });
+});
+
+for (const p of registry.all()) {
+  if (ctxOf(p).vault.tryAutoUnlock()) app.log.info(`Komfort-Modus: Profil „${p.name}“ automatisch entsperrt`);
+}
+
+// ---------- Push-Benachrichtigungen ----------
+app.get('/api/push', async (req) => {
+  const h = H(req);
+  return { key: push.publicKey, preview: push.preview(h.store), devices: push.subs(h.store).length };
+});
+app.post('/api/push/subscribe', async (req) => {
+  const h = H(req);
+  const b = req.body as { subscription?: any };
+  const sub = b?.subscription;
+  if (!sub?.endpoint || !/^https:\/\//.test(sub.endpoint) || !sub.keys?.p256dh || !sub.keys?.auth) throw Object.assign(new Error('Ungültige Anmeldung'), { statusCode: 400 });
+  push.add(h.store, { endpoint: sub.endpoint, keys: { p256dh: sub.keys.p256dh, auth: sub.keys.auth }, ua: String(req.headers['user-agent'] ?? '').slice(0, 200), created: Date.now() });
+  return { ok: true };
+});
+app.post('/api/push/unsubscribe', async (req) => { push.remove(H(req).store, String((req.body as any)?.endpoint ?? '')); return { ok: true }; });
+app.post('/api/push/test', async (req) => {
+  await push.send(H(req).store, { title: 'Chorus', body: 'So sehen Benachrichtigungen aus. 🎉', tag: 'test' }, (req.body as any)?.endpoint);
+  return { ok: true };
+});
+app.put('/api/push', async (req) => { H(req).store.setSetting('pushPreview', !!(req.body as any)?.preview); return { ok: true }; });
+
+// ---------- Admin: Server ----------
+const STARTED = Date.now();
+app.get('/api/admin/status', async (req) => {
+  needAdmin(req);
+  const { statfs } = await import('node:fs/promises');
+  const fs = await statfs(DATA_DIR).catch(() => null);
+  const os = await import('node:os');
+  const has = async (cmd: string, args: string[]) => new Promise<boolean>((res) => { try { const { spawn } = require_('node:child_process'); const p = spawn(cmd, args); p.on('error', () => res(false)); p.on('exit', (c: number) => res(c === 0)); } catch { res(false); } });
+  return {
+    version: VERSION, node: process.version, uptimeSec: Math.round((Date.now() - STARTED) / 1000),
+    memMB: Math.round(process.memoryUsage().rss / 1048576), hostMemMB: Math.round(os.totalmem() / 1048576), hostFreeMB: Math.round(os.freemem() / 1048576),
+    load: os.loadavg()[0], cpus: os.cpus().length,
+    disk: fs ? { freeGB: +(fs.bavail * fs.bsize / 1e9).toFixed(1), totalGB: +(fs.blocks * fs.bsize / 1e9).toFixed(1) } : null,
+    profiles: registry.all().map((p) => {
+      const c = ctxs.get(p.id);
+      return { name: p.name, unlocked: !!c?.vault.unlocked, comfort: !!c?.vault.comfortMode, accounts: c?.hub ? c.hub.accounts().map((a) => ({ network: a.network, state: a.status.state })) : [] };
+    }),
+    ffmpeg: await has('ffmpeg', ['-version']),
+    logs: recentLogs.slice(-60).reverse(),
+  };
+});
+app.post('/api/admin/restart', async (req) => {
+  needAdmin(req);
+  app.log.warn(`Neustart angefordert von „${C(req).p.name}“`);
+  setTimeout(() => { void shutdown(); }, 400);
+  return { ok: true };
+});
+app.post('/api/contacts/refresh', async (req) => { H(req).queueStaleContacts(undefined, true); return { ok: true }; });
+app.post('/api/reconnect', async (req) => {
+  const h = H(req);
+  await h.stopAll(); await h.startAll();
+  return { ok: true };
+});
+
+const shutdown = async () => {
+  for (const c of ctxs.values()) { await c.hub?.stopAll(); c.hub?.store.close(); }
+  process.exit(0);
+};
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
+
+await app.listen({ port: PORT, host: HOST });
+app.log.info(`Chorus ${VERSION} läuft auf Port ${PORT}`);

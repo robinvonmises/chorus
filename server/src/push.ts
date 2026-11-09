@@ -1,0 +1,52 @@
+import webpush from 'web-push';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import type { Store } from './db.js';
+import type { Chat, Message } from './types.js';
+import { previewText } from './hub.js';
+
+type Sub = { endpoint: string; keys: { p256dh: string; auth: string }; ua?: string; created: number };
+
+/**
+ * Echte Push-Benachrichtigungen (Web Push mit VAPID): kommen auch an, wenn Chorus geschlossen ist
+ * (iPhone: nur als installierte App vom Home-Bildschirm). Die Inhalte sind Ende-zu-Ende verschlüsselt
+ * bis zum Gerät; Apple/Google sehen sie nicht.
+ */
+export class Push {
+  readonly publicKey: string;
+  constructor(dataDir: string) {
+    const f = join(dataDir, 'vapid.json');
+    let k: { publicKey: string; privateKey: string };
+    if (existsSync(f)) k = JSON.parse(readFileSync(f, 'utf8'));
+    else { k = webpush.generateVAPIDKeys(); writeFileSync(f, JSON.stringify(k), { mode: 0o600 }); }
+    this.publicKey = k.publicKey;
+    webpush.setVapidDetails(process.env.PUSH_SUBJECT ?? 'mailto:chorus@example.com', k.publicKey, k.privateKey);
+  }
+
+  subs(store: Store): Sub[] { return store.getSetting<Sub[]>('pushSubs', []); }
+  add(store: Store, s: Sub) { store.setSetting('pushSubs', [...this.subs(store).filter((x) => x.endpoint !== s.endpoint), s].slice(-20)); }
+  remove(store: Store, endpoint: string) { store.setSetting('pushSubs', this.subs(store).filter((x) => x.endpoint !== endpoint)); }
+  preview(store: Store): boolean { return store.getSetting('pushPreview', true); }
+
+  async send(store: Store, payload: Record<string, unknown>, only?: string) {
+    for (const s of this.subs(store)) {
+      if (only && s.endpoint !== only) continue;
+      try { await webpush.sendNotification(s, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'high' }); }
+      catch (e: any) {
+        if (e?.statusCode === 404 || e?.statusCode === 410) this.remove(store, s.endpoint); // abgemeldet/abgelaufen
+        else console.warn('[push]', e?.statusCode ?? '', e?.body ?? e?.message ?? e);
+      }
+    }
+  }
+
+  notify(store: Store, chat: Chat, m: Message) {
+    if (!this.subs(store).length) return;
+    const full = this.preview(store);
+    const text = previewText(m);
+    void this.send(store, {
+      title: full ? chat.title : 'Chorus',
+      body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : 'Neue Nachricht',
+      chatId: chat.id, tag: chat.id,
+    });
+  }
+}

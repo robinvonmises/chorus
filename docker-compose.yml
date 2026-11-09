@@ -1,0 +1,40 @@
+# Chorus – alle Messenger in einer App
+# Start:  docker compose up -d
+# Danach im Browser: http://<server>:<PORT>  – für HTTPS einen eigenen Reverse Proxy davor setzen
+# oder das mitgelieferte HTTPS starten:  docker compose --profile https up -d
+services:
+  chorus:
+    image: ghcr.io/robinvonmises/chorus:latest
+    build: .
+    container_name: chorus
+    restart: unless-stopped
+    init: true
+    # signal-cli arbeitet im Arbeitsspeicher (/dev/shm). Docker gibt standardmäßig nur 64 MB,
+    # das war zu wenig (Signal empfing dann nichts mehr). Belegt wird nur, was wirklich gebraucht wird.
+    shm_size: 512m
+    # Zeit zum sauberen Beenden: signal-cli wird erst gestoppt, dann wird gesichert
+    stop_grace_period: 30s
+    environment:
+      PORT: 8080
+      # Name des ersten Profils, wenn ein bestehender Einzel-Tresor übernommen wird
+      FIRST_PROFILE_NAME: ${FIRST_PROFILE_NAME:-Ich}
+      # DEMO: "1"   # Demo-Chats zum Ausprobieren
+    ports:
+      - "${PORT:-8080}:8080"
+    volumes:
+      - ./data:/data
+
+  # Optional: HTTPS ohne eigenen Reverse Proxy (Mikrofon, App-Installation und Benachrichtigungen
+  # gibt es im Browser nur über HTTPS). Start mit:  docker compose --profile https up -d
+  # Caddy erstellt ein eigenes Zertifikat; beim ersten Aufruf einmal die Browser-Warnung bestätigen.
+  https:
+    profiles: [https]
+    image: caddy:2-alpine
+    container_name: chorus-https
+    restart: unless-stopped
+    ports:
+      - "${HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+    depends_on: [chorus]
