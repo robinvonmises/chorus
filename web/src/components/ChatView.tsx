@@ -24,6 +24,8 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const [headMenu, setHeadMenu] = useState(false);
   const [toast, setToast] = useState('');
   const [loadingOld, setLoadingOld] = useState(false);
+  const loadingRef = useRef(false);
+  const exhausted = useRef<string | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [aiOpen, setAiOpen] = useState(false);
   const aiAnim = useExit(aiOpen, 240);
@@ -81,12 +83,17 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     const el = scroller.current!;
     prevHeight.current = el.scrollHeight;
     setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 80);
-    if (el.scrollTop < 200 && !loadingOld && messages?.length) {
-      setLoadingOld(true);
-      await loadOlder().catch(() => false);
-      setLoadingOld(false);
+    // Ältere Nachrichten nachladen. Gibt es keine mehr (z. B. Signal ohne alten Verlauf), nicht immer wieder fragen:
+    // jedes erfolglose Nachladen ließ den Chat oben springen.
+    if (el.scrollTop < 200 && !loadingRef.current && messages?.length && exhausted.current !== chat.id) {
+      loadingRef.current = true;
+      const t = setTimeout(() => setLoadingOld(true), 300); // Hinweis nur, wenn es dauert
+      const more = await loadOlder().catch(() => false);
+      clearTimeout(t); setLoadingOld(false);
+      if (!more) exhausted.current = chat.id;
+      loadingRef.current = false;
     }
-  }, [loadOlder, loadingOld, messages?.length]);
+  }, [loadOlder, messages?.length, chat.id]);
 
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2500); };
   const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? 'Fehler'); } };
@@ -136,9 +143,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         </div>
       </header>
 
+      {loadingOld && <div className="loading-old floating">Lade ältere Nachrichten …</div>}
       <div className="messages" ref={scroller} onScroll={onScroll}>
         <div className="messages-inner" ref={inner}>
-        {loadingOld && <div className="loading-old">Lade ältere Nachrichten …</div>}
         {!messages && <div className="loading-old">Lade …</div>}
         {messages && !messages.length && <div className="loading-old">Noch keine Nachrichten.</div>}
         {items.map(({ m, day, showName }) => (

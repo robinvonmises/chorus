@@ -180,7 +180,7 @@ export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online:
   const open = () => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     ws = new WebSocket(`${proto}://${location.host}/api/ws`);
-    ws.onopen = () => { delay = 1000; onStatus(true); };
+    ws.onopen = () => { delay = 1000; onStatus(true); sendVisibility(); };
     ws.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch { /* ignore */ } };
     ws.onclose = (e) => {
       onStatus(false);
@@ -190,6 +190,10 @@ export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online:
       delay = Math.min(delay * 2, 15000);
     };
   };
+  // Dem Server sagen, ob die App gerade sichtbar ist: dann kommt keine Push-Benachrichtigung
+  const sendVisibility = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', visible: document.visibilityState === 'visible' })); };
+  document.addEventListener('visibilitychange', sendVisibility);
+  window.addEventListener('pagehide', sendVisibility);
   open();
-  return () => { closed = true; ws?.close(); };
+  return () => { closed = true; document.removeEventListener('visibilitychange', sendVisibility); window.removeEventListener('pagehide', sendVisibility); ws?.close(); };
 }

@@ -10,7 +10,7 @@ import { NewChat } from './components/NewChat';
 import { Lightbox } from './components/Lightbox';
 import { PlayerBar } from './components/PlayerBar';
 import { usePlayer } from './player';
-import { Rail } from './components/Rail';
+import { Rail, Avatar } from './components/Rail';
 import { previewOf } from './components/Message';
 
 export type Filter = { nets: Network[]; unread: boolean; archived: boolean };
@@ -121,8 +121,21 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         return new Map(ms).set(e.message.chatId, next);
       });
       if (e.message.chatId === activeRef.current && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
-    } else if (e.type === 'notify') notify(e.chat, e.message, activeRef.current);
+    } else if (e.type === 'notify') {
+      // App offen: kein System-Hinweis, nur ein dezentes Banner für andere Chats
+      if (document.visibilityState === 'visible') { if (e.chat.id !== activeRef.current) showBanner(e.chat, e.message); }
+      else notify(e.chat, e.message);
+    }
   }, onlineStatus, onLocked), [onLocked]);
+
+  const [banner, setBanner] = useState<{ chat: Chat; text: string; n: number } | null>(null);
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function showBanner(c: Chat, m: Message) {
+    const text = c.kind === 'direct' ? previewOf(m) : `${m.senderName}: ${previewOf(m)}`;
+    setBanner((b) => ({ chat: c, text, n: (b?.n ?? 0) + 1 }));
+    if (bannerTimer.current) clearTimeout(bannerTimer.current);
+    bannerTimer.current = setTimeout(() => setBanner(null), 4000);
+  }
 
   // Hash-Navigation (Zurück-Taste am Handy schließt den Chat)
   useEffect(() => {
@@ -217,13 +230,18 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       {panel === 'add' && <AccountWizard server={server} accounts={accounts} onClose={() => setPanel(null)} />}
       {panel === 'new' && <NewChat chats={sortedChats} accounts={accounts} onOpen={openChat} onClose={() => setPanel(null)} />}
       <Lightbox />
+      {banner && (
+        <button key={banner.n} className="in-app-banner" onClick={() => { setBanner(null); openChat(banner.chat.id); }}>
+          <Avatar name={banner.chat.alias || banner.chat.title} src={banner.chat.avatar} network={banner.chat.network} size={36} />
+          <span className="iab-text"><b>{banner.chat.alias || banner.chat.title}</b><span>{banner.text}</span></span>
+        </button>
+      )}
       {panel === 'settings' && <Settings server={server} accounts={accounts} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} />}
     </div>
   );
 }
 
-function notify(chat: Chat, m: Message, activeId: string | null) {
-  if (document.visibilityState === 'visible' && chat.id === activeId) return;
+function notify(chat: Chat, m: Message) {
   if (localStorage.getItem('inbox:push') === '1') return; // kommt per Push vom Server
   if (!('Notification' in window) || Notification.permission !== 'granted') return;
   const body = chat.kind === 'direct' ? previewOf(m) : `${m.senderName}: ${previewOf(m)}`;

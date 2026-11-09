@@ -1,6 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
-import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Adapter, AdapterEvents, Attachment, OutgoingFile } from '../types.js';
 import type { AdapterFactory } from '../hub.js';
@@ -147,7 +148,7 @@ export class SignalAdapter implements Adapter {
   private async persist() {
     if (!existsSync(join(this.dir, 'data'))) return;
     // Sticker-Pakete lädt signal-cli bei Bedarf neu, sie gehören nicht in die Sicherung
-    this.ev.saveSession(await packDir(this.dir, ['./stickers']));
+    this.ev.saveSession(await packDir(this.dir, ['./stickers', './outgoing']));
   }
 
   /**
@@ -288,9 +289,18 @@ export class SignalAdapter implements Adapter {
   }
 
   async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
-    const uri = `data:${f.mime};filename=${f.name.replace(/[;,]/g, '_')};base64,${f.data.toString('base64')}`;
-    const r = await this.call<{ timestamp: number }>('send', { ...this.target(chat), message: caption ?? '', attachments: [uri], ...this.quote(replyTo) }, 5 * 60_000);
-    return `${r.timestamp}:${this.me}`;
+    // Große Dateien (Videos) nicht als Base64 durch JSON-RPC schicken, sondern als Datei im Arbeitsverzeichnis von signal-cli.
+    // Der Dateiname bleibt erhalten, damit der Empfänger ihn sieht.
+    const dir = join(this.dir, 'outgoing', randomUUID());
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const path = join(dir, f.name.replace(/[\/\\]/g, '_') || 'datei');
+    writeFileSync(path, f.data, { mode: 0o600 });
+    try {
+      const r = await this.call<{ timestamp: number }>('send', { ...this.target(chat), message: caption ?? '', attachments: [path], ...this.quote(replyTo) }, 10 * 60_000);
+      return `${r.timestamp}:${this.me}`;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 
   async react(chat: string, remoteId: string, emoji: string | null) {
