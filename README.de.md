@@ -105,7 +105,7 @@ Am einfachsten mit [Tailscale](https://tailscale.com): auf Server und Handy inst
 docker compose pull && docker compose up -d
 ```
 
-**Automatisch** (Chorus-Ordner als Git-Klon, Server mit systemd): `bash deploy/auto-update-einrichten.sh` richtet einen Timer ein. Der Server schaut dann alle 5 Minuten auf GitHub nach, wartet, bis das Image zum neuen Stand fertig gebaut ist, spielt es ein und geht von selbst auf den alten Stand zurück, wenn Chorus danach nicht sauber startet. `data/` und `.env` werden nie angefasst. Protokoll: `journalctl -u chorus-update`.
+**Automatisch** (Chorus-Ordner als Git-Klon, Server mit systemd): `bash deploy/auto-update-einrichten.sh` richtet einen Timer ein. Der Server schaut dann jede Minute auf GitHub nach, wartet, bis das Image zum neuen Stand fertig gebaut ist, spielt es ein und geht von selbst auf den alten Stand zurück, wenn Chorus danach nicht sauber startet. `data/` und `.env` werden nie angefasst. Protokoll: `journalctl -u chorus-update`.
 
 Hinweis: Ohne Komfort-Modus ist nach jedem Update alles gesperrt, bis du die App wieder öffnest.
 

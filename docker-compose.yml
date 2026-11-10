@@ -14,6 +14,10 @@ services:
     shm_size: 512m
     # Zeit zum sauberen Beenden: signal-cli wird erst gestoppt, dann wird gesichert
     stop_grace_period: 30s
+    # Nach dem Start alle 2 s prüfen (statt alle 30 s), damit Updates schnell als "läuft" erkannt werden
+    healthcheck:
+      start_period: 2m
+      start_interval: 2s
     environment:
       PORT: 8080
       # Name des ersten Profils, wenn ein bestehender Einzel-Tresor übernommen wird
