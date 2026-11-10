@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process';
 
+/** Opus/Ogg wie von WhatsApp-Apps: Mono, 48 kHz, Sprachmodus, saubere Zeitstempel, keine fremden Metadaten */
+const OPUS_ARGS = ['-vn', '-map_metadata', '-1', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-avoid_negative_ts', 'make_zero', '-f', 'ogg', 'pipe:1'];
+
 /** Wandelt beliebiges Audio in OGG/Opus (Mono, 48 kHz) – das Format, das alle Messenger für Sprachnachrichten erwarten. */
 export function toOggOpus(input: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-f', 'ogg', 'pipe:1']);
+    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-i', 'pipe:0', ...OPUS_ARGS]);
     const out: Buffer[] = [];
     let err = '';
     p.stdout.on('data', (d) => out.push(d));
@@ -18,7 +21,7 @@ export function toOggOpus(input: Buffer): Promise<Buffer> {
 /** Wie toOggOpus, liefert zusätzlich die Länge in Sekunden (für Sprachnachrichten). */
 export function toOggOpusTimed(input: Buffer): Promise<{ data: Buffer; durationSec: number }> {
   return new Promise((resolve, reject) => {
-    const p = spawn('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'pipe:0', '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-f', 'ogg', 'pipe:1']);
+    const p = spawn('ffmpeg', ['-hide_banner', '-nostdin', '-i', 'pipe:0', ...OPUS_ARGS]);
     const out: Buffer[] = [];
     let err = '';
     p.stdout.on('data', (d) => out.push(d));
@@ -102,4 +105,32 @@ export async function editVideo(input: Buffer, e: VideoEdit): Promise<Buffer> {
   } finally {
     await rm(dir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/** Wellenform für Sprachnachrichten: 64 Werte von 0 bis 100 (WhatsApp zeigt sie als Balken) */
+export function waveform(input: Buffer, bars = 64): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', 'pipe:0', '-vn', '-ac', '1', '-ar', '8000', '-f', 's16le', 'pipe:1']);
+    const out: Buffer[] = [];
+    let err = '';
+    p.stdout.on('data', (d) => out.push(d));
+    p.stderr.on('data', (d) => (err += d));
+    p.on('error', reject);
+    p.on('close', (code) => {
+      if (code !== 0) return reject(new Error('ffmpeg: ' + err.trim()));
+      const pcm = Buffer.concat(out);
+      const n = Math.floor(pcm.length / 2);
+      const per = Math.max(1, Math.floor(n / bars));
+      const avg: number[] = [];
+      for (let b = 0; b < bars; b++) {
+        let sum = 0, cnt = 0;
+        for (let i = b * per; i < Math.min(n, (b + 1) * per); i++) { sum += Math.abs(pcm.readInt16LE(i * 2)); cnt++; }
+        avg.push(cnt ? sum / cnt : 0);
+      }
+      const max = Math.max(1, ...avg);
+      resolve(Uint8Array.from(avg.map((v) => Math.round((v / max) * 100))));
+    });
+    p.stdin.on('error', () => {});
+    p.stdin.end(input);
+  });
 }
