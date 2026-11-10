@@ -119,12 +119,14 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2500); };
   const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? 'Fehler'); } };
 
-  const react = (m: Message, emoji: string | null) => guard(() => api.react(m.id, emoji));
+  // Feste Funktionen für die Blasen: Sonst zeichnet jede Kleinigkeit (auch eine Nachricht in einem anderen Chat) alle Blasen neu
+  const react = useCallback((m: Message, emoji: string | null) => { void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? 'Fehler')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const openMenu = useCallback((mm: Message, p: { x: number; y: number }) => setMenu({ m: mm, ...p }), []);
   const transcribe = useCallback((m: Message) => api.ai.transcribe(m.id).then(() => {}).catch((e: any) => flash(e.message ?? 'Fehler')), []);
-  const jump = (remoteId: string) => {
+  const jump = useCallback((remoteId: string) => {
     const el = scroller.current?.querySelector(`[data-remote="${CSS.escape(remoteId)}"]`);
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
-  };
+  }, []);
 
   // Gesprungen aus Suche, Galerie oder Erinnerung
   useEffect(() => {
@@ -194,7 +196,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             {day && <div className="day"><span>{day}</span></div>}
             <MessageBubble m={m} group={group} showName={showName} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
               reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
-              onAction={(mm, p) => setMenu({ m: mm, ...p })} onReact={react} onJump={jump}
+              onAction={openMenu} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
           </Fragment>
         ))}

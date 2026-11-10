@@ -85,8 +85,9 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
       for (let i = 0; i < fs.length; i++) {
         const id = ids[i];
         try {
+          const dims = isVideo(fs[i]) ? await videoSize(fs[i]) : null;
           await api.upload(chat.id, fs[i], fs[i].name, {
-            caption: i === 0 ? t : undefined, translate: i === 0 && !!t && canTr && !noTr, replyTo: replyTo?.remoteId, video: ve.get(fs[i]),
+            ...(dims ?? {}), caption: i === 0 ? t : undefined, translate: i === 0 && !!t && canTr && !noTr, replyTo: replyTo?.remoteId, video: ve.get(fs[i]),
             onProgress: (p) => outbox.update(id, p >= 1 ? { progress: 1, phase: 'work' } : { progress: p }),
           });
           outbox.remove(id);
@@ -281,6 +282,18 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
 }
 
 /** Kleine Vorschau einer angehängten Bilddatei */
+/** Bildmaße eines Videos messen (höchstens 2 s warten), damit der Chat den Platz freihalten kann */
+function videoSize(f: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const v = document.createElement('video'), url = URL.createObjectURL(f);
+    const done = (r: { width: number; height: number } | null) => { URL.revokeObjectURL(url); resolve(r); };
+    const t = setTimeout(() => done(null), 2000);
+    v.preload = 'metadata'; v.muted = true;
+    v.onloadedmetadata = () => { clearTimeout(t); done(v.videoWidth && v.videoHeight ? { width: v.videoWidth, height: v.videoHeight } : null); };
+    v.onerror = () => { clearTimeout(t); done(null); };
+    v.src = url;
+  });
+}
 const isVideo = (f: File) => f.type.startsWith('video/') || /\.(mp4|mov|m4v|webm)$/i.test(f.name);
 
 function VideoThumb({ file }: { file: File }) {
