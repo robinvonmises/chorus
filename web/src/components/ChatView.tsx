@@ -45,6 +45,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     return () => window.removeEventListener('keydown', esc);
   }, [aiOpen]);
   const [inject, setInject] = useState<{ text: string; n: number } | null>(null);
+  const [draftEmpty, setDraftEmpty] = useState(true);
   const ai = useAi();
   // Transkribieren ist ein ausdrücklicher Klick pro Nachricht: braucht nur den ElevenLabs-Schlüssel, nicht die KI-Freigabe des Chats
   // (sonst fehlte der Knopf in Chats ohne KI-Opt-in, z. B. bei zusammengeführten WhatsApp-Kontakten).
@@ -244,7 +245,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             ))}
           </div>
         )}
-        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        {!aiOpen && !editing && draftEmpty && ai?.features.text && chat.aiEnabled && (
+          <QuickReplies chatId={chat.id} last={messages?.at(-1)} onUse={(t) => setInject({ text: t, n: Date.now() })} />
+        )}
+        <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
@@ -296,6 +300,44 @@ function menuPos(m: { x: number; y: number; picker?: boolean }): React.CSSProper
 }
 
 export { previewOf };
+
+/** Gemerkte Vorschläge je Chat und letzter Nachricht (der Server merkt sie sich ebenfalls) */
+const quickSeen = new Map<string, string[]>();
+const quickDismissed = new Set<string>();
+const QUICK_MAX_AGE = 3 * 24 * 3600_000;
+
+/** KI-Antwortvorschläge über dem Eingabefeld: drei kurze Antworten auf die neueste eingehende Nachricht.
+ *  Geladen wird nur, wenn die letzte Nachricht vom Gegenüber kommt und frisch ist, kurz verzögert (mehrere Nachrichten am Stück = eine Anfrage). */
+function QuickReplies({ chatId, last, onUse }: { chatId: string; last?: Message; onUse: (t: string) => void }) {
+  const want = !!last && !last.fromMe && !last.deleted && Date.now() - last.ts < QUICK_MAX_AGE;
+  const key = want ? `${chatId}|${last!.id}` : '';
+  const [list, setList] = useState<string[]>(() => quickSeen.get(key) ?? []);
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!key || quickDismissed.has(key)) { setList([]); return; }
+    const seen = quickSeen.get(key);
+    if (seen) { setList(seen); return; }
+    setList([]);
+    let alive = true;
+    const t = window.setTimeout(() => {
+      api.ai.quick(chatId).then((r) => {
+        const s = r.suggestions.slice(0, 3);
+        quickSeen.set(key, s);
+        if (quickSeen.size > 100) quickSeen.delete(quickSeen.keys().next().value!);
+        if (alive) setList(s);
+      }).catch(() => {}); // still: Vorschläge sind ein Extra
+    }, 1500);
+    return () => { alive = false; clearTimeout(t); };
+  }, [key, chatId]);
+  if (!key || !list.length || quickDismissed.has(key)) return null;
+  const done = () => { quickDismissed.add(key); force((n) => n + 1); };
+  return (
+    <div className="quick-replies" role="group" aria-label="Antwortvorschläge">
+      {list.map((s, i) => <button key={i} className="quick-chip" onClick={() => { onUse(`${s.trim()} 🤖`); done(); }} title="Ins Eingabefeld übernehmen">{s}</button>)}
+      <button className="icon-btn small quick-x" onClick={done} aria-label="Vorschläge ausblenden"><Icon name="close" size={14} /></button>
+    </div>
+  );
+}
 
 /** Datei, die gerade gesendet wird: erscheint sofort, mit Fortschritt */
 function PendingBubble({ o }: { o: Outgoing }) {

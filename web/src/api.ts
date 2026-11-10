@@ -195,6 +195,7 @@ export const api = {
     voices: () => req<Voice[]>('GET', '/api/ai/voices'),
     setChat: (id: string, on: boolean) => req<Chat>('POST', `/api/chats/${enc(id)}/ai`, { on }),
     summary: (id: string) => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/summary`, {}),
+    quick: (id: string) => req<{ key: string | null; suggestions: string[] }>('POST', `/api/chats/${enc(id)}/ai/quick`, {}),
     suggest: (id: string, hint?: string) => req<{ suggestions: string[] }>('POST', `/api/chats/${enc(id)}/ai/suggest`, { hint }),
     voice: (id: string, text: string, replyTo?: string | null) => req<{ ok: true }>('POST', `/api/chats/${enc(id)}/ai/voice`, { text, replyTo }),
     preview: (id: string, text: string) => req<{ audio: string; mime: string }>('POST', `/api/chats/${enc(id)}/ai/voice`, { text, preview: true }),
