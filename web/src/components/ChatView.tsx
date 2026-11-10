@@ -333,7 +333,7 @@ function QuickReplies({ chatId, last, onUse }: { chatId: string; last?: Message;
   const done = () => { quickDismissed.add(key); force((n) => n + 1); };
   return (
     <div className="quick-replies" role="group" aria-label="Antwortvorschläge">
-      {list.map((s, i) => <button key={i} className="quick-chip" onClick={() => { onUse(`${s.trim()} 🤖`); done(); }} title="Ins Eingabefeld übernehmen">{s}</button>)}
+      {list.map((s, i) => <button key={i} className="quick-chip" onClick={() => { onUse(s.trim()); done(); }} title="Ins Eingabefeld übernehmen">{s}</button>)}
       <button className="icon-btn small quick-x" onClick={done} aria-label="Vorschläge ausblenden"><Icon name="close" size={14} /></button>
     </div>
   );

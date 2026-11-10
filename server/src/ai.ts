@@ -72,11 +72,11 @@ export class Ai {
     return new Anthropic({ apiKey: key, maxRetries: 2, timeout: 120_000 });
   }
 
-  private async ask(system: string, user: string, opts: { maxTokens: number; schema?: Record<string, unknown> }): Promise<string> {
+  private async ask(system: string, user: string, opts: { maxTokens: number; schema?: Record<string, unknown>; model?: string }): Promise<string> {
     const s = this.settings;
     try {
       const r = await this.client().beta.messages.create({
-        model: s.model,
+        model: opts.model ?? s.model,
         max_tokens: opts.maxTokens,
         betas: ['server-side-fallback-2026-07-01'],
         fallbacks: 'default',
@@ -147,6 +147,7 @@ Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.`
     try { return { key, suggestions: await list }; } catch (e) { if (this.quickCache.get(chatId)?.list === list) this.quickCache.delete(chatId); throw e; }
   }
 
+  /** Schnellvorschläge laufen immer über Haiku: kurz, häufig, sehr günstig */
   private async makeQuick(chatId: string): Promise<string[]> {
     const t = this.transcript(chatId, 30);
     const tr = this.store.getChat(chatId)?.translate;
@@ -160,7 +161,7 @@ Jede Antwort höchstens etwa 12 Wörter. Die drei sollen sich in der Richtung un
 Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.
 Braucht die neueste Nachricht keine Antwort (z. B. nur ein Emoji, "ok", ein Danke, eine Werbe- oder Systemnachricht), gib eine leere Liste zurück.`,
       t.text,
-      { maxTokens: 600, schema: { type: 'object', properties: { suggestions: { type: 'array', items: { type: 'string' } } }, required: ['suggestions'], additionalProperties: false } });
+      { maxTokens: 600, model: 'claude-haiku-5-5', schema: { type: 'object', properties: { suggestions: { type: 'array', items: { type: 'string' } } }, required: ['suggestions'], additionalProperties: false } });
     try {
       return (JSON.parse(raw).suggestions as unknown[]).map(String).map((s) => s.trim()).filter(Boolean).slice(0, 3);
     } catch { throw new AiError(502, 'Die Vorschläge konnten nicht gelesen werden.'); }
