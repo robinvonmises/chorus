@@ -47,8 +47,10 @@ export class Store {
       CREATE INDEX IF NOT EXISTS messages_chat_ts ON messages(chat_id, ts);
     `);
     const cols = (this.db.prepare('PRAGMA table_info(chats)').all() as { name: string }[]).map((c) => c.name);
+    const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
+    if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
-    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT']] as const)
+    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
   }
 
@@ -103,7 +105,7 @@ export class Store {
       id: r.id, accountId: r.account_id, network: r.network, remoteId: r.remote_id, title: r.title, kind: r.kind,
       lastTs: r.last_ts, lastText: r.last_text, unread: r.unread, pinned: !!r.pinned, muted: !!r.muted,
       avatarFileId: r.avatar_file_id, aiEnabled: !!r.ai_enabled, autopilot: r.autopilot ? JSON.parse(r.autopilot) : null,
-      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null,
+      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null,
       avatar: (r.custom_avatar || r.avatar_file_id) ? `/api/chats/${encodeURIComponent(r.id)}/avatar?v=${String(r.custom_avatar || r.avatar_file_id).slice(0, 8)}` : null,
     };
     if (r.alias) c.title = r.alias;
@@ -146,6 +148,14 @@ export class Store {
   setAutopilot(id: string, a: import('./types.js').Autopilot | null) {
     this.db.prepare('UPDATE chats SET autopilot=? WHERE id=?').run(a ? JSON.stringify(a) : null, id);
   }
+  setTranslate(id: string, t: Chat['translate']) {
+    this.db.prepare('UPDATE chats SET translate=? WHERE id=?').run(t ? JSON.stringify(t) : null, id);
+  }
+  /** Neueste eingehende Nachrichten mit Text, aber ohne Übersetzung */
+  untranslated(chatId: string, limit: number): Message[] {
+    return this.db.prepare(`SELECT * FROM messages WHERE chat_id=? AND from_me=0 AND deleted=0 AND translation IS NULL AND (text<>'' OR transcript IS NOT NULL) ORDER BY ts DESC LIMIT ?`)
+      .all(chatId, limit).map((r) => this.rowToMsg(r)).reverse();
+  }
   chatAiEnabled(id: string): boolean {
     const r = this.db.prepare('SELECT ai_enabled FROM chats WHERE id=?').get(id) as { ai_enabled: number } | undefined;
     return !!r?.ai_enabled;
@@ -160,7 +170,7 @@ export class Store {
     return {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
-      attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript,
+      attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -198,8 +208,8 @@ export class Store {
     this.db.prepare('UPDATE messages SET id=?, remote_id=? WHERE id=?').run(newId, newRemoteId, oldId);
     return this.getMessage(newId);
   }
-  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments'>>) {
-    const map: Record<string, string> = { text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
+  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation'>>) {
+    const map: Record<string, string> = { translation: 'translation', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
       if (!map[k]) continue;
       const val = typeof v === 'boolean' ? Number(v) : Array.isArray(v) ? JSON.stringify(v) : v;
@@ -217,10 +227,30 @@ export class Store {
     const r = this.db.prepare('SELECT * FROM messages WHERE chat_id=? ORDER BY ts ASC LIMIT 1').get(chatId);
     return r ? this.rowToMsg(r) : null;
   }
-  search(q: string, limit = 50): Message[] {
-    return this.db.prepare(`SELECT * FROM messages WHERE deleted=0 AND text LIKE ? ESCAPE '\\' ORDER BY ts DESC LIMIT ?`)
-      .all('%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%', limit).map((r) => this.rowToMsg(r));
+  /** Volltextsuche über Text, Abschrift, Übersetzung und Dateinamen; optional nur bestimmte Chats */
+  search(q: string, limit = 50, chatIds?: string[], beforeTs?: number): Message[] {
+    const like = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+    const inChats = chatIds ? `AND chat_id IN (${chatIds.map(() => '?').join(',') || "''"})` : '';
+    return this.db.prepare(`SELECT * FROM messages WHERE deleted=0 ${inChats} ${beforeTs ? 'AND ts<?' : ''}
+      AND (text LIKE ? ESCAPE '\\' OR transcript LIKE ? ESCAPE '\\' OR translation LIKE ? ESCAPE '\\' OR attachments LIKE ? ESCAPE '\\')
+      ORDER BY ts DESC LIMIT ?`).all(...([...(chatIds ?? []), ...(beforeTs ? [beforeTs] : []), like, like, like, like, limit] as unknown[])).map((r) => this.rowToMsg(r))
+      // Dateinamen: nur echte Treffer im Namen, nicht in Typ/IDs
+      .filter((m) => [m.text, m.transcript, m.translation].some((t) => t?.toLowerCase().includes(q.toLowerCase())) || m.attachments.some((a) => a.name?.toLowerCase().includes(q.toLowerCase())));
   }
+  /** Galerie: Bilder/Videos, Dateien, Sprachnachrichten oder Links, neueste zuerst */
+  media(kind: 'media' | 'files' | 'voice' | 'links', chatIds: string[] | null, beforeTs: number | undefined, limit: number): Message[] {
+    const cond = {
+      media: `(attachments LIKE '%"kind":"image"%' OR attachments LIKE '%"kind":"video"%')`,
+      files: `(attachments LIKE '%"kind":"file"%' OR attachments LIKE '%"kind":"audio"%')`,
+      voice: `attachments LIKE '%"kind":"voice"%'`,
+      links: `(text LIKE '%http://%' OR text LIKE '%https://%' OR text LIKE '%www.%')`,
+    }[kind];
+    const inChats = chatIds ? `AND chat_id IN (${chatIds.map(() => '?').join(',') || "''"})` : '';
+    return this.db.prepare(`SELECT * FROM messages WHERE deleted=0 AND ${cond} ${inChats} ${beforeTs ? 'AND ts<?' : ''} ORDER BY ts DESC LIMIT ?`)
+      .all(...([...(chatIds ?? []), ...(beforeTs ? [beforeTs] : []), limit] as unknown[])).map((r) => this.rowToMsg(r));
+  }
+  setLink(id: string, link: string | null) { this.db.prepare('UPDATE chats SET link=? WHERE id=?').run(link, id); }
+  linkedIds(link: string): string[] { return (this.db.prepare('SELECT id FROM chats WHERE link=?').all(link) as { id: string }[]).map((r) => r.id); }
 
   // ---------- Dateien (AES-GCM verschlüsselt) ----------
   storeFile(data: Buffer): string {

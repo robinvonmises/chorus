@@ -5,7 +5,7 @@ import { useSyncExternalStore } from 'react';
  * bis der Messenger die echte Nachricht zurückmeldet.
  */
 export type Outgoing = {
-  id: number; chatId: string; name: string; kind: 'image' | 'video' | 'file';
+  id: number; chatId: string; name: string; kind: 'image' | 'video' | 'file' | 'voice'; duration?: number;
   url: string | null; caption?: string;
   progress: number; // 0–1 Hochladen
   phase: 'upload' | 'work' | 'error'; // work = Server bearbeitet/sendet

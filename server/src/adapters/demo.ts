@@ -16,12 +16,14 @@ export class DemoAdapter implements Adapter {
       { remoteId: 'familie', title: 'Familie', kind: 'group' as const },
       { remoteId: 'tom', title: 'Tom', kind: 'direct' as const },
       { remoteId: 'verein', title: 'Laufgruppe Sonntag', kind: 'group' as const },
+      { remoteId: 'emma', title: 'Emma (London)', kind: 'direct' as const },
     ];
     const script: Record<string, [string, string, number][]> = {
       anna: [['Anna', 'Hey! Kommst du heute Abend noch vorbei?', 50], ['me', 'Ja, so gegen 19 Uhr 🙂', 48], ['Anna', 'Super, bring gern was zu trinken mit', 47]],
       familie: [['Mama', 'Wer kommt Sonntag zum Essen?', 300], ['Papa', 'Ich natürlich 😄', 290], ['Lena', 'Bin dabei, bringe Nachtisch mit', 200], ['me', 'Ich auch!', 120]],
       tom: [['Tom', 'Hast du die Unterlagen schon angeschaut?', 1500]],
       verein: [['Jonas', 'Treffpunkt wie immer 9 Uhr am Parkplatz', 3000], ['Sarah', '👍', 2900]],
+      emma: [['Emma', 'Hi! Are you still coming to London next month?', 4000], ['Emma', 'Let me know your dates, you can stay with us 😊', 3990]],
     };
     for (const c of chats) {
       const msgs = script[c.remoteId];
@@ -41,14 +43,14 @@ export class DemoAdapter implements Adapter {
   private reply(chat: string, text: string) {
     this.timers.push(setTimeout(() => {
       this.ev.message({
-        chatRemoteId: chat, remoteId: String(this.n++), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : 'Lena',
+        chatRemoteId: chat, remoteId: String(this.n++), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : 'Lena',
         fromMe: false, ts: Date.now(), text, edited: false, deleted: false, attachments: [], status: 'received',
       });
     }, 1500));
   }
   async sendText(chat: string, text: string) {
     const id = String(this.n++);
-    this.reply(chat, text.includes('?') ? 'Gute Frage, ich schau nach 🤔' : 'Alles klar 👍');
+    this.reply(chat, chat === 'emma' ? (text.includes('?') ? 'Good question, let me check 🤔' : 'Sounds great, see you soon!') : text.includes('?') ? 'Gute Frage, ich schau nach 🤔' : 'Alles klar 👍');
     return id;
   }
   async sendFile(chat: string, f: OutgoingFile) {

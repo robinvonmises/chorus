@@ -1,7 +1,9 @@
 import { memo, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { attachmentUrl, type Attachment, type Message } from '../api';
-import { duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
+import { NETWORKS, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
+import type { Network } from '../api';
+import { whenLabel } from './WhenPicker';
 import { Icon } from './Icon';
 import { player, usePlayer } from '../player';
 
@@ -13,8 +15,12 @@ export function previewOf(m: Message): string {
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe }: {
+export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, net, reminder }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
+  /** Bei zusammengeführten Kontakten: über welchen Messenger die Nachricht lief */
+  net?: Network;
+  /** Erinnerung an diese Nachricht (Zeitpunkt) */
+  reminder?: number;
   onAction: (m: Message, anchor: { x: number; y: number }) => void;
   onReact: (m: Message, emoji: string | null) => void;
   onJump: (remoteId: string) => void;
@@ -56,8 +62,11 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, r
           {m.attachments.map((a, i) => <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
+          {m.translation && <div className={`translation ${m.fromMe ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{m.fromMe ? `Original: ${m.translation}` : m.translation}</span></div>}
         </>}
         <span className="meta">
+          {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}
+          {net && <span className="net-dot" title={NETWORKS[net].name} style={{ background: NETWORKS[net].color }} />}
           {m.edited && !m.deleted && <span>bearbeitet</span>}
           <span>{msgTime(m.ts)}</span>
           {m.fromMe && <StatusIcon s={m.status} />}
@@ -112,7 +121,7 @@ function effKind(a: Attachment): Attachment['kind'] {
   return 'file';
 }
 
-function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i: number }) {
+export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i: number }) {
   const a = { ...raw, kind: effKind(raw) };
   const url = attachmentUrl(m, i);
   const [failed, setFailed] = useState(false);

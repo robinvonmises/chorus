@@ -15,6 +15,8 @@ export interface Chat {
   kind: 'direct' | 'group' | 'channel'; lastTs: number; lastText: string; unread: number; pinned: boolean; muted: boolean;
   aiEnabled?: boolean;
   autopilot?: Autopilot | null;
+  translate?: { on: boolean; lang?: string | null; langName?: string | null } | null;
+  link?: string | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
   info?: { phone?: string; username?: string; about?: string; description?: string; members?: number; fetchedAt?: number } | null;
 }
@@ -28,6 +30,7 @@ export interface Message {
   id: string; chatId: string; remoteId: string; senderId: string; senderName: string; fromMe: boolean; ts: number;
   text: string; replyToRemoteId?: string | null; edited: boolean; deleted: boolean; attachments: Attachment[];
   reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
+  translation?: string | null;
 }
 export interface PublicProfile {
   id: string; name: string; initialized: boolean; invite: boolean; totp: boolean; avatar: string | null;
@@ -43,7 +46,15 @@ export type HubEvent =
   | { type: 'account_removed'; id: string }
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
-  | { type: 'notify'; chat: Chat; message: Message };
+  | { type: 'notify'; chat: Chat; message: Message }
+  | { type: 'planned'; items: Planned[] }
+  | { type: 'reminder'; item: Planned; chat: Chat | null };
+
+export interface Planned {
+  id: string; kind: 'send' | 'remind'; chatId: string; at: number; created: number; text: string;
+  replyTo?: string | null; translate?: boolean; messageId?: string | null; note?: string; error?: string;
+}
+export type MediaKind = 'media' | 'files' | 'voice' | 'links';
 
 export interface AiSettings {
   model: string; models: { id: string; label: string }[]; hasAnthropicKey: boolean; hasElevenKey: boolean;
@@ -118,7 +129,20 @@ export const api = {
   markRead: (id: string) => req('POST', `/api/chats/${enc(id)}/read`),
   messages: (id: string, before?: number) => req<Message[]>('GET', `/api/chats/${enc(id)}/messages${before ? `?before=${before}` : ''}`),
   history: (id: string) => req('POST', `/api/chats/${enc(id)}/history`),
-  send: (id: string, text: string, replyTo?: string | null) => req('POST', `/api/chats/${enc(id)}/send`, { text, replyTo }),
+  send: (id: string, text: string, replyTo?: string | null, translate?: boolean) => req('POST', `/api/chats/${enc(id)}/send`, { text, replyTo, translate }),
+  translate: (id: string, on: boolean) => req<Chat>('PUT', `/api/chats/${enc(id)}/translate`, { on }),
+  planned: () => req<Planned[]>('GET', '/api/planned'),
+  plan: (p: Partial<Planned> & { kind: Planned['kind']; chatId: string; at: number }) => req<Planned>('POST', '/api/planned', p),
+  replan: (id: string, patch: { at?: number; text?: string }) => req<Planned>('PATCH', `/api/planned/${enc(id)}`, patch),
+  unplan: (id: string) => req('DELETE', `/api/planned/${enc(id)}`),
+  planNow: (id: string) => req('POST', `/api/planned/${enc(id)}/now`, {}),
+  gallery: (kind: MediaKind, chats?: string[], before?: number) => req<Message[]>('GET', `/api/gallery?kind=${kind}${chats ? `&chats=${chats.map(enc).join(',')}` : ''}${before ? `&before=${before}` : ''}`),
+  aiSearch: (question: string) => req<{ answer: string; messages: Message[]; terms: string[]; scope: 'all' | 'ai' }>('POST', '/api/search/ai', { question }),
+  aiSearchScope: () => req<{ all: boolean }>('GET', '/api/search/ai'),
+  setAiSearchScope: (all: boolean) => req<{ all: boolean }>('PUT', '/api/search/ai', { all }),
+  links: (id: string) => req<{ linked: Chat[]; suggestions: Chat[] }>('GET', `/api/chats/${enc(id)}/link`),
+  link: (id: string, other: string) => req<Chat[]>('POST', `/api/chats/${enc(id)}/link`, { other }),
+  unlink: (id: string) => req('DELETE', `/api/chats/${enc(id)}/link`),
   upload: (id: string, file: Blob, name: string, opts: { caption?: string; replyTo?: string | null; voice?: boolean; duration?: number; video?: { start: number; end: number; crop?: { x: number; y: number; w: number; h: number } }; onProgress?: (p: number) => void } = {}) => {
     const fd = new FormData();
     if (opts.caption) fd.append('caption', opts.caption);
@@ -151,7 +175,7 @@ export const api = {
   edit: (msgId: string, text: string) => req('PATCH', `/api/messages/${enc(msgId)}`, { text }),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
   startChat: (accountId: string, phone: string) => req<Chat>('POST', `/api/accounts/${accountId}/start-chat`, { phone }),
-  search: (q: string) => req<Message[]>('GET', `/api/search?q=${encodeURIComponent(q)}`),
+  search: (q: string, chats?: string[]) => req<Message[]>('GET', `/api/search?q=${encodeURIComponent(q)}${chats ? `&chats=${chats.map(enc).join(',')}` : ''}`),
 
   ai: {
     settings: () => req<AiSettings>('GET', '/api/ai/settings'),

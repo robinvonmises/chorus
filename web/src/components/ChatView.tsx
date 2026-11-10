@@ -1,5 +1,6 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, attachmentUrl, type Account, type Chat, type Message } from '../api';
+import { api, attachmentUrl, type Account, type Chat, type Message, type Planned } from '../api';
+import { WhenPicker, whenLabel } from './WhenPicker';
 import { NETWORKS, QUICK_REACTIONS, dayLabel } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
@@ -12,8 +13,10 @@ import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 
-export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat }: {
+export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
+  linked?: Chat[]; accounts?: Account[]; focus?: { id: string; remoteId: string; n: number } | null; planned?: Planned[];
+  onGallery?: () => void; onOpenMessage?: (m: Message) => void;
   onPatchChat: (p: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived'>>) => Promise<void>; onChat: (c: Chat) => void;
 }) {
   const [contact, setContact] = useState(false);
@@ -49,7 +52,21 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   useLayoutEffect(() => { const el = scroller.current; if (el && pending.length) el.scrollTop = el.scrollHeight; }, [pending.length]);
   const byRemote = useMemo(() => new Map((messages ?? []).map((m) => [m.remoteId, m])), [messages]);
   const group = chat.kind !== 'direct';
-  const connected = account?.status.state === 'connected';
+  // Zusammengeführter Kontakt: Antworten über den Messenger, über den zuletzt etwas kam (umschaltbar)
+  const multi = linked.length > 1;
+  const netOf = useMemo(() => new Map(linked.map((c) => [c.id, c.network])), [linked]);
+  const [via, setVia] = useState<string | null>(null);
+  const lastIn = useMemo(() => [...(messages ?? [])].reverse().find((m) => !m.fromMe)?.chatId, [messages]);
+  const sendChat = linked.find((c) => c.id === (via ?? lastIn)) ?? chat;
+  const sendAccount = multi ? accounts.find((a) => a.id === sendChat.accountId) : account;
+  const connected = sendAccount?.status.state === 'connected';
+  const ids = useMemo(() => new Set(linked.map((c) => c.id)), [linked]);
+  const mine = planned.filter((p) => ids.has(p.chatId));
+  const scheduled = mine.filter((p) => p.kind === 'send');
+  const reminders = useMemo(() => new Map(mine.filter((p) => p.kind === 'remind' && p.messageId).map((p) => [p.messageId!, p.at])), [mine]);
+  const [showPlanned, setShowPlanned] = useState(false);
+  const [remindFor, setRemindFor] = useState<Message | null>(null);
+  const tr = chat.translate;
 
   // Scrollposition: unten bleiben bei neuen Nachrichten, Position halten beim Nachladen
   useLayoutEffect(() => {
@@ -105,6 +122,12 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
   };
 
+  // Gesprungen aus Suche, Galerie oder Erinnerung
+  useEffect(() => {
+    if (!focus || !messages?.some((m) => m.id === focus.id)) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => jump(focus.remoteId)));
+  }, [focus?.n, messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const items = useMemo(() => {
     const out: { m: Message; day?: string; showName: boolean }[] = [];
     let lastDay = '', lastSender = '';
@@ -136,7 +159,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         <Avatar name={chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
-          <small><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}{!connected && ' · nicht verbunden'}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autopilot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
+          <small>{multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autopilot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
         </div>
         </button>
         <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>
@@ -148,6 +171,8 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); onPatchChat({ pinned: !chat.pinned }); }}><Icon name="pin" size={18} />{chat.pinned ? 'Lösen' : 'Anheften'}</button>
               <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? 'Ton an' : 'Stummschalten'}</button>
               <button onClick={() => { setHeadMenu(false); setContact(true); }}><Icon name="user" size={18} />{chat.kind === 'direct' ? 'Kontaktprofil' : 'Gruppeninfo'}</button>
+              <button onClick={() => { setHeadMenu(false); guard(async () => { const c = await api.translate(chat.id, !tr?.on); onChat(c); flash(c.translate?.on ? 'Live-Übersetzung an. Fremdsprachige Nachrichten erscheinen übersetzt.' : 'Live-Übersetzung aus'); }); }}><Icon name="globe" size={18} />{tr?.on ? 'Übersetzung ausschalten' : 'Live-Übersetzung'}</button>
+              {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
             </div>
@@ -164,6 +189,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
             <MessageBubble m={m} group={group} showName={showName} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
+              net={multi ? netOf.get(m.chatId) : undefined} reminder={reminders.get(m.id)}
               onAction={(mm, p) => setMenu({ m: mm, ...p })} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
           </Fragment>
@@ -179,7 +205,32 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <AiPanel chat={chat} replyTo={replyTo} onClose={() => setAiOpen(false)} onError={flash}
             onUse={(text) => { setInject({ text, n: Date.now() }); setAiOpen(false); }} />
         </div>}
-        <Composer chat={chat} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        {scheduled.length > 0 && (
+          <div className="planned-bar">
+            <button className="planned-toggle" onClick={() => setShowPlanned((v) => !v)}>
+              <Icon name="clock" size={16} /><span>{scheduled.length === 1 ? `1 geplante Nachricht · ${whenLabel(scheduled[0].at)}` : `${scheduled.length} geplante Nachrichten`}</span>
+              <Icon name="back" size={14} className={showPlanned ? 'rot-90' : 'rot-270'} />
+            </button>
+            {showPlanned && scheduled.map((p) => (
+              <div key={p.id} className={`planned-item ${p.error ? 'err' : ''}`}>
+                <span className="planned-text"><b>{p.error ? 'Nicht gesendet' : whenLabel(p.at)}{multi ? ` · ${NETWORKS[netOf.get(p.chatId) ?? 'demo'].name}` : ''}{p.translate ? ' · 🌐' : ''}</b>{p.text}</span>
+                <button className="btn small ghost" onClick={() => guard(() => api.planNow(p.id))}>Jetzt senden</button>
+                <button className="icon-btn small" onClick={() => guard(() => api.unplan(p.id))} aria-label="Löschen"><Icon name="trash" size={16} /></button>
+              </div>
+            ))}
+          </div>
+        )}
+        {multi && (
+          <div className="via-bar" role="radiogroup" aria-label="Senden über">
+            <span>Senden über</span>
+            {linked.map((c) => (
+              <button key={c.id} role="radio" aria-checked={c.id === sendChat.id} className={`pill ${c.id === sendChat.id ? 'on' : ''}`} onClick={() => setVia(c.id)}>
+                <span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name}{linked.filter((x) => x.network === c.network).length > 1 ? ` · ${c.netTitle ?? c.title}` : ''}
+              </button>
+            ))}
+          </div>
+        )}
+        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} draftId={chat.id} onInfo={flash} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
@@ -199,6 +250,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               </div>
               <div className="menu-list">
                 <button onClick={() => { setReplyTo(menu.m); setEditing(null); setMenu(null); }}><Icon name="reply" size={18} />Antworten</button>
+                {reminders.has(menu.m.id)
+                  ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash('Erinnerung gelöscht'); }); }}><Icon name="alarm" size={18} />Erinnerung löschen</button>
+                  : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
                 {menu.m.attachments.map((a, i) => (
                   <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
@@ -211,6 +265,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           </div>
         </div>
       ))(menu ?? menuShown))}
+      {remindFor && <WhenPicker title="Erinnern" confirm="Erinnern" hint="Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist."
+        onClose={() => setRemindFor(null)}
+        onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(`Erinnerung ${whenLabel(at)}`); }); }} />}
       {toast && <div className="toast">{toast}</div>}
       {contact && <ContactSheet chat={chat} account={account} onClose={() => setContact(false)} onChat={onChat} />}
     </div>
@@ -227,12 +284,14 @@ export { previewOf };
 
 /** Datei, die gerade gesendet wird: erscheint sofort, mit Fortschritt */
 function PendingBubble({ o }: { o: Outgoing }) {
-  const label = o.phase === 'error' ? 'Nicht gesendet' : o.phase === 'work' ? (o.kind === 'video' ? 'Wird verarbeitet …' : 'Wird gesendet …') : `Wird hochgeladen … ${Math.round(o.progress * 100)} %`;
+  const label = o.phase === 'error' ? 'Nicht gesendet' : o.phase === 'work' || o.kind === 'voice' ? (o.kind === 'video' ? 'Wird verarbeitet …' : 'Wird gesendet …') : `Wird hochgeladen … ${Math.round(o.progress * 100)} %`;
   const ring = o.phase === 'upload' ? o.progress : null;
   return (
     <div className="msg out pending">
       <div className={`bubble ${o.url && !o.caption ? "media-only" : ""} ${o.caption && o.url ? "has-media" : ""}`}>
-        {o.url ? (
+        {o.kind === 'voice' ? (
+          <div className="pending-file pending-voice"><span className="pending-ring small">{o.phase === 'error' ? <Icon name="close" size={16} /> : <Ring p={ring} />}</span><Icon name="mic" size={18} /><span className="pending-name">{Math.floor((o.duration ?? 0) / 60)}:{String((o.duration ?? 0) % 60).padStart(2, '0')}</span></div>
+        ) : o.url ? (
           <div className="pending-media">
             {o.kind === 'video' ? <video src={`${o.url}#t=0.1`} muted playsInline preload="metadata" /> : <img src={o.url} alt="" />}
             <span className="pending-ring">{o.phase === 'error' ? <Icon name="close" size={22} /> : <Ring p={ring} />}</span>

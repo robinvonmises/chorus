@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+import type { Chat, Message } from './types.js';
 import { createRequire } from 'node:module';
 import { Push } from './push.js';
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
@@ -21,6 +23,8 @@ import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
 import { Ai, AiError } from './ai.js';
 import { AutopilotRunner } from './autopilot.js';
+import { Translator } from './translate.js';
+import { Planner } from './planner.js';
 import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
 import { exportZip, slug } from './export.js';
 import * as totp from './totp.js';
@@ -48,6 +52,8 @@ interface Ctx {
   hub: Hub | null;
   ai: Ai | null;
   autopilot: AutopilotRunner | null;
+  translator: Translator | null;
+  planner: Planner | null;
   sockets: Set<import('ws').WebSocket>;
   pendingTotp: { secret: string; sid: string } | null;
   lastTotpStep: number;
@@ -57,7 +63,7 @@ function ctxOf(p: ProfileEntry): Ctx {
   let c = ctxs.get(p.id);
   if (c) { c.p = p; return c; }
   const vault = registry.vault(p);
-  const ctx: Ctx = { p, vault, hub: null, ai: null, autopilot: null, sockets: new Set(), pendingTotp: null, lastTotpStep: 0 };
+  const ctx: Ctx = { p, vault, hub: null, ai: null, autopilot: null, translator: null, planner: null, sockets: new Set(), pendingTotp: null, lastTotpStep: 0 };
   vault.onUnlock(async (dek) => {
     const dir = registry.dirOf(ctx.p);
     const store = new Store(dir, dek);
@@ -65,6 +71,10 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.hub = hub;
     ctx.ai = new Ai(store);
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
+    ctx.translator = new Translator(hub, ctx.ai);
+    ctx.planner?.stop();
+    ctx.planner = new Planner(hub, (title, body, chatId) => { if (!appVisible(ctx)) void push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }); },
+      (p) => sendMaybeTranslated(hub, ctx.ai!, p.chatId, p.text, p.replyTo ?? null, !!p.translate));
     hub.subscribe((e) => broadcast(ctx, e));
     // Push nur, wenn die App gerade nirgends offen und sichtbar ist. Sonst zeigt die App selbst einen dezenten Hinweis.
     hub.subscribe((e) => { if (e.type !== 'notify') return; if (appVisible(ctx)) console.log('[push] übersprungen: App ist offen'); else push.notify(store, e.chat, e.message); });
@@ -370,7 +380,7 @@ app.delete('/api/profiles/:id', async (req) => {
   if (id === C(req).p.id) throw Object.assign(new Error('Du kannst dein eigenes Profil nicht löschen'), { statusCode: 400 });
   const other = ctxs.get(id);
   if (other) {
-    await other.hub?.stopAll(); other.hub?.store.close();
+    other.planner?.stop(); await other.hub?.stopAll(); other.hub?.store.close();
     for (const ws of other.sockets) ws.close(4401, 'Profil gelöscht');
     ctxs.delete(id);
   }
@@ -435,10 +445,25 @@ app.get('/api/chats/:id/messages', async (req) => {
   return H(req).store.listMessages((req.params as any).id, q.before ? Number(q.before) : undefined, Math.min(Number(q.limit ?? 60), 200));
 });
 app.post('/api/chats/:id/history', async (req) => { await H(req).loadHistory((req.params as any).id); return { ok: true }; });
+/** Senden, bei eingeschalteter Live-Übersetzung in der Sprache des Chatpartners; das deutsche Original bleibt sichtbar */
+async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, text: string, replyTo: string | null, translate: boolean) {
+  const chat = h.store.getChat(id);
+  // Bei zusammengeführten Kontakten gilt die Übersetzung des ganzen Kontakts
+  const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
+  const tr = src?.translate;
+  if (translate && tr?.on && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled) {
+    const out = await ai.translateOut(id, text, tr.langName);
+    const m = await h.sendText(id, out, replyTo);
+    if (m) { const u = h.store.patchMessage(m.id, { translation: text }); if (u) h.emit({ type: 'message', message: u }); }
+    return;
+  }
+  await h.sendText(id, text, replyTo);
+}
 app.post('/api/chats/:id/send', async (req) => {
-  const { text, replyTo } = req.body as { text: string; replyTo?: string | null };
+  const { text, replyTo, translate } = req.body as { text: string; replyTo?: string | null; translate?: boolean };
   if (!text?.trim()) throw Object.assign(new Error('Leere Nachricht'), { statusCode: 400 });
-  await H(req).sendText((req.params as any).id, text, replyTo);
+  const id = (req.params as any).id;
+  await sendMaybeTranslated(H(req), A(req), id, text, replyTo ?? null, !!translate);
   return { ok: true };
 });
 app.post('/api/chats/:id/upload', async (req) => {
@@ -502,6 +527,46 @@ app.post('/api/chats/:id/ai/suggest', async (req) => {
   needAi(req, id);
   const hint = String((req.body as any)?.hint ?? '').slice(0, 500).trim();
   return { suggestions: await A(req).suggest(id, hint || undefined) };
+});
+// ---------- Geplant: zeitversetzt senden, Erinnerungen ----------
+const P = (req: FastifyRequest) => { const p = C(req).planner; if (!p) throw Object.assign(new Error('Nicht bereit'), { statusCode: 503 }); return p; };
+app.get('/api/planned', async (req) => P(req).list());
+app.post('/api/planned', async (req) => {
+  const b = (req.body ?? {}) as any;
+  const kind = b.kind === 'remind' ? 'remind' : 'send';
+  const text = String(b.text ?? '').slice(0, 8000);
+  if (kind === 'send' && !text.trim()) throw Object.assign(new Error('Leere Nachricht'), { statusCode: 400 });
+  return P(req).add({ kind, chatId: String(b.chatId ?? ''), at: Number(b.at), text, replyTo: b.replyTo ?? null, translate: !!b.translate,
+    messageId: b.messageId ?? null, note: String(b.note ?? '').slice(0, 300) || undefined });
+});
+app.patch('/api/planned/:id', async (req) => {
+  const b = (req.body ?? {}) as any;
+  return P(req).update((req.params as any).id, { ...(b.at ? { at: Number(b.at) } : {}), ...(typeof b.text === 'string' ? { text: b.text.slice(0, 8000) } : {}) });
+});
+app.delete('/api/planned/:id', async (req) => { P(req).remove((req.params as any).id); return { ok: true }; });
+/** Jetzt sofort senden */
+app.post('/api/planned/:id/now', async (req) => {
+  const p = P(req).list().find((x) => x.id === (req.params as any).id);
+  if (!p) throw Object.assign(new Error('Nicht gefunden'), { statusCode: 404 });
+  await sendMaybeTranslated(H(req), A(req), p.chatId, p.text, p.replyTo ?? null, !!p.translate);
+  P(req).remove(p.id);
+  return { ok: true };
+});
+
+/** Live-Übersetzung ein/aus. Schaltet die KI für den Chat mit ein und übersetzt die letzten Nachrichten. */
+app.put('/api/chats/:id/translate', async (req) => {
+  const id = (req.params as any).id;
+  const h = H(req);
+  const c = h.store.getChat(id);
+  if (!c) throw new AiError(404, 'Chat nicht gefunden');
+  const on = !!(req.body as any)?.on;
+  if (on && !A(req).publicSettings().features.text) throw new AiError(400, 'Für die Übersetzung bitte zuerst in den Einstellungen einen Claude-Schlüssel eintragen.');
+  if (on && !c.aiEnabled) h.setChatAi(id, true);
+  h.store.setTranslate(id, { ...(c.translate ?? {}), on });
+  const chat = h.store.getChat(id)!;
+  h.emit({ type: 'chat', chat });
+  if (on) void C(req).translator!.run(id, 30);
+  return chat;
 });
 /** Autopilot ein/aus, Limit und Hinweise */
 app.put('/api/chats/:id/autopilot', async (req) => {
@@ -633,8 +698,79 @@ app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
 app.put('/api/media', async (req) => { H(req).autoSaveMedia = !!(req.body as any)?.autoSave; return { autoSave: H(req).autoSaveMedia }; });
 
 app.get('/api/search', async (req) => {
-  const q = String((req.query as any).q ?? '').trim();
-  return q.length < 2 ? [] : H(req).store.search(q);
+  const qs = req.query as { q?: string; chats?: string; before?: string };
+  const q = String(qs.q ?? '').trim();
+  const chats = qs.chats ? String(qs.chats).split(',').filter(Boolean) : undefined;
+  return q.length < 2 ? [] : H(req).store.search(q, 60, chats, qs.before ? Number(qs.before) : undefined);
+});
+/** Galerie: ?kind=media|files|voice|links&chats=a,b&before=ts */
+app.get('/api/gallery', async (req) => {
+  const qs = req.query as { kind?: string; chats?: string; before?: string };
+  const kind = (['media', 'files', 'voice', 'links'] as const).find((k) => k === qs.kind) ?? 'media';
+  const chats = qs.chats ? String(qs.chats).split(',').filter(Boolean) : null;
+  return H(req).store.media(kind, chats, qs.before ? Number(qs.before) : undefined, 120);
+});
+/** KI-Suche: Frage in Alltagssprache. Standard: nur Chats mit eingeschalteter KI; „all“ nach Freigabe in den Einstellungen */
+app.post('/api/search/ai', async (req) => {
+  const h = H(req), ai = A(req);
+  const question = String((req.body as any)?.question ?? '').trim().slice(0, 500);
+  if (question.length < 3) throw new AiError(400, 'Bitte eine Frage eingeben.');
+  if (!ai.publicSettings().features.text) throw new AiError(400, 'Für die KI-Suche bitte zuerst einen Claude-Schlüssel eintragen.');
+  const all = h.store.getSetting('aiSearchAll', false);
+  const allowed = h.store.listChats().filter((c) => all || c.aiEnabled);
+  if (!allowed.length) throw new AiError(400, 'Die KI darf noch in keinem Chat suchen. Schalte die KI in einzelnen Chats ein oder erlaube die Suche in allen Chats.');
+  const byId = new Map(allowed.map((c) => [c.id, c]));
+  const terms = await ai.searchTerms(question);
+  const hits = new Map<string, Message>();
+  for (const t of terms) for (const m of h.store.search(t, 60, [...byId.keys()])) hits.set(m.id, m);
+  const list = [...hits.values()].sort((a, b) => b.ts - a.ts).slice(0, 150);
+  if (!list.length) return { answer: 'Dazu habe ich in deinen Chats nichts gefunden.', messages: [], terms, scope: all ? 'all' : 'ai' };
+  const fmt = new Intl.DateTimeFormat('de-DE', { dateStyle: 'short', timeStyle: 'short', timeZone: process.env.TZ || 'Europe/Berlin' });
+  const lines = list.map((m) => `${m.id} | ${fmt.format(m.ts)} | ${byId.get(m.chatId)?.title ?? ''} | ${m.fromMe ? 'Ich' : m.senderName}: ${(m.text || m.transcript || m.attachments.map((a) => a.name).join(', ')).slice(0, 600)}`).join('\n');
+  const r = await ai.searchAnswer(question, lines);
+  return { answer: r.answer, messages: r.ids.map((id) => hits.get(id)).filter(Boolean), terms, scope: all ? 'all' : 'ai' };
+});
+app.get('/api/search/ai', async (req) => ({ all: H(req).store.getSetting('aiSearchAll', false) }));
+app.put('/api/search/ai', async (req) => { H(req).store.setSetting('aiSearchAll', !!(req.body as any)?.all); return { all: !!(req.body as any)?.all }; });
+
+// ---------- Kontakte über Messenger hinweg zusammenführen ----------
+const digits = (s?: string | null) => (s ?? '').replace(/[^\d]/g, '').slice(-9);
+function phoneOf(c: Chat): string {
+  if (c.info?.phone) return digits(c.info.phone);
+  const r = c.remoteId.split('@')[0];
+  return /^\+?\d{7,}$/.test(r) ? digits(r) : '';
+}
+app.get('/api/chats/:id/link', async (req) => {
+  const h = H(req);
+  const c = h.store.getChat((req.params as any).id);
+  if (!c) throw Object.assign(new Error('Chat nicht gefunden'), { statusCode: 404 });
+  const linked = c.link ? h.store.linkedIds(c.link).filter((x) => x !== c.id).map((x) => h.store.getChat(x)).filter(Boolean) : [];
+  const ph = phoneOf(c), name = c.title.trim().toLowerCase();
+  const suggestions = h.store.listChats().filter((o) => o.id !== c.id && o.kind === 'direct' && (!c.link || o.link !== c.link)
+    && ((ph && phoneOf(o) === ph) || (name.length > 2 && o.title.trim().toLowerCase() === name))).slice(0, 10);
+  return { linked, suggestions };
+});
+app.post('/api/chats/:id/link', async (req) => {
+  const h = H(req);
+  const a = h.store.getChat((req.params as any).id), b = h.store.getChat(String((req.body as any)?.other ?? ''));
+  if (!a || !b || a.id === b.id) throw Object.assign(new Error('Chat nicht gefunden'), { statusCode: 404 });
+  if (a.kind !== 'direct' || b.kind !== 'direct') throw Object.assign(new Error('Nur Einzelchats lassen sich zusammenführen.'), { statusCode: 400 });
+  const link = a.link || b.link || randomUUID().slice(0, 12);
+  // Hatte b schon eine eigene Gruppe, die ganze Gruppe mitnehmen
+  for (const id of [a.id, b.id, ...(b.link && b.link !== link ? h.store.linkedIds(b.link) : [])]) h.store.setLink(id, link);
+  const out = h.store.linkedIds(link).map((id) => h.store.getChat(id)!);
+  for (const c of out) h.emit({ type: 'chat', chat: c });
+  return out;
+});
+app.delete('/api/chats/:id/link', async (req) => {
+  const h = H(req);
+  const c = h.store.getChat((req.params as any).id);
+  if (!c?.link) return { ok: true };
+  h.store.setLink(c.id, null);
+  const rest = h.store.linkedIds(c.link);
+  if (rest.length === 1) h.store.setLink(rest[0], null); // Einzelner Rest ist keine Gruppe mehr
+  for (const id of [c.id, ...rest]) h.emit({ type: 'chat', chat: h.store.getChat(id)! });
+  return { ok: true };
 });
 
 // ---------- Live-Ereignisse ----------

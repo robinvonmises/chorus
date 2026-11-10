@@ -8,14 +8,20 @@ import { VideoEditor, type VideoEdit } from './VideoEditor';
 import { outbox } from '../outbox';
 import { previewOf } from './Message';
 import { useAi } from '../aiState';
+import { WhenPicker, whenLabel } from './WhenPicker';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError }: {
-  chat: Chat; disabled: boolean; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
+export function Composer({ chat, draftId, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
+  chat: Chat; draftId?: string; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
-  const draftKey = `inbox:draft:${chat.id}`;
+  const draftKey = `inbox:draft:${draftId ?? chat.id}`;
+  // Live-Übersetzung: eigene Nachrichten in der Sprache des Chatpartners senden (pro Nachricht abschaltbar)
+  const tr = chat.translate;
+  const canTr = !!(tr?.on && tr.lang && tr.lang !== 'de' && tr.langName);
+  const [noTr, setNoTr] = useState(false);
+  const [when, setWhen] = useState(false);
   const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '');
   const [emoji, setEmoji] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
@@ -85,9 +91,25 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
     }
     if (!t) return;
     const r = replyTo?.remoteId;
-    setText(''); onSent();
-    try { await api.send(chat.id, t, r); } catch (e: any) { onError(e.message); }
+    const translate = canTr && !noTr;
+    setText(''); setNoTr(false); onSent();
+    try { await api.send(chat.id, t, r, translate); } catch (e: any) { onError(e.message); }
   };
+
+  /** Zeitversetzt senden */
+  const schedule = async (at: number) => {
+    const t = text.trim();
+    setWhen(false);
+    if (!t) return;
+    try {
+      await api.plan({ kind: 'send', chatId: chat.id, at, text: t, replyTo: replyTo?.remoteId ?? null, translate: canTr && !noTr });
+      setText(''); setNoTr(false); onSent();
+      onInfo?.(`Wird ${whenLabel(at)} gesendet`);
+    } catch (e: any) { onError(e.message); }
+  };
+  const sendPress = useRef<number | null>(null);
+  const pressStart = () => { if (editing) return; sendPress.current = window.setTimeout(() => { sendPress.current = -1; navigator.vibrate?.(10); setWhen(true); }, 500); };
+  const pressEnd = () => { if (sendPress.current && sendPress.current > 0) clearTimeout(sendPress.current); };
 
   /** Text in der eigenen ElevenLabs-Stimme als Sprachnachricht senden */
   const sendAsVoice = async () => {
@@ -121,8 +143,14 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
         if (cancelRec.current || secs < 0.7) return;
         const blob = new Blob(chunks.current, { type: r.mimeType || 'audio/webm' });
         const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
-        try { await api.upload(chat.id, blob, `sprachnachricht.${ext}`, { voice: true, duration: Math.round(secs), replyTo: replyTo?.remoteId }); onSent(); }
-        catch (e: any) { onError(e.message); }
+        // Blase sofort zeigen, nicht erst nach dem Senden
+        const oid = outbox.add({ chatId: chat.id, name: 'Sprachnachricht', kind: 'voice', duration: Math.round(secs), url: null });
+        onSent();
+        try {
+          await api.upload(chat.id, blob, `sprachnachricht.${ext}`, { voice: true, duration: Math.round(secs), replyTo: replyTo?.remoteId,
+            onProgress: (p) => outbox.update(oid, p >= 1 ? { progress: 1, phase: 'work' } : { progress: p }) });
+          outbox.remove(oid);
+        } catch (e: any) { outbox.update(oid, { phase: 'error', error: e.message }); onError(e.message); }
       };
       r.start(250);
       recorder.current = r;
@@ -154,6 +182,15 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
 
   return (
     <footer className="composer-wrap">
+      {when && <WhenPicker title="Später senden" confirm="Planen" hint={`„${text.trim().slice(0, 80)}${text.trim().length > 80 ? '…' : ''}“ wird automatisch gesendet${canTr && !noTr ? `, übersetzt auf ${tr!.langName}` : ''}.`}
+        onPick={schedule} onClose={() => setWhen(false)} />}
+      {canTr && !editing && (
+        <div className="tr-chip">
+          <Icon name="globe" size={15} />
+          <span>{noTr ? "Ohne Übersetzung senden" : `Antwort wird auf ${tr!.langName} übersetzt`}</span>
+          <button className="link-btn" onClick={() => setNoTr((v) => !v)}>{noTr ? "Übersetzen" : "Original"}</button>
+        </div>
+      )}
       {(replyTo || editing) && (
         <div className="composer-context">
           <Icon name={editing ? 'edit' : 'reply'} size={18} />
@@ -213,7 +250,12 @@ export function Composer({ chat, disabled, replyTo, editing, inject, onAi, aiOpe
             </button>
           )}
           {hasContent || editing ? (
-            <button className="send-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => { if (isTouch() && document.activeElement === ta.current) ta.current?.focus(); send(); }} aria-label="Senden"><Icon name={editing ? 'check' : 'send'} /></button>
+            <>
+            {!editing && !files.length && <button className="icon-btn tool" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setWhen(true)} title="Später senden" aria-label="Später senden"><Icon name="clock" /></button>}
+            <button className="send-btn" onPointerDown={(e) => { keepKeyboard(e); if (!files.length) pressStart(); }} onPointerUp={pressEnd} onPointerLeave={pressEnd} onMouseDown={keepKeyboard}
+              onContextMenu={(e) => { if (!editing && !files.length) { e.preventDefault(); setWhen(true); } }}
+              onClick={() => { if (sendPress.current === -1) { sendPress.current = null; return; } if (isTouch() && document.activeElement === ta.current) ta.current?.focus(); send(); }} aria-label="Senden" title="Senden (gedrückt halten: später senden)"><Icon name={editing ? 'check' : 'send'} /></button>
+            </>
           ) : (
             <button className="send-btn mic" onClick={startRec} aria-label="Sprachnachricht aufnehmen"><Icon name="mic" /></button>
           )}

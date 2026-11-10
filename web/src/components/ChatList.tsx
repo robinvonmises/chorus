@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
-import { NETWORKS, listTime } from '../util';
+import { NETWORKS, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 
-export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onReload, onChats }: {
+export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onReload, onChats, onOpenMessage, onGallery }: {
+  onOpenMessage: (m: Message) => void; onGallery: () => void;
   chats: Chat[]; accounts: Account[]; filter: Filter; setFilter: (f: Filter) => void; active: string | null;
   onOpen: (id: string) => void; onAdd: () => void; onSettings: () => void; onNew: () => void; online: boolean; problems: Account[];
   onFixAccount: () => void; previewOf: (m: Message) => string; onReload: () => Promise<void>; onChats: (cs: Chat[]) => void;
@@ -17,15 +18,47 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const archivedCount = useMemo(() => chats.filter((c) => c.archived && c.lastTs > 0).length, [chats]);
   const archivedUnread = useMemo(() => chats.filter((c) => c.archived && c.unread > 0 && !c.muted).length, [chats]);
 
+  // Zusammengeführte Kontakte: nur eine Zeile pro Person (der zuletzt aktive Chat), Ungelesene zusammengezählt
+  const groups = useMemo(() => {
+    const g = new Map<string, Chat[]>();
+    for (const c of chats) if (c.link) g.set(c.link, [...(g.get(c.link) ?? []), c]);
+    return g;
+  }, [chats]);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
+    const seen = new Set<string>();
     return chats.filter((c) =>
       (c.lastTs > 0 || c.id === active || !!s) &&
       (s ? true : filter.archived ? !!c.archived : !c.archived) &&
       (!filter.unread || c.unread > 0) &&
       (!filter.nets.length || filter.nets.includes(c.network)) &&
-      (!s || c.title.toLowerCase().includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)));
-  }, [chats, filter, q, active]);
+      (!s || c.title.toLowerCase().includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)))
+      .filter((c) => { if (!c.link || (groups.get(c.link)?.length ?? 0) < 2) return true; if (seen.has(c.link)) return false; seen.add(c.link); return true; })
+      .map((c) => {
+        const g = c.link ? groups.get(c.link) : undefined;
+        return g && g.length > 1 ? { ...c, unread: g.reduce((n, x) => n + x.unread, 0), linkedNets: [...new Set(g.map((x) => x.network))] } : c;
+      });
+  }, [chats, filter, q, active, groups]);
+
+  // Nachrichten durchsuchen (ab 2 Zeichen) und KI-Suche
+  const [hits, setHits] = useState<Message[]>([]);
+  const [aiRes, setAiRes] = useState<{ q: string; answer: string; messages: Message[]; scope: string } | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const byId = useMemo(() => new Map(chats.map((c) => [c.id, c])), [chats]);
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2) { setHits([]); return; }
+    const t = setTimeout(() => api.search(s).then(setHits).catch(() => setHits([])), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  useEffect(() => { if (aiRes && aiRes.q !== q.trim()) setAiRes(null); }, [q]); // eslint-disable-line react-hooks/exhaustive-deps
+  const askAi = async () => {
+    const s = q.trim(); if (s.length < 3 || aiBusy) return;
+    setAiBusy(true);
+    try { const r = await api.aiSearch(s); setAiRes({ q: s, ...r }); }
+    catch (e: any) { setAiRes({ q: s, answer: e.message ?? 'Fehler', messages: [], scope: '' }); }
+    finally { setAiBusy(false); }
+  };
 
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2200); };
   const toggleNet = (n: Network) => setFilter({ ...filter, nets: filter.nets.includes(n) ? filter.nets.filter((x) => x !== n) : [...filter.nets, n] });
@@ -93,6 +126,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label="Zurück"><Icon name="back" /></button><h1>Archiv</h1></>
           ) : <h1>Chats</h1>}
           <div className="row">
+            <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
             <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
             <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
@@ -146,7 +180,25 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             </SwipeRow>
           </li>
         ))}
-        {!shown.length && (
+        {q.trim().length >= 2 && (
+          <li className="search-results">
+            {q.trim().length >= 3 && (
+              <button className="ai-ask" onClick={askAi} disabled={aiBusy}>
+                <Icon name="sparkle" size={18} /><span>{aiBusy ? 'KI sucht …' : <>KI fragen: <b>„{q.trim()}“</b></>}</span>
+              </button>
+            )}
+            {aiRes && (
+              <div className="ai-answer">
+                <p>{aiRes.answer}</p>
+                {aiRes.messages.map((m) => <HitRow key={m.id} m={m} chat={byId.get(m.chatId)} onOpen={onOpenMessage} />)}
+                {aiRes.scope === 'ai' && <small className="muted">Gesucht in Chats mit eingeschalteter KI. In den KI-Einstellungen kannst du die Suche für alle Chats erlauben.</small>}
+              </div>
+            )}
+            {hits.length > 0 && <h4 className="results-head">Nachrichten</h4>}
+            {hits.map((m) => <HitRow key={m.id} m={m} chat={byId.get(m.chatId)} q={q.trim()} onOpen={onOpenMessage} />)}
+          </li>
+        )}
+        {!shown.length && !hits.length && (
           <li className="list-empty">
             {accounts.length ? (q ? 'Nichts gefunden.' : filter.archived ? 'Das Archiv ist leer.' : 'Keine Chats in dieser Ansicht.') : (
               <>
@@ -181,8 +233,26 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   );
 }
 
+/** Suchtreffer: Chat, Datum und Ausschnitt mit hervorgehobenem Suchwort */
+function HitRow({ m, chat, q, onOpen }: { m: Message; chat?: Chat; q?: string; onOpen: (m: Message) => void }) {
+  const text = m.text || m.transcript || m.translation || m.attachments.map((a) => a.name).join(', ');
+  let snip = text;
+  const i = q ? text.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i > 40) snip = '…' + text.slice(i - 30);
+  const parts = q && i >= 0 ? snip.split(new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'i')) : [snip];
+  return (
+    <button className="chat-item hit" onClick={() => onOpen(m)}>
+      <Avatar name={chat?.title ?? '?'} src={chat?.avatar} size={40} />
+      <span className="chat-main">
+        <span className="chat-top"><span className="chat-title">{chat?.title ?? 'Chat'}</span><span className="chat-time">{dayLabel(m.ts)}</span></span>
+        <span className="chat-bottom"><span className="chat-preview">{m.fromMe ? 'Du: ' : chat?.kind !== 'direct' ? `${m.senderName}: ` : ''}{parts.map((p, j) => (j % 2 ? <mark key={j}>{p}</mark> : p))}</span></span>
+      </span>
+    </button>
+  );
+}
+
 function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
-  c: Chat; active: boolean; selecting: boolean; selected: boolean; onClick: () => void; onLong: () => void;
+  c: Chat & { linkedNets?: Network[] }; active: boolean; selecting: boolean; selected: boolean; onClick: () => void; onLong: () => void;
 }) {
   const t = useRef<number | null>(null);
   const longFired = useRef(false);
@@ -197,7 +267,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       <Avatar name={c.title} src={c.avatar} />
       <span className="chat-main">
         <span className="chat-top">
-          <span className="chat-title">{c.title}</span>
+          <span className="chat-title">{c.title}{c.linkedNets && <span className="linked-dots" title="Zusammengeführter Kontakt">{c.linkedNets.map((n) => <span key={n} className="dot" style={{ background: NETWORKS[n].color }} />)}</span>}</span>
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">
