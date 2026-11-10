@@ -13,6 +13,9 @@ import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 
+/** „Englisch“ → „Englischen“ (aus dem Englischen) */
+const adjLang = (n: string) => (/e$/.test(n) ? n + 'n' : /isch$/.test(n) ? n + 'en' : n);
+
 export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
   linked?: Chat[]; accounts?: Account[]; focus?: { id: string; remoteId: string; n: number } | null; planned?: Planned[];
@@ -172,6 +175,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? 'Ton an' : 'Stummschalten'}</button>
               <button onClick={() => { setHeadMenu(false); setContact(true); }}><Icon name="user" size={18} />{chat.kind === 'direct' ? 'Kontaktprofil' : 'Gruppeninfo'}</button>
               <button onClick={() => { setHeadMenu(false); guard(async () => { const c = await api.translate(chat.id, !tr?.on); onChat(c); flash(c.translate?.on ? 'Live-Übersetzung an. Fremdsprachige Nachrichten erscheinen übersetzt.' : 'Live-Übersetzung aus'); }); }}><Icon name="globe" size={18} />{tr?.on ? 'Übersetzung ausschalten' : 'Live-Übersetzung'}</button>
+              {tr?.on && <button onClick={() => { setHeadMenu(false); guard(async () => { const c = await api.translate(chat.id, true, tr.out === false); onChat(c); flash(c.translate?.out === false ? 'Deine Nachrichten gehen ab jetzt unübersetzt raus.' : 'Deine Nachrichten werden ab jetzt übersetzt.'); }); }}><Icon name="globe" size={18} />{tr.out === false ? 'Meine Nachrichten übersetzen' : 'Meine Nachrichten nicht übersetzen'}</button>}
               {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
@@ -189,7 +193,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
             <MessageBubble m={m} group={group} showName={showName} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
-              net={multi ? netOf.get(m.chatId) : undefined} reminder={reminders.get(m.id)}
+              net={multi ? netOf.get(m.chatId) : undefined} reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
               onAction={(mm, p) => setMenu({ m: mm, ...p })} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
           </Fragment>

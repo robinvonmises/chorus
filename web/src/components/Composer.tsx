@@ -19,7 +19,7 @@ export function Composer({ chat, draftId, placeholder, onResize, disabled, reply
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
   // Live-Übersetzung: eigene Nachrichten in der Sprache des Chatpartners senden (pro Nachricht abschaltbar)
   const tr = chat.translate;
-  const canTr = !!(tr?.on && tr.lang && tr.lang !== 'de' && tr.langName);
+  const canTr = !!(tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName);
   const [noTr, setNoTr] = useState(false);
   const [when, setWhen] = useState(false);
   const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '');
@@ -43,7 +43,11 @@ export function Composer({ chat, draftId, placeholder, onResize, disabled, reply
   useEffect(() => { if (inject) { setText(inject.text); requestAnimationFrame(() => ta.current?.focus()); } }, [inject?.n]);
   useEffect(() => { // Höhe automatisch
     const el = ta.current; if (!el) return;
+    // Beim Messen klappt das Feld kurz zusammen. Den Rahmen so lange festhalten, damit der Chat darüber nicht springt.
+    const box = el.closest('.composer-wrap') as HTMLElement | null;
+    if (box) box.style.minHeight = box.offsetHeight + 'px';
     el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    if (box) box.style.minHeight = '';
     // Das kurze Zusammenklappen (auto) verschiebt den Chat darüber: dort wieder nach unten rücken lassen
     onResize?.();
   }, [text]); // eslint-disable-line react-hooks/exhaustive-deps

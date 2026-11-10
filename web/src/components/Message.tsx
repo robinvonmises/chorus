@@ -15,8 +15,10 @@ export function previewOf(m: Message): string {
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, net, reminder }: {
+export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, net, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
+  /** Live-Übersetzung: Sprache des Chatpartners (für „Übersetzt aus …“) */
+  trLang?: string | null;
   /** Bei zusammengeführten Kontakten: über welchen Messenger die Nachricht lief */
   net?: Network;
   /** Erinnerung an diese Nachricht (Zeitpunkt) */
@@ -62,7 +64,7 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, r
           {m.attachments.map((a, i) => <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
-          {m.translation && <div className={`translation ${m.fromMe ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{m.fromMe ? `Original: ${m.translation}` : m.translation}</span></div>}
+          {m.translation && <div className={`translation ${m.fromMe ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{m.fromMe ? <><small>Original</small>{m.translation}</> : <>{trLang && <small>Aus dem {trLang}</small>}{m.translation}</>}</span></div>}
         </>}
         <span className="meta">
           {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}
