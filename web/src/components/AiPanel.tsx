@@ -43,13 +43,13 @@ export function AiPanel({ chat, replyTo, onClose, onUse, onError }: {
         <div className="ai-tabs" role="tablist">
           <button role="tab" className={tab === 'write' ? 'on' : ''} onClick={() => setTab('write')}>Schreiben</button>
           <button role="tab" className={tab === 'overview' ? 'on' : ''} onClick={() => setTab('overview')}>Überblick</button>
-          <button role="tab" className={tab === 'auto' ? 'on' : ''} onClick={() => setTab('auto')}>Autopilot{autoOn && <span className="ai-dot" />}</button>
+          <button role="tab" className={tab === 'auto' ? 'on' : ''} onClick={() => setTab('auto')}>Autobot{autoOn && <span className="ai-dot" />}</button>
         </div>
         <CloseBtn onClose={onClose} />
       </div>
       {!ai ? <p className="muted">Lade …</p>
         : tab === 'write' ? <WriteTab chat={chat} replyTo={replyTo} busy={busy} run={run} voiceOk={ai.features.voice} dictateOk={ai.features.transcribe} openSettings={openSettings} onError={onError} onDone={onClose} />
-        : !chat.aiEnabled ? <OptIn chat={chat} busy={busy} run={run} what={tab === 'auto' ? 'Der Autopilot' : 'Zusammenfassen und Vorschläge'} />
+        : !chat.aiEnabled ? <OptIn chat={chat} busy={busy} run={run} what={tab === 'auto' ? 'Der Autobot' : 'Zusammenfassen und Vorschläge'} />
         : tab === 'overview' ? <OverviewTab chat={chat} busy={busy} run={run} onUse={onUse} />
         : <AutoTab chat={chat} onError={onError} />}
     </div>
@@ -156,7 +156,7 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
 function OptIn({ chat, busy, run, what }: { chat: Chat; busy: Busy; run: Run; what: string }) {
   return (
     <div className="ai-body ai-empty">
-      <p>{what} braucht den Verlauf dieses Chats. Gib ihn einmal frei. Die KI liest ihn nur, wenn du sie hier benutzt oder der Autopilot an ist.</p>
+      <p>{what} braucht den Verlauf dieses Chats. Gib ihn einmal frei. Die KI liest ihn nur, wenn du sie hier benutzt oder der Autobot an ist.</p>
       <button className="btn primary small" disabled={!!busy} onClick={() => run('toggle', () => api.ai.setChat(chat.id, true).then(() => {}))}>Chatverlauf freigeben</button>
     </div>
   );
@@ -192,14 +192,14 @@ function AutoTab({ chat, onError }: { chat: Chat; onError: (t: string) => void }
   const a = chat.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
   const [note, setNote] = useState(a.note);
   useEffect(() => { setNote(a.note); }, [chat.id]);
-  if (chat.kind === 'channel') return <div className="ai-body ai-empty"><p>In Kanälen gibt es keinen Autopiloten.</p></div>;
+  if (chat.kind === 'channel') return <div className="ai-body ai-empty"><p>In Kanälen gibt es keinen Autobot.</p></div>;
   const save = (patch: Parameters<typeof api.ai.autopilot>[1]) => api.ai.autopilot(chat.id, patch).catch((e) => onError(e.message));
   const left = a.max - a.used;
   return (
     <div className="ai-body">
       <label className={`switch-row ${a.on ? 'on' : ''}`}>
         <span>
-          <b>{a.on ? 'Autopilot ist an' : 'Autopilot ist aus'}</b>
+          <b>{a.on ? 'Autobot ist an' : 'Autobot ist aus'}</b>
           <small>{a.on ? `Claude antwortet selbst. Noch ${left} von ${a.max}.` : a.used >= a.max && a.used > 0 ? `Limit erreicht. Zum Weitermachen wieder einschalten.` : chat.kind === 'group' ? 'Antwortet in der Gruppe, wenn jemand eine Frage stellt, dich erwähnt oder dir antwortet.' : 'Claude antwortet für dich, bis das Limit erreicht ist.'}</small>
         </span>
         <input type="checkbox" className="switch" checked={a.on} onChange={(e) => save({ on: e.target.checked, note })} />

@@ -272,7 +272,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
         </span>
         <span className="chat-bottom">
           <span className="chat-preview">{c.lastText || ' '}</span>
-          {c.autopilot?.on && <span title="Autopilot an">🤖</span>}
+          {c.autopilot?.on && <span title="Autobot an">🤖</span>}
           {c.pinned && <Icon name="pin" size={14} className="muted-icon" />}
           {c.muted && <Icon name="belloff" size={14} className="muted-icon" />}
           {c.unread > 0 && <span className={`badge ${c.muted ? 'muted' : ''}`}>{c.unread > 99 ? '99+' : c.unread}</span>}

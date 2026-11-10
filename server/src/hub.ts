@@ -235,8 +235,18 @@ export class Hub {
     const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';
     const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec }]);
     // Nicht auf den Messenger warten: Die Nachricht steht ab jetzt im Chat und zeigt selbst „wird gesendet“, „gesendet“ oder „fehlgeschlagen“.
-    this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
-      .catch((e) => console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`));
+    const done = this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
+      .catch((e) => { console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`); return null; });
+    return { pending: tmp, done };
+  }
+
+  /** KI-Nachricht kennzeichnen: 🤖 als eigene Reaktion (Telegram erlaubt 🤖 nicht als Reaktion, dort steht es im Text) */
+  async markBot(m: Message | null | undefined) {
+    if (!m) return;
+    const chat = this.store.getChat(m.chatId);
+    if (!chat || chat.network === 'telegram') return;
+    await new Promise((r) => setTimeout(r, 800));
+    await this.react(m.id, '🤖').catch((e) => console.error('[bot-reaktion]', e?.message ?? e));
   }
 
   async react(messageId: string, emoji: string | null) {

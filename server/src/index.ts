@@ -446,18 +446,27 @@ app.get('/api/chats/:id/messages', async (req) => {
 });
 app.post('/api/chats/:id/history', async (req) => { await H(req).loadHistory((req.params as any).id); return { ok: true }; });
 /** Senden, bei eingeschalteter Live-Übersetzung in der Sprache des Chatpartners; das deutsche Original bleibt sichtbar */
-async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, text: string, replyTo: string | null, translate: boolean) {
+/** Endet ein Text auf 🤖 (KI-Vorschlag, „Schreib für mich“), wird das Zeichen zur Reaktion statt zum Text */
+const BOT_MARK = /\s*[–-]?\s*🤖\s*$/u;
+function splitBotMark(text: string): { text: string; bot: boolean } {
+  const rest = text.replace(BOT_MARK, '').trim();
+  return rest && rest !== text.trim() ? { text: rest, bot: true } : { text, bot: false };
+}
+async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, raw: string, replyTo: string | null, translate: boolean) {
   const chat = h.store.getChat(id);
+  const { text, bot } = splitBotMark(raw);
+  const tg = chat?.network === 'telegram';
+  const out = (t: string) => (bot && tg ? `${t} – 🤖` : t);
   // Bei zusammengeführten Kontakten gilt die Übersetzung des ganzen Kontakts
   const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
   const tr = src?.translate;
+  let m: Message | null;
   if (translate && tr?.on && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled) {
-    const out = await ai.translateOut(id, text, tr.langName);
-    const m = await h.sendText(id, out, replyTo);
-    if (m) { const u = h.store.patchMessage(m.id, { translation: text }); if (u) h.emit({ type: 'message', message: u }); }
-    return;
-  }
-  await h.sendText(id, text, replyTo);
+    const t = await ai.translateOut(id, text, tr.langName);
+    m = await h.sendText(id, out(t), replyTo);
+    if (m) { const u = h.store.patchMessage(m.id, { translation: text }); if (u) { m = u; h.emit({ type: 'message', message: u }); } }
+  } else m = await h.sendText(id, out(text), replyTo);
+  if (bot) void h.markBot(m);
 }
 app.post('/api/chats/:id/send', async (req) => {
   const { text, replyTo, translate } = req.body as { text: string; replyTo?: string | null; translate?: boolean };
@@ -572,7 +581,7 @@ app.put('/api/chats/:id/translate', async (req) => {
 app.put('/api/chats/:id/autopilot', async (req) => {
   const id = (req.params as any).id;
   const c = needAi(req, id);
-  if (c.kind === 'channel') throw new AiError(400, 'In Kanälen gibt es keinen Autopiloten.');
+  if (c.kind === 'channel') throw new AiError(400, 'In Kanälen gibt es keinen Autobot.');
   if (!A(req).publicSettings().features.text) throw new AiError(400, 'Bitte zuerst einen Claude-Schlüssel eintragen.');
   const b = (req.body ?? {}) as { on?: boolean; max?: number; note?: string; mark?: boolean; reset?: boolean };
   const cur = c.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
@@ -603,7 +612,9 @@ app.post('/api/chats/:id/ai/voice', async (req) => {
   const mp3 = await A(req).speak(String(text ?? ''));
   if (preview) return { audio: mp3.toString('base64'), mime: 'audio/mpeg' };
   const { data, durationSec } = await toOggOpusTimed(mp3);
-  await H(req).sendFile(id, { data, name: 'sprachnachricht.ogg', mime: 'audio/ogg', voice: true, durationSec }, undefined, replyTo || null);
+  const h = H(req);
+  const { done } = await h.sendFile(id, { data, name: 'sprachnachricht.ogg', mime: 'audio/ogg', voice: true, durationSec }, undefined, replyTo || null);
+  void done.then((m) => h.markBot(m)); // KI-Stimme: immer mit 🤖 kennzeichnen
   return { ok: true };
 });
 app.post('/api/messages/:id/transcribe', async (req) => {

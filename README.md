@@ -61,10 +61,10 @@ The interface is deliberately quiet and iOS-like: soft colours, smooth motion an
 ### AI assistant (optional, per chat, opt-in)
 Bring your own [Anthropic](https://console.anthropic.com) and [ElevenLabs](https://elevenlabs.io) keys:
 - **Summarise** a chat: what it's about, what's agreed, what's still open
-- **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**
+- **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**. Everything the AI wrote is marked with a 🤖 reaction (on Telegram, which does not allow it as a reaction, with a 🤖 at the end)
 - **Suggested replies**, optionally with a direction ("politely decline")
 - **Transcribe** voice messages
-- **Autopilot**: Claude answers on your behalf up to a limit you set, also in groups when someone asks a question, mentions you or replies to you. Answers are marked with a 🤖 reaction
+- **Autobot**: Claude answers on your behalf up to a limit you set, also in groups when someone asks a question, mentions you or replies to you. Answers are marked with a 🤖 reaction
 
 Nothing is sent to an AI provider unless you enable AI for that chat and press a button.
 
