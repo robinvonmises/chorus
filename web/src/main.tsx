@@ -19,9 +19,27 @@ if (vv) {
   // In der iOS-Web-App schrumpft innerHeight mit, daran lässt sich die Tastatur nicht erkennen.
   // Deshalb zusätzlich: Ein Textfeld hat den Fokus = Tastatur offen (auf Touch-Geräten).
   const typing = () => touch && !!document.activeElement?.matches('input:not([type=checkbox]):not([type=radio]), textarea, [contenteditable]');
+  let settleT: number[] = [];
   const set = (h: number, kbd: boolean) => {
     root.style.setProperty('--vvh', `${h}px`);
     root.classList.toggle('kbd', kbd);
+    if (!kbd) root.style.setProperty('--vvt', '0px'); // ohne Tastatur ist die App immer oben bündig
+  };
+  // Vorhergesagte Höhen (Tastatur zu, Rückkehr aus dem Hintergrund) später mit der echten Größe abgleichen.
+  // Sonst bleibt eine zu große Höhe stehen, wenn iOS danach kein resize mehr meldet, und das Eingabefeld
+  // ragt unten aus dem Bild (z. B. nach dem Foto-Picker).
+  const settle = () => {
+    settleT.forEach(clearTimeout);
+    settleT = [450, 1100].map((ms) => window.setTimeout(() => {
+      if (document.visibilityState === 'hidden' || vv.height < 150) return;
+      if (!typing()) {
+        // Deutlich kleiner = iOS meldet noch die alte Tastaturhöhe; dann die Vorhersage stehen lassen.
+        if (maxH - vv.height > 120) return;
+        maxH = vv.height;
+        if (window.scrollY) window.scrollTo(0, 0);
+      }
+      fit();
+    }, ms));
   };
   const fit = () => {
     // Im Hintergrund meldet iOS teils unsinnige Größen (bis 0). Die nicht übernehmen, sonst bleibt die App beim Öffnen leer.
@@ -33,11 +51,11 @@ if (vv) {
     set(vv.height, window.innerHeight - vv.height > 120 || diff > 120 || typing());
   };
   document.addEventListener('focusin', () => {
-    if (typing() && kbH && maxH - vv.height < 120) set(maxH - kbH, true); // vorausgleiten
+    if (typing() && kbH && maxH - vv.height < 120) { set(maxH - kbH, true); settle(); } // vorausgleiten
     else fit();
   });
   document.addEventListener('focusout', () => setTimeout(() => {
-    if (!typing() && touch && maxH - vv.height > 120) set(maxH, false); // schon mit zurückgleiten
+    if (!typing() && touch && maxH - vv.height > 120) { set(maxH, false); settle(); } // schon mit zurückgleiten
     else fit();
   }, 30));
   // Zurück aus dem Hintergrund (z. B. über eine Benachrichtigung): iOS meldet die Fenstergröße erst verspätet
@@ -46,6 +64,7 @@ if (vv) {
   const snap = () => {
     root.classList.remove('vv-ready');
     set(maxH || vv.height, false);
+    settle();
     requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add('vv-ready')));
   };
   document.addEventListener('visibilitychange', () => {
