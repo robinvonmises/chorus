@@ -159,7 +159,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         <Avatar name={chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
-          <small>{multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autopilot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
+          <small>{multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autobot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
         </div>
         </button>
         <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>

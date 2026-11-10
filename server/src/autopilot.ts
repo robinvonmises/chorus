@@ -48,10 +48,7 @@ export class AutopilotRunner {
       // Kennzeichnung: 🤖 als Reaktion auf die eigene Nachricht; Telegram erlaubt 🤖 nicht als Reaktion, dort „– 🤖“ anhängen
       const suffix = a.mark && chat.network === 'telegram';
       const sent = await this.hub.sendText(chatId, suffix ? `${text} – 🤖` : text);
-      if (a.mark && !suffix && sent) {
-        await new Promise((r) => setTimeout(r, 800));
-        await this.hub.react(sent.id, '🤖').catch(async () => { /* Reaktion ging nicht: nachträglich nichts ändern */ });
-      }
+      if (a.mark && !suffix) await this.hub.markBot(sent);
       const used = a.used + 1;
       this.set(chatId, { ...a, used, on: used < a.max });
     } catch (e: any) {
