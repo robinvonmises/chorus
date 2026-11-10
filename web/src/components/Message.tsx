@@ -1,7 +1,7 @@
 import { memo, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { attachmentUrl, type Attachment, type Message } from '../api';
-import { NETWORKS, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
+import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
 import { whenLabel } from './WhenPicker';
 import { Icon } from './Icon';
@@ -64,7 +64,12 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, r
           {m.attachments.map((a, i) => <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
-          {m.translation && <div className={`translation ${m.fromMe ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{m.fromMe ? <><small>Original</small>{m.translation}</> : <>{trLang && <small>Aus dem {trLang}</small>}{m.translation}</>}</span></div>}
+          {m.translation && (() => {
+            // Eigene, übersetzt gesendete Nachricht: darunter steht das deutsche Original. Sonst die deutsche Übersetzung.
+            const orig = m.fromMe && !m.translationFrom;
+            const from = m.translationFrom ? adjLang(m.translationFrom) : trLang;
+            return <div className={`translation ${orig ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{orig ? <><small>Original</small>{m.translation}</> : <>{from && <small>Aus dem {from}</small>}{m.translation}</>}</span></div>;
+          })()}
         </>}
         <span className="meta">
           {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}

@@ -875,3 +875,11 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .auto-seg button.on { background: var(--bg); color: var(--accent); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
 .auto-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .translation small { display: block; font-size: 11px; font-weight: 600; opacity: .7; margin-bottom: 1px; }
+
+/* Live-Übersetzung: Sprachauswahl */
+.tr-sheet .modal-body { display: grid; gap: 10px; }
+.tr-head { margin: 8px 0 0; font-size: 13px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .04em; }
+.tr-langs { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 2px 12px; }
+.tr-other { display: flex; gap: 8px; padding: 6px 0 10px; }
+.tr-other .input { flex: 1; min-width: 0; }
+.tr-note { margin: 0; }

@@ -79,3 +79,6 @@ export function isOnlyEmoji(text: string): boolean {
   if (!t || t.length > 16) return false;
   return /^(\p{Extended_Pictographic}|\p{Emoji_Component}|‍|️|\s)+$/u.test(t) && !/^[0-9#*\s]+$/.test(t);
 }
+
+/** „Niederländisch“ → „Niederländischen“ (für „Aus dem …“) */
+export const adjLang = (n: string) => (/e$/.test(n) ? n + 'n' : /isch$/.test(n) ? n + 'en' : n);

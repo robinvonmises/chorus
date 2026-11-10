@@ -1,7 +1,8 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, attachmentUrl, type Account, type Chat, type Message, type Planned } from '../api';
 import { WhenPicker, whenLabel } from './WhenPicker';
-import { NETWORKS, QUICK_REACTIONS, dayLabel } from '../util';
+import { NETWORKS, QUICK_REACTIONS, adjLang, dayLabel } from '../util';
+import { TranslateSheet } from './TranslateSheet';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { MessageBubble, previewOf } from './Message';
@@ -14,7 +15,6 @@ import { ContactSheet } from './ContactSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
-const adjLang = (n: string) => (/e$/.test(n) ? n + 'n' : /isch$/.test(n) ? n + 'en' : n);
 
 export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
@@ -70,6 +70,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const [showPlanned, setShowPlanned] = useState(false);
   const [remindFor, setRemindFor] = useState<Message | null>(null);
   const tr = chat.translate;
+  const [trSheet, setTrSheet] = useState(false);
 
   // Scrollposition: unten bleiben bei neuen Nachrichten, Position halten beim Nachladen
   useLayoutEffect(() => {
@@ -174,8 +175,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); onPatchChat({ pinned: !chat.pinned }); }}><Icon name="pin" size={18} />{chat.pinned ? 'Lösen' : 'Anheften'}</button>
               <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? 'Ton an' : 'Stummschalten'}</button>
               <button onClick={() => { setHeadMenu(false); setContact(true); }}><Icon name="user" size={18} />{chat.kind === 'direct' ? 'Kontaktprofil' : 'Gruppeninfo'}</button>
-              <button onClick={() => { setHeadMenu(false); guard(async () => { const c = await api.translate(chat.id, !tr?.on); onChat(c); flash(c.translate?.on ? 'Live-Übersetzung an. Fremdsprachige Nachrichten erscheinen übersetzt.' : 'Live-Übersetzung aus'); }); }}><Icon name="globe" size={18} />{tr?.on ? 'Übersetzung ausschalten' : 'Live-Übersetzung'}</button>
-              {tr?.on && <button onClick={() => { setHeadMenu(false); guard(async () => { const c = await api.translate(chat.id, true, tr.out === false); onChat(c); flash(c.translate?.out === false ? 'Deine Nachrichten gehen ab jetzt unübersetzt raus.' : 'Deine Nachrichten werden ab jetzt übersetzt.'); }); }}><Icon name="globe" size={18} />{tr.out === false ? 'Meine Nachrichten übersetzen' : 'Meine Nachrichten nicht übersetzen'}</button>}
+              <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? `Übersetzung · ${tr.langName ?? 'an'}` : 'Live-Übersetzung'}</button>
               {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
@@ -224,7 +224,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             ))}
           </div>
         )}
-        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
@@ -263,6 +263,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         onClose={() => setRemindFor(null)}
         onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(`Erinnerung ${whenLabel(at)}`); }); }} />}
       {toast && <div className="toast">{toast}</div>}
+      {trSheet && <TranslateSheet chat={chat} onChat={onChat} onClose={() => setTrSheet(false)} onError={flash} />}
       {contact && <ContactSheet chat={chat} account={account} onClose={() => setContact(false)} onChat={onChat} />}
     </div>
   );

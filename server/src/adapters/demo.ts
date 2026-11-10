@@ -17,6 +17,7 @@ export class DemoAdapter implements Adapter {
       { remoteId: 'tom', title: 'Tom', kind: 'direct' as const },
       { remoteId: 'verein', title: 'Laufgruppe Sonntag', kind: 'group' as const },
       { remoteId: 'emma', title: 'Emma (London)', kind: 'direct' as const },
+      { remoteId: 'bram', title: 'Bram (Utrecht)', kind: 'direct' as const },
     ];
     const script: Record<string, [string, string, number][]> = {
       anna: [['Anna', 'Hey! Kommst du heute Abend noch vorbei?', 50], ['me', 'Ja, so gegen 19 Uhr 🙂', 48], ['Anna', 'Super, bring gern was zu trinken mit', 47]],
@@ -24,6 +25,7 @@ export class DemoAdapter implements Adapter {
       tom: [['Tom', 'Hast du die Unterlagen schon angeschaut?', 1500]],
       verein: [['Jonas', 'Treffpunkt wie immer 9 Uhr am Parkplatz', 3000], ['Sarah', '👍', 2900]],
       emma: [['Emma', 'Hi! Are you still coming to London next month?', 4000], ['Emma', 'Let me know your dates, you can stay with us 😊', 3990]],
+      bram: [['me', 'Hoi Bram, stuur me even een berichtje als je tijd hebt 😅', 5]],
     };
     for (const c of chats) {
       const msgs = script[c.remoteId];
@@ -43,14 +45,14 @@ export class DemoAdapter implements Adapter {
   private reply(chat: string, text: string) {
     this.timers.push(setTimeout(() => {
       this.ev.message({
-        chatRemoteId: chat, remoteId: String(this.n++), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : 'Lena',
+        chatRemoteId: chat, remoteId: String(this.n++), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : chat === 'bram' ? 'Bram' : 'Lena',
         fromMe: false, ts: Date.now(), text, edited: false, deleted: false, attachments: [], status: 'received',
       });
     }, 1500));
   }
   async sendText(chat: string, text: string) {
     const id = String(this.n++);
-    this.reply(chat, chat === 'emma' ? (text.includes('?') ? 'Good question, let me check 🤔' : 'Sounds great, see you soon!') : text.includes('?') ? 'Gute Frage, ich schau nach 🤔' : 'Alles klar 👍');
+    this.reply(chat, chat === 'bram' ? 'Hoi! Alles goed hier, en met jou?' : chat === 'emma' ? (text.includes('?') ? 'Good question, let me check 🤔' : 'Sounds great, see you soon!') : text.includes('?') ? 'Gute Frage, ich schau nach 🤔' : 'Alles klar 👍');
     return id;
   }
   async sendFile(chat: string, f: OutgoingFile) {
@@ -63,7 +65,7 @@ export class DemoAdapter implements Adapter {
   async markRead() {}
   async loadHistory() {}
   async fetchAttachment(): Promise<Buffer> { throw new Error('Keine Datei'); }
-  async contactInfo(remote: string, kind: string) { return kind === "direct" ? { phone: "+49 170 " + (1000000 + remote.length * 12345), about: "Hey, ich nutze Chorus" } : { description: "Demo-Gruppe", members: 5 }; }
+  async contactInfo(remote: string, kind: string) { return kind === "direct" ? { phone: remote === "bram" ? "+31 6 12345678" : "+49 170 " + (1000000 + remote.length * 12345), about: "Hey, ich nutze Chorus" } : { description: "Demo-Gruppe", members: 5 }; }
   async resync() {}
   async logout() {}
 }
