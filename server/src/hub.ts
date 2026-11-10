@@ -22,6 +22,7 @@ export type HubEvent =
 export { fixKind } from './kinds.js';
 import { fixKind, sniffKind } from './kinds.js';
 
+const rank: Record<string, number> = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
 const MAX_AUTO_MEDIA = Number(process.env.MAX_AUTO_MEDIA_MB ?? 200) * 1024 * 1024;
 
 export class Hub {
@@ -104,8 +105,14 @@ export class Hub {
         // Sonderformen: '<=123' = alle eigenen bis ID 123 (Lesebestätigung), Chat '*' = Chat unbekannt
         const ids = remoteId.startsWith('<=')
           ? store.outgoingUpTo(chatId(chatRemote), Number(remoteId.slice(2)))
-          : chatRemote === '*' ? store.findByRemote(accountId, remoteId) : [`${chatId(chatRemote)}:${remoteId}`];
+          : chatRemote === '*' || !store.getMessage(`${chatId(chatRemote)}:${remoteId}`) ? store.findByRemote(accountId, remoteId) : [`${chatId(chatRemote)}:${remoteId}`];
+        if (patch.status && !remoteId.startsWith('<=')) console.log(`[status] ${remoteId} → ${patch.status} (${ids.length ? 'gefunden' : 'nicht gefunden'})`);
         for (const id of ids) {
+          // Status nie zurückstufen (z. B. „gelesen“ → „zugestellt“, wenn Bestätigungen in falscher Reihenfolge kommen)
+          if (patch.status && rank[patch.status] > 0) {
+            const cur = store.getMessage(id)?.status;
+            if (cur && (rank[cur] ?? -1) >= rank[patch.status]) continue;
+          }
           const msg = store.patchMessage(id, patch);
           if (msg) this.emit({ type: 'message', message: msg });
         }
