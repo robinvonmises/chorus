@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Store } from './db.js';
-import { toOggOpus } from './audio.js';
+import { toOggOpusTimed } from './audio.js';
 import type { Account, AccountStatus, Adapter, AdapterEvents, Attachment, Network, OutgoingFile, Message, Chat } from './types.js';
 
 export type AdapterFactory = (opts: {
@@ -228,8 +228,10 @@ export class Hub {
   async sendFile(chatId: string, file: OutgoingFile, caption?: string, replyTo?: string | null) {
     const chat = this.chatOrThrow(chatId);
     const a = this.adapterFor(chat);
-    if (file.voice && !/ogg/.test(file.mime)) {
-      file = { ...file, data: await toOggOpus(file.data), mime: 'audio/ogg', name: file.name.replace(/\.[^.]+$/, '') + '.ogg' };
+    if (file.voice) {
+      // Immer neu kodieren: Browser-Aufnahmen (auch „audio/ogg“) haben oft fehlende Längenangaben oder andere Abtastraten, die WhatsApp nicht laden kann
+      const { data, durationSec } = await toOggOpusTimed(file.data);
+      file = { ...file, data, mime: 'audio/ogg', name: file.name.replace(/\.[^.]+$/, '') + '.ogg', durationSec: Math.max(1, Math.round(file.durationSec || durationSec)) };
     }
     const fileId = this.store.storeFile(file.data);
     const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';

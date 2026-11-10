@@ -5,6 +5,7 @@ import makeWASocket, {
 import pino from 'pino';
 import type { Adapter, AdapterEvents, Attachment, OutgoingFile, Message } from '../types.js';
 import type { AdapterFactory } from '../hub.js';
+import { waveform } from '../audio.js';
 
 const logger = pino({ level: process.env.WA_LOG_LEVEL ?? 'silent' });
 
@@ -295,13 +296,18 @@ export class WhatsAppAdapter implements Adapter {
 
   async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
     const quoted = this.quoted(chat, replyTo);
+    const wave = f.voice ? await waveform(f.data).catch(() => undefined) : undefined;
     const content = f.voice
-      ? { audio: f.data, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: Math.round(f.durationSec ?? 0) }
+      ? { audio: f.data, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: Math.max(1, Math.round(f.durationSec ?? 1)), waveform: wave }
       : f.mime.startsWith('image/') && !f.mime.includes('svg') ? { image: f.data, caption, mimetype: f.mime }
       : f.mime.startsWith('video/') ? { video: f.data, caption, mimetype: f.mime }
       : f.mime.startsWith('audio/') ? { audio: f.data, mimetype: f.mime }
       : { document: f.data, fileName: f.name, mimetype: f.mime, caption };
     const r = await this.s.sendMessage(chat, content as any, { quoted });
+    if (f.voice) {
+      const a = r?.message?.audioMessage;
+      console.log(`[whatsapp] Sprachnachricht: ${f.data.length} Bytes, ${Math.round(f.durationSec ?? 0)} s, Upload ${a?.directPath ? 'ok' : 'ohne directPath'}, ${a?.fileLength ?? '?'} Bytes verschlüsselt`);
+    }
     if (r?.key) this.keys.set(r.key.id!, r.key);
     return r!.key.id!;
   }
