@@ -676,7 +676,8 @@ app.post('/api/messages/:id/transcribe', async (req) => {
   const h = H(req);
   const msg = h.store.getMessage((req.params as any).id);
   if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
-  needAi(req, msg.chatId);
+  // Bewusst ohne KI-Freigabe des Chats: der Nutzer stößt das pro Nachricht selbst an.
+  if (!A(req).publicSettings().features.transcribe) throw new AiError(400, 'Zum Transkribieren bitte zuerst einen ElevenLabs-Schlüssel eintragen.');
   const i = msg.attachments.findIndex((a) => a.kind === 'voice' || a.kind === 'audio' || a.kind === 'video');
   if (i < 0) throw new AiError(400, 'Diese Nachricht enthält keine Sprachnachricht.');
   const att = msg.attachments[i];

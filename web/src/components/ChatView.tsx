@@ -46,7 +46,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   }, [aiOpen]);
   const [inject, setInject] = useState<{ text: string; n: number } | null>(null);
   const ai = useAi();
-  const canTranscribe = !!ai?.features.transcribe && !!chat.aiEnabled;
+  // Transkribieren ist ein ausdrücklicher Klick pro Nachricht: braucht nur den ElevenLabs-Schlüssel, nicht die KI-Freigabe des Chats
+  // (sonst fehlte der Knopf in Chats ohne KI-Opt-in, z. B. bei zusammengeführten WhatsApp-Kontakten).
+  const canTranscribe = !!ai?.features.transcribe;
   const prevLen = useRef(0);
   const prevFirst = useRef<string | null>(null);
   const prevHeight = useRef(0);
