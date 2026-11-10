@@ -165,17 +165,25 @@ input, textarea { font: inherit; color: inherit; }
 .day { text-align: center; margin: 12px 0 6px; }
 .day span { background: var(--bg); color: var(--ink-2); font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
 
-.msg { display: flex; flex-direction: column; max-width: min(72%, 560px); position: relative; margin-top: 2px; }
+.msg { display: flex; flex-direction: column; max-width: min(72%, 560px); position: relative; margin-top: 1px; }
+/* Neue Absender-Folge: etwas mehr Luft davor (wie bei Signal) */
+.msg.first { margin-top: 10px; }
+.day + .msg.first { margin-top: 0; }
+.msg:has(> .reactions) { margin-bottom: 4px; }
+/* Gruppen: Profilbild links neben der ersten Nachricht einer Folge, die weiteren Blasen bleiben eingerückt */
+.msg.with-av { padding-left: 42px; max-width: min(calc(72% + 42px), 602px); }
+.msg-av { position: absolute; left: 0; top: 0; }
+.msg-av .avatar { box-shadow: 0 0 0 .5px rgba(0,0,0,.06); }
 .msg.in { align-self: flex-start; align-items: flex-start; }
 .msg.out { align-self: flex-end; align-items: flex-end; }
 .msg.flash .bubble { animation: flash 1.2s; }
 @keyframes flash { 0%, 60% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: none; } }
-.bubble { position: relative; padding: 7px 12px 6px; border-radius: var(--radius); background: var(--bubble-in); overflow-wrap: anywhere; min-width: 64px; }
+.bubble { position: relative; padding: 8px 13px 7px; line-height: 1.38; border-radius: var(--radius); background: var(--bubble-in); overflow-wrap: anywhere; min-width: 64px; }
 .msg.out .bubble { background: var(--bubble-out); color: var(--bubble-out-ink); }
 .msg.out .bubble a { color: inherit; }
 .bubble .text { white-space: pre-wrap; display: inline; }
-.bubble .sender { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-.bubble .meta { float: right; display: inline-flex; gap: 4px; align-items: center; margin: 6px 0 -2px 10px; font-size: 11px; white-space: nowrap; }
+.bubble .sender { font-size: 13px; font-weight: 700; margin-bottom: 3px; line-height: 1.25; }
+.bubble .meta { float: right; display: inline-flex; gap: 4px; align-items: center; margin: 7px 0 -3px 14px; font-size: 11px; white-space: nowrap; }
 .bubble .meta > * { opacity: .65; }
 .bubble.media-only .meta > * { opacity: 1; }
 .bubble.big-emoji { background: transparent !important; font-size: 44px; line-height: 1.1; padding: 0; color: var(--ink) !important; }
@@ -309,9 +317,12 @@ input, textarea { font: inherit; color: inherit; }
   .app.has-chat .pane-list { display: none; }
   .app.has-chat .pane-chat { display: block; }
   .chat-head .back { display: inline-grid; margin-left: -6px; }
-  .messages { padding: 14px 16px 10px; gap: 6px; }
-  .msg { max-width: 80%; margin-top: 2px; }
-  .bubble { padding: 9px 14px 8px; border-radius: 20px; }
+  .messages { padding: 14px 14px 12px; }
+  .msg { max-width: 80%; }
+  .msg.first { margin-top: 12px; }
+  .day + .msg.first { margin-top: 0; }
+  .msg.with-av { max-width: calc(80% + 42px); }
+  .bubble { padding: 11px 15px 10px; border-radius: 20px; }
   .day { margin: 18px 0 10px; }
   .chats { padding: 0 8px 12px; }
   .chat-item { padding: 12px 10px; gap: 14px; }
@@ -548,7 +559,8 @@ input, textarea { font: inherit; color: inherit; }
 /* Menüs: Tippen daneben schließt */
 .menu-catcher { position: fixed; inset: 0; z-index: 30; background: transparent; }
 .menu-wrap .menu { z-index: 31; }
-.messages-inner { display: flex; flex-direction: column; gap: 2px; }
+.messages-inner { display: flex; flex-direction: column; gap: 3px; }
+@media (max-width: 860px) { .messages-inner { gap: 4px; } }
 
 /* Bildansicht */
 .lightbox { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; animation: fadeIn .2s var(--ease-out); touch-action: none; }
