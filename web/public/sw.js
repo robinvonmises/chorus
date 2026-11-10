@@ -1,7 +1,12 @@
 // Minimaler Service Worker: macht die App installierbar und zeigt Benachrichtigungen an.
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-self.addEventListener('fetch', () => {});
+// Die App-Seite selbst immer frisch vom Server holen: iOS öffnet sonst (z. B. beim Tipp auf eine Benachrichtigung)
+// eine alte, aufgehobene Startseite, deren Skripte es nach einem Update nicht mehr gibt, und zeigt nur Weiß.
+self.addEventListener('fetch', (e) => {
+  if (e.request.mode !== 'navigate' || e.request.method !== 'GET') return;
+  e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request)));
+});
 // Ziel einer angetippten Benachrichtigung. iOS weckt eine eingefrorene App nur langsam auf und verliert dabei
 // manchmal die Nachricht. Deshalb merkt sich der Service Worker das Ziel, und die App fragt beim Aufwachen nach.
 let pendingOpen = null;

@@ -691,6 +691,12 @@ if (existsSync(WEB_DIR)) {
     if (path.startsWith('/api/')) return reply.code(404).send({ error: 'Nicht gefunden' });
     // Fehlende Dateien (z. B. Skripte einer alten Version) ehrlich mit 404 beantworten, nicht mit der Startseite:
     // sonst bekommt der Browser HTML statt JavaScript und die App bleibt leer
+    // Altes App-Skript angefragt (iOS hat eine alte Startseite aufgehoben, z. B. beim Tipp auf eine Benachrichtigung):
+    // statt 404 ein Mini-Skript, das die aktuelle Version frisch lädt. Der Chat aus der Benachrichtigung (#chat=…) bleibt erhalten.
+    if (/^\/assets\/index-[\w-]+\.js$/.test(path)) {
+      return reply.code(200).header('Cache-Control', 'no-store').type('application/javascript; charset=utf-8')
+        .send("(function(){var k='inbox:stale',t=+(sessionStorage.getItem(k)||0);if(Date.now()-t<15000)return;sessionStorage.setItem(k,String(Date.now()));location.replace('/?r='+Date.now()+location.hash);})();");
+    }
     if (path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path)) return reply.code(404).type('text/plain').send('Nicht gefunden');
     return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
   });
