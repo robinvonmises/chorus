@@ -31,12 +31,6 @@ export class Push {
     store.setSetting('pushSubs', [...this.subs(store).filter((x) => x.endpoint !== s.endpoint), s].slice(-20)); }
   remove(store: Store, endpoint: string) { store.setSetting('pushSubs', this.subs(store).filter((x) => x.endpoint !== endpoint)); }
   preview(store: Store): boolean { return store.getSetting('pushPreview', true); }
-  /** iOS hängt an jeden Titel „from Chorus“ an. Ohne Titel steht der Absender stattdessen vorne im Text. */
-  noTitle(store: Store): boolean { return store.getSetting('pushNoTitle', false); }
-  /** Titel und Text passend zur Einstellung: ohne Titel wird „Titel: Text“ zum Text. */
-  shape(store: Store, title: string, body: string) {
-    return this.noTitle(store) ? { title: '', body: title ? `${title}: ${body}` : body } : { title, body };
-  }
 
   async send(store: Store, payload: Record<string, unknown>, only?: string) {
     let ok = 0, gone = 0, fail = 0;
@@ -55,9 +49,10 @@ export class Push {
     if (!this.subs(store).length) { console.log('[push] übersprungen: keine Geräte angemeldet'); return; }
     const full = this.preview(store);
     const text = previewText(m);
-    const t = full ? chat.title : 'Chorus';
-    const b = full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : 'Neue Nachricht';
-    const shaped = this.noTitle(store) && !full ? { title: '', body: 'Neue Nachricht' } : this.shape(store, t, b);
-    void this.send(store, { ...shaped, chatId: chat.id, tag: chat.id });
+    void this.send(store, {
+      title: full ? chat.title : 'Chorus',
+      body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : 'Neue Nachricht',
+      chatId: chat.id, tag: chat.id,
+    });
   }
 }
