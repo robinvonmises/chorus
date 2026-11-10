@@ -11,7 +11,6 @@ export function PushSection() {
   const supported = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   const [sub, setSub] = useState<PushSubscription | null>(null);
   const [preview, setPreview] = useState(true);
-  const [noTitle, setNoTitle] = useState(false);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
 
@@ -23,7 +22,7 @@ export function PushSection() {
       setSub(s);
       if (!s) localStorage.removeItem('inbox:push');
     });
-    api.push().then((p) => { setPreview(p.preview); setNoTitle(!!p.noTitle); }).catch(() => {});
+    api.push().then((p) => setPreview(p.preview)).catch(() => {});
   }, []);
 
   const enable = async () => {
@@ -61,12 +60,6 @@ export function PushSection() {
             <input type="checkbox" checked={preview} onChange={async (e) => { setPreview(e.target.checked); await api.setPushPreview(e.target.checked).catch(() => {}); }} />
             <span><b>Absender und Text zeigen</b><small>Aus: nur „Neue Nachricht“, z. B. für den Sperrbildschirm.</small></span>
           </label>
-          {ios && (
-            <label className="toggle">
-              <input type="checkbox" checked={noTitle} onChange={async (e) => { setNoTitle(e.target.checked); await api.setPushNoTitle(e.target.checked).catch(() => {}); }} />
-              <span><b>Absender in den Text</b><small>Ohne Titel, damit iOS kein „from Chorus“ anhängt.</small></span>
-            </label>
-          )}
           <div className="row gap wrap">
             <button className="btn" onClick={() => api.pushTest(sub.endpoint).then(() => setMsg('Gesendet.')).catch((e) => setMsg(e.message))}><Icon name="bell" size={18} /> Test senden</button>
             <button className="btn ghost" onClick={disable}>Ausschalten</button>
