@@ -426,6 +426,16 @@ app.get('/api/chats/:id/avatar', async (req, reply) => {
   reply.header('Cache-Control', 'private, max-age=31536000, immutable');
   return reply.send(data);
 });
+app.get('/api/chats/:id/sender-avatars', async (req) => H(req).senderAvatars((req.params as any).id));
+app.get('/api/chats/:id/people/:sid/avatar', async (req, reply) => {
+  const h = H(req); const { id, sid } = req.params as any;
+  const f = h.store.personAvatarFile(id, sid);
+  const data = f ? h.store.readFile(f) : null;
+  if (!data) return reply.code(404).send({ error: 'Kein Bild' });
+  reply.header('Content-Type', data[0] === 0x89 ? 'image/png' : data[0] === 0x52 ? 'image/webp' : 'image/jpeg');
+  reply.header('Cache-Control', 'private, max-age=31536000, immutable');
+  return reply.send(data);
+});
 app.put('/api/chats/:id/avatar', async (req, reply) => {
   const h = H(req); const id = (req.params as any).id;
   const part = await req.file();

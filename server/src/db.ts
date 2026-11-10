@@ -45,6 +45,11 @@ export class Store {
         reactions TEXT NOT NULL DEFAULT '[]', status TEXT NOT NULL, transcript TEXT
       );
       CREATE INDEX IF NOT EXISTS messages_chat_ts ON messages(chat_id, ts);
+      CREATE TABLE IF NOT EXISTS people (
+        account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, remote_id TEXT NOT NULL,
+        avatar_file_id TEXT, no_avatar INTEGER NOT NULL DEFAULT 0, fetched_at INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (account_id, remote_id)
+      );
     `);
     const cols = (this.db.prepare('PRAGMA table_info(chats)').all() as { name: string }[]).map((c) => c.name);
     const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
@@ -157,6 +162,45 @@ export class Store {
   participants(chatId: string): { id: string; name: string }[] {
     return (this.db.prepare(`SELECT sender_id AS id, sender_name AS name, MAX(ts) AS t FROM messages WHERE chat_id=? AND from_me=0 GROUP BY sender_id ORDER BY t DESC LIMIT 100`)
       .all(chatId) as { id: string; name: string }[]).map(({ id, name }) => ({ id, name }));
+  }
+  /** Profilbilder der Absender in einer Gruppe. Gibt es mit der Person einen Einzelchat mit Bild, wird dessen Bild genommen,
+   *  sonst das eigens geholte (Tabelle people). `fetch`: diese Absender sollten (neu) beim Messenger nachgefragt werden. */
+  senderAvatars(chatId: string): { avatars: Record<string, string>; fetch: string[] } {
+    const chat = this.db.prepare('SELECT account_id FROM chats WHERE id=?').get(chatId) as { account_id: string } | undefined;
+    if (!chat) return { avatars: {}, fetch: [] };
+    const rows = this.db.prepare(`
+      SELECT s.sender_id AS sid, d.id AS did, COALESCE(d.custom_avatar, d.avatar_file_id) AS dfile,
+             p.avatar_file_id AS pfile, p.no_avatar AS pnone, p.fetched_at AS pat
+      FROM (SELECT sender_id, MAX(ts) AS t FROM messages WHERE chat_id=? AND from_me=0 AND sender_id<>'' GROUP BY sender_id ORDER BY t DESC LIMIT 200) s
+      LEFT JOIN chats d ON d.account_id=? AND d.remote_id=s.sender_id AND d.kind='direct'
+      LEFT JOIN people p ON p.account_id=? AND p.remote_id=s.sender_id`).all(chatId, chat.account_id, chat.account_id) as
+      { sid: string; did: string | null; dfile: string | null; pfile: string | null; pnone: number | null; pat: number | null }[];
+    const avatars: Record<string, string> = {}; const fetch: string[] = [];
+    const now = Date.now();
+    for (const r of rows) {
+      if (r.dfile && r.did) { avatars[r.sid] = `/api/chats/${encodeURIComponent(r.did)}/avatar?v=${r.dfile.slice(0, 8)}`; continue; }
+      if (r.pfile) avatars[r.sid] = `/api/chats/${encodeURIComponent(chatId)}/people/${encodeURIComponent(r.sid)}/avatar?v=${r.pfile.slice(0, 8)}`;
+      if (r.did) continue; // Einzelchat ohne Bild: den frischt die normale Kontaktabfrage auf
+      const age = now - (r.pat ?? 0);
+      if (age > 7 * 864e5 || (!r.pfile && !r.pnone && age > 20 * 60_000)) fetch.push(r.sid);
+    }
+    return { avatars, fetch };
+  }
+  personAvatarFile(chatId: string, remoteId: string): string | null {
+    const r = this.db.prepare('SELECT p.avatar_file_id AS f FROM people p JOIN chats c ON c.account_id=p.account_id WHERE c.id=? AND p.remote_id=?').get(chatId, remoteId) as { f: string | null } | undefined;
+    return r?.f ?? null;
+  }
+  getPerson(accountId: string, remoteId: string) {
+    return this.db.prepare('SELECT avatar_file_id AS fileId FROM people WHERE account_id=? AND remote_id=?').get(accountId, remoteId) as { fileId: string | null } | undefined;
+  }
+  /** fileId undefined: Bild unverändert lassen (Fehler beim Abholen), null: Person hat kein Bild */
+  setPerson(accountId: string, remoteId: string, fileId: string | null | undefined) {
+    const old = this.getPerson(accountId, remoteId);
+    const keep = fileId === undefined ? old?.fileId ?? null : fileId;
+    this.db.prepare(`INSERT INTO people(account_id,remote_id,avatar_file_id,no_avatar,fetched_at) VALUES(?,?,?,?,?)
+      ON CONFLICT(account_id,remote_id) DO UPDATE SET avatar_file_id=excluded.avatar_file_id, no_avatar=excluded.no_avatar, fetched_at=excluded.fetched_at`)
+      .run(accountId, remoteId, keep, fileId === null ? 1 : 0, Date.now());
+    if (old?.fileId && old.fileId !== keep) this.deleteFile(old.fileId);
   }
   untranslated(chatId: string, limit: number): Message[] {
     return this.db.prepare(`SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND translation IS NULL AND remote_id NOT LIKE 'local-%' AND (text<>'' OR transcript IS NOT NULL) ORDER BY ts DESC LIMIT ?`)

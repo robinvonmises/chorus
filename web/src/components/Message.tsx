@@ -5,6 +5,7 @@ import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from
 import type { Network } from '../api';
 import { whenLabel } from './WhenPicker';
 import { Icon } from './Icon';
+import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
 
 export function previewOf(m: Message): string {
@@ -15,8 +16,10 @@ export function previewOf(m: Message): string {
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
+export const MessageBubble = memo(function MessageBubble({ m, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
+  /** Gruppen, eingehend: Profilbild des Absenders (null = Initialen); undefined = keine Bild-Spalte */
+  senderAvatar?: string | null;
   /** Live-Übersetzung: Sprache des Chatpartners (für „Übersetzt aus …“) */
   trLang?: string | null;
   /** Bei zusammengeführten Kontakten: über welchen Messenger die Nachricht lief */
@@ -47,10 +50,11 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, r
   const myReaction = m.reactions.find((r) => r.fromMe)?.emoji ?? null;
 
   return (
-    <div className={`msg ${m.fromMe ? 'out' : 'in'}`} data-remote={m.remoteId}
+    <div className={`msg ${m.fromMe ? 'out' : 'in'}${showName ? ' first' : ''}${senderAvatar !== undefined ? ' with-av' : ''}`} data-remote={m.remoteId}
       onContextMenu={(e) => { e.preventDefault(); onAction(m, { x: e.clientX, y: e.clientY }); }}
       onTouchStart={startPress} onTouchEnd={endPress} onTouchMove={endPress}
       onDoubleClick={() => !m.deleted && onReact(m, myReaction === '❤️' ? null : '❤️')}>
+      {senderAvatar !== undefined && showName && <span className="msg-av"><Avatar name={m.senderName || '?'} src={senderAvatar} size={32} /></span>}
       <div className={`bubble ${big ? 'big-emoji' : ''} ${media && !m.text ? 'media-only' : ''} ${media && m.text ? 'has-media' : ''} ${m.deleted ? 'deleted' : ''}`}>
         {showName && group && !m.fromMe && <div className="sender" style={{ color: `hsl(${hue(m.senderName)} 50% 42%)` }}>{m.senderName}</div>}
         {replied !== undefined && m.replyToRemoteId && (

@@ -1,3 +1,4 @@
+import { crc32 } from 'node:zlib';
 import type { Adapter, AdapterEvents, OutgoingFile } from '../types.js';
 import type { AdapterFactory } from '../hub.js';
 import { deflateSync } from 'node:zlib';
@@ -34,7 +35,9 @@ export class DemoAdapter implements Adapter {
     ];
     const script: Record<string, [string, string, number][]> = {
       anna: [['Anna', 'Hey! Kommst du heute Abend noch vorbei?', 50], ['me', 'Ja, so gegen 19 Uhr 🙂', 48], ['Anna', 'Super, bring gern was zu trinken mit', 47]],
-      familie: [['Mama', 'Wer kommt Sonntag zum Essen?', 300], ['Papa', 'Ich natürlich 😄', 290], ['Lena', 'Bin dabei, bringe Nachtisch mit', 200], ['me', 'Ich auch!', 120]],
+      familie: [['Mama', 'Wer kommt Sonntag zum Essen?', 300], ['Mama', 'Ich mache Rouladen, wie letztes Mal 😊', 299], ['Papa', 'Ich natürlich 😄', 290],
+        ['Lena', 'Bin dabei, bringe Nachtisch mit', 200], ['Lena', 'Soll ich noch jemanden vom Bahnhof abholen?', 199], ['me', 'Ich auch! Komme mit dem Zug um 11:40 an, wäre super 🙏', 120],
+        ['Mama', 'Schön, dann sind wir komplett', 100], ['Mama', '❤️', 99]],
       tom: [['Tom', 'Hast du die Unterlagen schon angeschaut?', 1500]],
       verein: [['Jonas', 'Treffpunkt wie immer 9 Uhr am Parkplatz', 3000], ['Sarah', '👍', 2900]],
       emma: [['Emma', 'Hi! Are you still coming to London next month?', 4000], ['Emma', 'Let me know your dates, you can stay with us 😊', 3990]],
@@ -98,9 +101,30 @@ export class DemoAdapter implements Adapter {
     await new Promise((r) => setTimeout(r, 150));
     return demoPng(Number(m[1]), Number(m[2]), [96 + (Number(m[1]) % 90), 140, 200]);
   }
-  async contactInfo(remote: string, kind: string) { return kind === "direct" ? { phone: remote === "bram" ? "+31 6 12345678" : "+49 170 " + (1000000 + remote.length * 12345), about: "Hey, ich nutze Chorus" } : { description: "Demo-Gruppe", members: 5 }; }
+  async contactInfo(remote: string, kind: string) {
+    if (kind !== 'direct') return { description: 'Demo-Gruppe', members: 5 };
+    // Ein paar Gruppenmitglieder bekommen ein Profilbild (Farbverlauf), die übrigen zeigen Initialen
+    const pic = ({ Mama: [244, 114, 182, 251, 191, 36], Jonas: [56, 189, 248, 99, 102, 241] } as Record<string, number[]>)[remote];
+    return { phone: remote === 'bram' ? '+31 6 12345678' : '+49 170 ' + (1000000 + remote.length * 12345), about: 'Hey, ich nutze Chorus', ...(pic ? { avatar: gradientPng(pic) } : {}) };
+  }
   async resync() {}
   async logout() {}
 }
 
 export const demoFactory: AdapterFactory = ({ events }) => new DemoAdapter(events);
+
+/** Kleines PNG mit diagonalem Farbverlauf (nur für die Demo-Profilbilder) */
+function gradientPng([r1, g1, b1, r2, g2, b2]: number[], n = 64): Buffer {
+  const raw = Buffer.alloc((n * 3 + 1) * n);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const t = (x + y) / (2 * n - 2), o = y * (n * 3 + 1) + 1 + x * 3;
+    raw[o] = r1 + (r2 - r1) * t; raw[o + 1] = g1 + (g2 - g1) * t; raw[o + 2] = b1 + (b2 - b1) * t;
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]); const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(td));
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(n, 0); ihdr.writeUInt32BE(n, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}

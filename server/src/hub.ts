@@ -383,7 +383,9 @@ export class Hub {
     this.contactBusy = true;
     while (this.contactQueue.length) {
       const id = this.contactQueue.shift()!;
-      await this.refreshContact(id).catch(async (e) => {
+      const person = id.startsWith('p\u0000') ? id.split('\u0000') : null;
+      await (person ? this.refreshPerson(person[1], person[2]) : this.refreshContact(id)).catch(async (e) => {
+        if (person) { this.store.setPerson(person[1], person[2], e?.code === 'gone' ? null : undefined); console.warn(`[profil] Absender: ${e?.message ?? e}`); return; }
         const c = this.store.getChat(id);
         if (e?.code === 'gone' && c) { // Chat existiert beim Messenger nicht mehr: erst in 7 Tagen wieder fragen
           this.store.setChatInfo(id, { ...(c.info ?? {}), fetchedAt: Date.now(), noAvatar: true });
@@ -410,6 +412,23 @@ export class Hub {
       this.store.setChatInfo(chatId, merged, same ? chat.avatarFileId! : this.store.storeFile(avatar));
     }
     return this.emitChat(chatId)!;
+  }
+  /** Profilbilder der Absender einer Gruppe; fehlende werden langsam im Hintergrund nachgeholt */
+  senderAvatars(chatId: string) {
+    const chat = this.chatOrThrow(chatId);
+    const { avatars, fetch } = this.store.senderAvatars(chatId);
+    const live = this.statuses.get(chat.accountId)?.state === 'connected' && !!this.adapters.get(chat.accountId)?.contactInfo;
+    if (live) for (const sid of fetch.slice(0, 50)) this.queueContact(`p\u0000${chat.accountId}\u0000${sid}`);
+    return { avatars, pending: live && fetch.length > 0 };
+  }
+  private async refreshPerson(accountId: string, remoteId: string) {
+    const a = this.adapters.get(accountId);
+    if (!a?.contactInfo || this.statuses.get(accountId)?.state !== 'connected') throw new Error('Der Messenger ist gerade nicht verbunden');
+    const { avatar } = await a.contactInfo(remoteId, 'direct');
+    if (!avatar) return this.store.setPerson(accountId, remoteId, avatar);
+    const old = this.store.getPerson(accountId, remoteId)?.fileId;
+    const same = old && this.store.readFile(old)?.equals(avatar);
+    this.store.setPerson(accountId, remoteId, same ? old! : this.store.storeFile(avatar));
   }
   async resync() {
     for (const [id, a] of this.adapters) if (this.statuses.get(id)?.state === 'connected') await a.resync?.().catch(() => {});

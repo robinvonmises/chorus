@@ -134,6 +134,22 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     requestAnimationFrame(() => requestAnimationFrame(() => jump(focus.remoteId)));
   }, [focus?.n, messages?.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Gruppen: Profilbilder der Absender (wie bei Signal neben der ersten Nachricht einer Folge)
+  const [senderAv, setSenderAv] = useState<Record<string, string>>({});
+  const sendersKey = useMemo(() => group ? [...new Set((messages ?? []).filter((m) => !m.fromMe).map((m) => m.senderId))].sort().join('|') : '', [group, messages]);
+  useEffect(() => {
+    if (!group) { setSenderAv({}); return; }
+    let alive = true; let timer = 0;
+    const load = (tries: number) => api.senderAvatars(chat.id).then((r) => {
+      if (!alive) return;
+      setSenderAv((old) => JSON.stringify(old) === JSON.stringify(r.avatars) ? old : r.avatars);
+      // Fehlende Bilder holt der Server langsam nach: ein paar Mal später erneut nachsehen
+      if (r.pending && tries < 3) timer = window.setTimeout(() => load(tries + 1), 20_000 * (tries + 1));
+    }).catch(() => {});
+    load(0);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [chat.id, group, sendersKey]);
+
   const items = useMemo(() => {
     const out: { m: Message; day?: string; showName: boolean }[] = [];
     let lastDay = '', lastSender = '';
@@ -194,7 +210,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         {items.map(({ m, day, showName }) => (
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
-            <MessageBubble m={m} group={group} showName={showName} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
+            <MessageBubble m={m} group={group} showName={showName} senderAvatar={group && !m.fromMe ? senderAv[m.senderId] ?? null : undefined} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
               reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
               onAction={openMenu} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
