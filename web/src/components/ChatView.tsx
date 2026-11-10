@@ -193,7 +193,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
             <MessageBubble m={m} group={group} showName={showName} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
-              net={multi ? netOf.get(m.chatId) : undefined} reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
+              reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
               onAction={(mm, p) => setMenu({ m: mm, ...p })} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
           </Fragment>
