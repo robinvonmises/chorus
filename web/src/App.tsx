@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { syncPush } from './push';
 import { api, connectEvents, type Account, type Chat, type HubEvent, type Message, type Network, type ServerState } from './api';
 import { keyStore, lastProfile } from './keys';
 import { Lock } from './components/Lock';
@@ -56,6 +57,14 @@ export default function App() {
     return () => window.removeEventListener('inbox:unauthorized', h);
   }, [boot]);
   useEffect(() => { if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {}); }, []);
+  // Push-Abo bei jedem Start und beim Zurückkommen prüfen (verschwindet z. B. nach Neuinstallation still)
+  useEffect(() => {
+    if (!server?.authed) return;
+    syncPush();
+    const onVis = () => { if (document.visibilityState === 'visible') syncPush(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, [server?.authed]);
 
   if (!ready && !server) return <div className="splash"><img src="/icon.svg" width={64} alt="" /></div>;
   if (error && !server) return <div className="splash"><p>{error}</p></div>;

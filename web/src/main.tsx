@@ -48,11 +48,7 @@ if (vv) {
     set(maxH || vv.height, false);
     requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add('vv-ready')));
   };
-  let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
-    // Nach langer Pause (über 15 Minuten) die App frisch laden: iOS hat sie dann oft halb abgeräumt
-    if (document.visibilityState === 'hidden') hiddenAt = Date.now();
-    else if (hiddenAt && Date.now() - hiddenAt > 15 * 60_000) { location.reload(); return; }
     if (!touch) return;
     if (document.visibilityState === 'hidden') { (document.activeElement as HTMLElement | null)?.blur?.(); snap(); }
     else if (!typing()) snap();

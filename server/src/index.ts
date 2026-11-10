@@ -67,7 +67,7 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
     hub.subscribe((e) => broadcast(ctx, e));
     // Push nur, wenn die App gerade nirgends offen und sichtbar ist. Sonst zeigt die App selbst einen dezenten Hinweis.
-    hub.subscribe((e) => { if (e.type === 'notify' && !appVisible(ctx)) push.notify(store, e.chat, e.message); });
+    hub.subscribe((e) => { if (e.type !== 'notify') return; if (appVisible(ctx)) console.log('[push] übersprungen: App ist offen'); else push.notify(store, e.chat, e.message); });
     await hub.startAll();
     if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
       await hub.addAccount('demo', 'Demo', {});

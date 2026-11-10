@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Icon } from './Icon';
+import { b64, syncPush } from '../push';
 
-const b64 = (s: string) => { const p = '='.repeat((4 - (s.length % 4)) % 4); const r = atob((s + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, (c) => c.charCodeAt(0)); };
 const ios = /iPhone|iPad|iPod/.test(navigator.userAgent);
 const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
 
@@ -16,11 +16,12 @@ export function PushSection() {
 
   useEffect(() => {
     if (!supported) return;
-    navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).then(async (s) => {
+    // Erlaubnis da: Abo prüfen, notfalls neu anlegen und beim Server anmelden
+    syncPush(true).then(async (s) => {
+      if (!s) s = await navigator.serviceWorker.ready.then((r) => r.pushManager.getSubscription()).catch(() => null);
       setSub(s);
-      // Gerät beim Server (erneut) anmelden, falls es dort fehlt
-      if (s) { await api.pushSubscribe(s).catch(() => {}); localStorage.setItem('inbox:push', '1'); } else localStorage.removeItem('inbox:push');
-    }).catch(() => {});
+      if (!s) localStorage.removeItem('inbox:push');
+    });
     api.push().then((p) => setPreview(p.preview)).catch(() => {});
   }, []);
 
