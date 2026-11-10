@@ -3,7 +3,8 @@
 #
 # Ablauf:
 #  1. Schaut auf GitHub nach, ob es auf "main" einen neuen Stand gibt.
-#  2. Wartet, bis GitHub das fertige Docker-Image dazu gebaut hat (ghcr.io …:sha-<commit>).
+#  2. Wartet, bis GitHub das fertige Docker-Image dazu gebaut hat (ghcr.io …:sha-<commit>-amd64,
+#     auf ARM …:sha-<commit>).
 #     Schlägt der Build bei GitHub fehl, gibt es kein Image – dann bleibt einfach alles, wie es ist.
 #  3. Holt das Image, aktualisiert die Dateien im Ordner (nur die aus dem Repo) und startet Chorus neu.
 #  4. Wird Chorus nicht innerhalb von 4 Minuten "healthy", geht es automatisch zurück auf den alten Stand.
@@ -40,7 +41,11 @@ main() {
     return 0   # dieser Stand ist schon einmal gescheitert – erst der nächste Commit wird wieder versucht
   fi
 
-  if ! docker pull -q "$IMAGE:sha-$SHORT" >/dev/null 2>&1; then
+  # Auf x86-Servern zuerst das schnell gebaute amd64-Image nehmen, sonst das Multi-Arch-Image
+  local TAG="sha-$SHORT"
+  if [ "$(uname -m)" = x86_64 ] && docker pull -q "$IMAGE:sha-$SHORT-amd64" >/dev/null 2>&1; then
+    TAG="sha-$SHORT-amd64"
+  elif ! docker pull -q "$IMAGE:sha-$SHORT" >/dev/null 2>&1; then
     [ "$(cat "$WAIT_MARK" 2>/dev/null)" = "$NEW" ] && return 0   # nur einmal ins Protokoll schreiben
     echo "$NEW" > "$WAIT_MARK"
     log "Image für $SHORT gibt es (noch) nicht – GitHub baut vermutlich noch oder der Build ist fehlgeschlagen. Alter Stand bleibt, nächster Versuch beim nächsten Lauf."
@@ -55,11 +60,15 @@ main() {
   [ -n "$PREV_IMG" ] && docker tag "$PREV_IMG" "$IMAGE:vorher"
 
   git reset -q --hard "$NEW"
-  docker tag "$IMAGE:sha-$SHORT" "$IMAGE:latest"
+  docker tag "$IMAGE:$TAG" "$IMAGE:latest"
 
   if docker compose up -d --no-build "$SERVICE" && wait_healthy "$SERVICE"; then
     log "Chorus läuft jetzt auf $SHORT"
-    docker rmi "$IMAGE:sha-$SHORT" >/dev/null 2>&1 || true   # nur das Etikett, das Image bleibt als :latest
+    # Hat sich die Timer-Einrichtung geändert, gleich mit übernehmen
+    if [ -x /bin/systemctl ] && ! git diff --quiet "$OLD" "$NEW" -- deploy/auto-update-einrichten.sh 2>/dev/null; then
+      bash deploy/auto-update-einrichten.sh >/dev/null && log "Timer-Einrichtung aktualisiert"
+    fi
+    docker rmi "$IMAGE:$TAG" >/dev/null 2>&1 || true   # nur das Etikett, das Image bleibt als :latest
     docker image prune -f >/dev/null 2>&1 || true            # alte, unbenutzte Images aufräumen
     return 0
   fi
@@ -79,8 +88,8 @@ log() { echo "[chorus-update] $*"; }
 # Wartet, bis der Healthcheck des Containers "healthy" meldet (max. 4 Minuten)
 wait_healthy() {
   local s i
-  for i in $(seq 1 48); do
-    sleep 5
+  for i in $(seq 1 120); do
+    sleep 2
     s=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$1" 2>/dev/null || echo fehlt)
     case "$s" in
       healthy) return 0 ;;

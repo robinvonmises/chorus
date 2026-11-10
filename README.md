@@ -141,7 +141,7 @@ docker compose build && docker run --rm -p 8080:8080 -e DEMO=1 chorus-chorus
 
 Updates: `docker compose pull && docker compose up -d`.
 
-**Automatic updates** (Docker setup cloned with git, systemd): `bash deploy/auto-update-einrichten.sh` installs a timer that checks GitHub every 5 minutes, waits for the CI image of the new commit, swaps it in and rolls back automatically if the container doesn't become healthy. `data/` and `.env` are never touched. Log: `journalctl -u chorus-update`.
+**Automatic updates** (Docker setup cloned with git, systemd): `bash deploy/auto-update-einrichten.sh` installs a timer that checks GitHub every minute, waits for the CI image of the new commit, swaps it in and rolls back automatically if the container doesn't become healthy. `data/` and `.env` are never touched. Log: `journalctl -u chorus-update`.
 
 ## Architecture
 
