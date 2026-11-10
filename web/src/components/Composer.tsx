@@ -75,7 +75,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
       return;
     }
     if (files.length) {
-      const fs = files, ve = vEdits; setFiles([]); setVEdits(new Map()); setText(''); onSent();
+      const fs = files, ve = vEdits, translate = canTr && !noTr; setFiles([]); setVEdits(new Map()); setText(''); setNoTr(false); onSent();
       // Blasen sofort zeigen, dann nacheinander hochladen
       const ids = fs.map((f, i) => outbox.add({
         chatId: chat.id, name: f.name, caption: i === 0 && t ? t : undefined,
@@ -86,7 +86,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         const id = ids[i];
         try {
           await api.upload(chat.id, fs[i], fs[i].name, {
-            caption: i === 0 ? t : undefined, replyTo: replyTo?.remoteId, video: ve.get(fs[i]),
+            caption: i === 0 ? t : undefined, translate, replyTo: replyTo?.remoteId, video: ve.get(fs[i]),
             onProgress: (p) => outbox.update(id, p >= 1 ? { progress: 1, phase: 'work' } : { progress: p }),
           });
           outbox.remove(id);
