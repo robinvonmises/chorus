@@ -73,7 +73,7 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
     ctx.translator = new Translator(hub, ctx.ai);
     ctx.planner?.stop();
-    ctx.planner = new Planner(hub, (title, body, chatId) => { if (!appVisible(ctx)) void push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }); },
+    ctx.planner = new Planner(hub, (title, body, chatId) => { if (!appVisible(ctx)) void push.send(store, { ...push.shape(store, title, body), chatId, tag: 'reminder-' + chatId }); },
       (p) => sendMaybeTranslated(hub, ctx.ai!, p.chatId, p.text, p.replyTo ?? null, !!p.translate));
     hub.subscribe((e) => broadcast(ctx, e));
     // Push nur, wenn die App gerade nirgends offen und sichtbar ist. Sonst zeigt die App selbst einen dezenten Hinweis.
@@ -920,7 +920,7 @@ for (const p of registry.all()) {
 // ---------- Push-Benachrichtigungen ----------
 app.get('/api/push', async (req) => {
   const h = H(req);
-  return { key: push.publicKey, preview: push.preview(h.store), devices: push.subs(h.store).length };
+  return { key: push.publicKey, preview: push.preview(h.store), noTitle: push.noTitle(h.store), devices: push.subs(h.store).length };
 });
 app.post('/api/push/subscribe', async (req) => {
   const h = H(req);
@@ -932,10 +932,16 @@ app.post('/api/push/subscribe', async (req) => {
 });
 app.post('/api/push/unsubscribe', async (req) => { push.remove(H(req).store, String((req.body as any)?.endpoint ?? '')); return { ok: true }; });
 app.post('/api/push/test', async (req) => {
-  await push.send(H(req).store, { title: 'Chorus', body: 'So sehen Benachrichtigungen aus. 🎉', tag: 'test' }, (req.body as any)?.endpoint);
+  const st = H(req).store;
+  await push.send(st, { ...push.shape(st, 'Chorus', 'So sehen Benachrichtigungen aus. 🎉'), tag: 'test' }, (req.body as any)?.endpoint);
   return { ok: true };
 });
-app.put('/api/push', async (req) => { H(req).store.setSetting('pushPreview', !!(req.body as any)?.preview); return { ok: true }; });
+app.put('/api/push', async (req) => {
+  const b = (req.body ?? {}) as { preview?: boolean; noTitle?: boolean };
+  if (b.preview !== undefined) H(req).store.setSetting('pushPreview', !!b.preview);
+  if (b.noTitle !== undefined) H(req).store.setSetting('pushNoTitle', !!b.noTitle);
+  return { ok: true };
+});
 
 // ---------- Admin: Server ----------
 const STARTED = Date.now();

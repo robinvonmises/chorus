@@ -38,7 +38,7 @@ self.addEventListener('push', (e) => {
     const ios = /iPhone|iPad|iPod/.test(self.navigator.userAgent);
     const open = d.chatId && cs.some((c) => c.visibilityState === 'visible' && c.focused && decodeURIComponent((c.url.split('#chat=')[1] || '').split('&')[0]) === d.chatId);
     if (open && !ios) return;
-    return self.registration.showNotification(d.title || 'Chorus', {
+    return self.registration.showNotification(typeof d.title === 'string' ? d.title : 'Chorus', {
       body: d.body || '', tag: d.tag || d.chatId || undefined, renotify: true,
       data: { chatId: d.chatId || null }, icon: '/icon-192.png', badge: '/icon-192.png',
     });
