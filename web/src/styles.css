@@ -175,18 +175,24 @@ input, textarea { font: inherit; color: inherit; }
 .msg.out .bubble a { color: inherit; }
 .bubble .text { white-space: pre-wrap; display: inline; }
 .bubble .sender { font-size: 13px; font-weight: 700; margin-bottom: 2px; }
-.bubble .meta { float: right; display: inline-flex; gap: 4px; align-items: center; margin: 6px 0 -2px 10px; font-size: 11px; opacity: .65; white-space: nowrap; }
+.bubble .meta { float: right; display: inline-flex; gap: 4px; align-items: center; margin: 6px 0 -2px 10px; font-size: 11px; white-space: nowrap; }
+.bubble .meta > * { opacity: .65; }
+.bubble.media-only .meta > * { opacity: 1; }
 .bubble.big-emoji { background: transparent !important; font-size: 44px; line-height: 1.1; padding: 0; color: var(--ink) !important; }
 .bubble.big-emoji .meta { float: none; display: flex; justify-content: flex-end; font-size: 11px; margin: 0; color: var(--ink-3); }
 .bubble.deleted { opacity: .7; font-size: 14px; }
 .bubble.media-only { padding: 4px; }
 .bubble.media-only .meta { position: absolute; right: 10px; bottom: 8px; background: rgba(0,0,0,.45); color: #fff; padding: 1px 6px; border-radius: 8px; opacity: 1; margin: 0; }
-.st.read { color: #7dd3fc; opacity: 1; }
+/* Gelesen-Haken: kräftige Farbe des Messengers (Signal blau, WhatsApp grün) auf einem kleinen weißen Plättchen,
+   damit sie auf jeder Blasenfarbe sofort auffallen */
+.bubble .meta > .st.read { opacity: 1; }
+.st.read { color: #2563eb; stroke-width: 2.6; }
+.msg.out .st.read { background: #fff; border-radius: 6px; padding: 1px 2px; width: 20px; height: 15px; box-shadow: 0 0 0 .5px rgba(0,0,0,.08); }
 .msg.in .st.read { color: var(--accent); }
-/* Gelesen-Haken in der Farbe des Messengers: Signal blau, WhatsApp grün */
-.chat-view[data-net="whatsapp"] .msg.out .st.read { color: #bef264; }
-.chat-view[data-net="signal"] .msg.out .st.read { color: #7dd3fc; }
-.st.failed { color: #fca5a5; opacity: 1; }
+.chat-view[data-net="whatsapp"] .msg.out .st.read { color: #16a34a; }
+.chat-view[data-net="signal"] .msg.out .st.read { color: #2563eb; }
+.bubble .meta > .st.failed { opacity: 1; }
+.st.failed { color: #fca5a5; }
 .quote { display: grid; text-align: left; width: 100%; border-left: 3px solid currentColor; padding: 4px 8px; margin: 2px 0 6px; border-radius: 6px; background: rgba(127,127,127,.12); font-size: 13px; }
 .quote span { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hover-actions { position: absolute; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }

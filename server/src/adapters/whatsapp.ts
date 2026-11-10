@@ -156,9 +156,18 @@ export class WhatsAppAdapter implements Adapter {
         const chat = this.chatId(key);
         if (update.status != null && key.fromMe) {
           const st = update.status >= 4 ? 'read' : update.status === 3 ? 'delivered' : 'sent';
-          this.ev.messageUpdate(chat, key.id, { status: st });
+          // Bestätigungen kommen oft mit der LID statt der Telefonnummer als Chat: dann über die Nachrichten-ID suchen
+          this.ev.messageUpdate(chat.endsWith('@lid') ? '*' : chat, key.id, { status: st });
         }
         if (update.message) this.onMessage({ key, ...update } as WAMessage, true);
+      }
+    });
+    // Gruppen: Zustell- und Lesebestätigungen kommen je Teilnehmer
+    sock.ev.on('message-receipt.update', (rs) => {
+      for (const { key, receipt } of rs) {
+        if (!key.id || !key.fromMe) continue;
+        const st = receipt.readTimestamp || receipt.playedTimestamp ? 'read' : receipt.receiptTimestamp ? 'delivered' : null;
+        if (st) this.ev.messageUpdate('*', key.id, { status: st });
       }
     });
     sock.ev.on('messages.reaction', (rs) => {
