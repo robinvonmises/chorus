@@ -15,12 +15,11 @@ export function previewOf(m: Message): string {
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, net, reminder, trLang }: {
+export const MessageBubble = memo(function MessageBubble({ m, group, showName, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
   /** Live-Übersetzung: Sprache des Chatpartners (für „Übersetzt aus …“) */
   trLang?: string | null;
   /** Bei zusammengeführten Kontakten: über welchen Messenger die Nachricht lief */
-  net?: Network;
   /** Erinnerung an diese Nachricht (Zeitpunkt) */
   reminder?: number;
   onAction: (m: Message, anchor: { x: number; y: number }) => void;
@@ -73,7 +72,6 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, r
         </>}
         <span className="meta">
           {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}
-          {net && <span className="net-dot" title={NETWORKS[net].name} style={{ background: NETWORKS[net].color }} />}
           {m.edited && !m.deleted && <span>bearbeitet</span>}
           <span>{msgTime(m.ts)}</span>
           {m.fromMe && <StatusIcon s={m.status} />}
