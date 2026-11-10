@@ -565,6 +565,11 @@ app.post('/api/chats/:id/ai/suggest', async (req) => {
   const hint = String((req.body as any)?.hint ?? '').slice(0, 500).trim();
   return { suggestions: await A(req).suggest(id, hint || undefined) };
 });
+app.post('/api/chats/:id/ai/quick', async (req) => {
+  const id = (req.params as any).id;
+  needAi(req, id);
+  return A(req).quick(id);
+});
 // ---------- Geplant: zeitversetzt senden, Erinnerungen ----------
 const P = (req: FastifyRequest) => { const p = C(req).planner; if (!p) throw Object.assign(new Error('Nicht bereit'), { statusCode: 503 }); return p; };
 app.get('/api/planned', async (req) => P(req).list());

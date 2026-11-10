@@ -12,8 +12,8 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, onPickLang, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
-  chat: Chat; onPickLang?: () => void; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
+export function Composer({ chat, onPickLang, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo, onEmpty }: {
+  chat: Chat; onPickLang?: () => void; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean; onEmpty?: (empty: boolean) => void;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
@@ -42,6 +42,8 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   useEffect(() => { localStorage.setItem(draftKey, text); if (!text) localStorage.removeItem(draftKey); }, [text, draftKey]);
   useEffect(() => { if (editing) { setText(editing.text); ta.current?.focus(); } }, [editing]);
   useEffect(() => { if (replyTo) ta.current?.focus(); }, [replyTo]);
+  const empty = !text.trim();
+  useEffect(() => { onEmpty?.(empty); }, [empty]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (inject) { setText(inject.text); requestAnimationFrame(() => ta.current?.focus()); } }, [inject?.n]);
   useEffect(() => { // Höhe automatisch
     const el = ta.current; if (!el) return;

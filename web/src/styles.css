@@ -895,3 +895,12 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .tr-other { display: flex; gap: 8px; padding: 6px 0 10px; }
 .tr-other .input { flex: 1; min-width: 0; }
 .tr-note { margin: 0; }
+
+/* KI-Antwortvorschläge über dem Eingabefeld */
+.quick-replies { display: flex; gap: 6px; align-items: center; margin: 0 12px 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; animation: quick-in .2s ease-out; }
+.quick-replies::-webkit-scrollbar { display: none; }
+.quick-chip { flex: 0 0 auto; max-width: 78vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--bg-2); border: 1px solid var(--line); color: var(--ink); border-radius: 18px; padding: 7px 12px; font-size: 14px; cursor: pointer; }
+@media (hover: hover) { .quick-chip:hover { border-color: var(--accent); background: var(--accent-soft); } }
+.quick-x { flex: 0 0 auto; opacity: .6; }
+@keyframes quick-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .quick-replies { animation: none; } }
