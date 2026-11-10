@@ -12,8 +12,8 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, draftId, placeholder, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
-  chat: Chat; draftId?: string; placeholder?: string; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
+export function Composer({ chat, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
+  chat: Chat; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
@@ -44,7 +44,9 @@ export function Composer({ chat, draftId, placeholder, disabled, replyTo, editin
   useEffect(() => { // Höhe automatisch
     const el = ta.current; if (!el) return;
     el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px';
-  }, [text]);
+    // Das kurze Zusammenklappen (auto) verschiebt den Chat darüber: dort wieder nach unten rücken lassen
+    onResize?.();
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!isTouch()) ta.current?.focus(); }, [chat.id]);
 
   // Einfügen von Bildern und Dateien per Drag & Drop
