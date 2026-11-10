@@ -461,7 +461,7 @@ async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, raw: string, repl
   const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
   const tr = src?.translate;
   let m: Message | null;
-  if (translate && tr?.on && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled) {
+  if (translate && tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled) {
     const t = await ai.translateOut(id, text, tr.langName);
     m = await h.sendText(id, out(t), replyTo);
     if (m) { const u = h.store.patchMessage(m.id, { translation: text }); if (u) { m = u; h.emit({ type: 'message', message: u }); } }
@@ -571,7 +571,8 @@ app.put('/api/chats/:id/translate', async (req) => {
   const on = !!(req.body as any)?.on;
   if (on && !A(req).publicSettings().features.text) throw new AiError(400, 'Für die Übersetzung bitte zuerst in den Einstellungen einen Claude-Schlüssel eintragen.');
   if (on && !c.aiEnabled) h.setChatAi(id, true);
-  h.store.setTranslate(id, { ...(c.translate ?? {}), on });
+  const out = (req.body as any)?.out;
+  h.store.setTranslate(id, { ...(c.translate ?? {}), on, ...(typeof out === 'boolean' ? { out } : {}) });
   const chat = h.store.getChat(id)!;
   h.emit({ type: 'chat', chat });
   if (on) void C(req).translator!.run(id, 30);

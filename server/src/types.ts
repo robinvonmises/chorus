@@ -58,7 +58,8 @@ export interface Chat {
   link?: string | null;
   /** Bei zusammengeführten Kontakten: Chat, über den gesendet wird (null = automatisch) */
   sendVia?: string | null;
-  translate?: { on: boolean; lang?: string | null; langName?: string | null } | null;
+  /** out = eigene Nachrichten übersetzen (Standard: ja) */
+  translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean } | null;
 }
 
 /** Was der Messenger über einen Kontakt oder eine Gruppe verrät */
