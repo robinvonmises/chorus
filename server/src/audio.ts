@@ -38,6 +38,22 @@ export function toOggOpusTimed(input: Buffer): Promise<{ data: Buffer; durationS
   });
 }
 
+/** Signal-Sprachnachricht: AAC (ADTS), Mono – so nehmen die Signal-Apps selbst auf und können es überall abspielen.
+ *  OGG/Opus zeigt Signal auf dem iPhone nur als Datei an. */
+export function toAac(input: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const p = spawn('ffmpeg', ['-hide_banner', '-loglevel', 'error', '-nostdin', '-i', 'pipe:0', '-vn', '-map_metadata', '-1', '-ac', '1', '-ar', '44100', '-c:a', 'aac', '-b:a', '48k', '-f', 'adts', 'pipe:1']);
+    const out: Buffer[] = [];
+    let err = '';
+    p.stdout.on('data', (d) => out.push(d));
+    p.stderr.on('data', (d) => (err += d));
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve(Buffer.concat(out)) : reject(new Error('ffmpeg: ' + err.trim()))));
+    p.stdin.on('error', () => {});
+    p.stdin.end(input);
+  });
+}
+
 /** Für Safari/iOS: Opus/OGG (WhatsApp, Telegram) in MP3 umwandeln, das jeder Browser abspielt. */
 export function toMp3(input: Buffer): Promise<Buffer> {
   return new Promise((resolve, reject) => {

@@ -1,5 +1,6 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface } from 'node:readline';
+import { toAac } from '../audio.js';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
@@ -301,6 +302,13 @@ export class SignalAdapter implements Adapter {
   }
 
   async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
+    if (f.voice) {
+      // Echte Sprachnachricht (mit Abspielknopf beim Empfänger) statt „sprachnachricht.ogg“: AAC wie die Signal-Apps und Kennzeichen voiceNote
+      const aac = await toAac(f.data);
+      const r = await this.sendRetry({ ...this.target(chat), message: caption ?? '', voiceNote: true,
+        attachments: [`data:audio/aac;filename=sprachnachricht.aac;base64,${aac.toString('base64')}`], ...this.quote(replyTo) }, 5 * 60_000);
+      return `${r.timestamp}:${this.me}`;
+    }
     // Große Dateien (Videos) nicht als Base64 durch JSON-RPC schicken, sondern als Datei im Arbeitsverzeichnis von signal-cli.
     // Der Dateiname bleibt erhalten, damit der Empfänger ihn sieht.
     const dir = join(this.dir, 'outgoing', randomUUID());

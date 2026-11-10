@@ -108,7 +108,7 @@ function Transcript({ m, onTranscribe }: { m: Message; onTranscribe?: (m: Messag
   if (!onTranscribe || m.status === 'pending') return null;
   return (
     <button className="transcribe-btn" disabled={busy} onClick={async () => { setBusy(true); await onTranscribe(m); setBusy(false); }}>
-      {busy ? <><span className="spinner" /> Wird abgetippt …</> : <><Icon name="file" size={14} /> Abtippen</>}
+      {busy ? <><span className="spinner" /> Wird transkribiert …</> : <><Icon name="file" size={14} /> Transkribieren</>}
     </button>
   );
 }

@@ -257,7 +257,11 @@ Nichts hinzufügen, nichts weglassen. Antworte nur mit der Übersetzung, ohne An
   async transcribe(audio: Buffer, mime: string, name: string): Promise<string> {
     const fd = new FormData();
     fd.append('model_id', this.settings.sttModel);
-    fd.append('file', new Blob([new Uint8Array(audio)], { type: mime || 'audio/ogg' }), name || 'audio.ogg');
+    // WhatsApp liefert „audio/ogg; codecs=opus“ und Dateinamen ohne Endung: beides mag die Spracherkennung nicht
+    const type = (mime || 'audio/ogg').split(';')[0].trim().toLowerCase();
+    const ext = EXT[type] ?? 'ogg';
+    const file = (name || 'audio').replace(/\.[^.\/]*$/, '') + '.' + ext;
+    fd.append('file', new Blob([new Uint8Array(audio)], { type }), file);
     const r = await this.eleven('/v1/speech-to-text', { method: 'POST', body: fd });
     const j = (await r.json()) as { text?: string };
     return (j.text ?? '').trim() || '(keine Sprache erkannt)';
@@ -276,6 +280,8 @@ Nichts hinzufügen, nichts weglassen. Antworte nur mit der Übersetzung, ohne An
     return Buffer.from(await r.arrayBuffer());
   }
 }
+
+const EXT: Record<string, string> = { 'audio/ogg': 'ogg', 'audio/opus': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/aac': 'aac', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a', 'audio/m4a': 'm4a', 'audio/wav': 'wav', 'audio/x-wav': 'wav', 'audio/webm': 'webm', 'video/mp4': 'mp4', 'video/quicktime': 'mov', 'video/webm': 'webm' };
 
 function describe(m: Message): string {
   const parts: string[] = [];
