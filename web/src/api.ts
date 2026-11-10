@@ -15,7 +15,7 @@ export interface Chat {
   kind: 'direct' | 'group' | 'channel'; lastTs: number; lastText: string; unread: number; pinned: boolean; muted: boolean;
   aiEnabled?: boolean;
   autopilot?: Autopilot | null;
-  translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean } | null;
+  translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean; fixed?: boolean } | null;
   link?: string | null;
   sendVia?: string | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
@@ -35,6 +35,8 @@ export interface Message {
   text: string; replyToRemoteId?: string | null; edited: boolean; deleted: boolean; attachments: Attachment[];
   reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
   translation?: string | null;
+  /** Sprache des Texts, wenn translation die deutsche Übersetzung ist (bei eigenen übersetzt gesendeten leer: dann ist translation das Original) */
+  translationFrom?: string | null;
 }
 export interface PublicProfile {
   id: string; name: string; initialized: boolean; invite: boolean; totp: boolean; avatar: string | null;
@@ -134,7 +136,8 @@ export const api = {
   messages: (id: string, before?: number) => req<Message[]>('GET', `/api/chats/${enc(id)}/messages${before ? `?before=${before}` : ''}`),
   history: (id: string) => req('POST', `/api/chats/${enc(id)}/history`),
   send: (id: string, text: string, replyTo?: string | null, translate?: boolean) => req('POST', `/api/chats/${enc(id)}/send`, { text, replyTo, translate }),
-  translate: (id: string, on: boolean, out?: boolean) => req<Chat>('PUT', `/api/chats/${enc(id)}/translate`, { on, out }),
+  translate: (id: string, on: boolean, out?: boolean, lang?: { lang: string | null; langName?: string | null }) => req<Chat>('PUT', `/api/chats/${enc(id)}/translate`, { on, out, ...(lang ?? {}) }),
+  translateGuess: (id: string) => req<{ guess: { lang: string; langName: string } | null }>('GET', `/api/chats/${enc(id)}/translate`),
   planned: () => req<Planned[]>('GET', '/api/planned'),
   plan: (p: Partial<Planned> & { kind: Planned['kind']; chatId: string; at: number }) => req<Planned>('POST', '/api/planned', p),
   replan: (id: string, patch: { at?: number; text?: string }) => req<Planned>('PATCH', `/api/planned/${enc(id)}`, patch),

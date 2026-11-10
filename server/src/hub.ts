@@ -33,6 +33,9 @@ export class Hub {
   private subscribers = new Set<(e: HubEvent) => void>();
   /** Neue eingehende Nachrichten (für den Autopiloten) */
   readonly incoming = new Set<(chat: Chat, msg: Message) => void>();
+  /** Neue eigene Nachrichten, aus Chorus oder vom Handy (für die Live-Übersetzung) */
+  readonly own = new Set<(chat: Chat, msg: Message) => void>();
+  private fire(set: Set<(chat: Chat, msg: Message) => void>, chat: Chat, msg: Message) { for (const f of set) { try { f(chat, msg); } catch { /* ignore */ } } }
   /** Eigene Nummern/Namen je Konto (für Erwähnungen) */
   selfOf(accountId: string): string | undefined { return this.statuses.get(accountId)?.self; }
 
@@ -98,7 +101,7 @@ export class Hub {
           if (!chat.info?.fetchedAt) this.queueContact(cid);
           this.emit({ type: 'chat', chat });
           if (!msg.fromMe && Date.now() - msg.ts < 60_000 && !chat.muted && !chat.archived) this.emit({ type: 'notify', chat, message: msg });
-          if (!msg.fromMe && Date.now() - msg.ts < 5 * 60_000) for (const f of this.incoming) { try { f(chat, msg); } catch { /* ignore */ } }
+          if (Date.now() - msg.ts < 5 * 60_000) this.fire(msg.fromMe ? this.own : this.incoming, chat, msg);
           if (msg.attachments.some((a) => !a.fileId)) this.queueMedia(msg.id);
         }
         this.emit({ type: 'message', message: msg });
@@ -208,6 +211,7 @@ export class Hub {
         this.emit({ type: 'message', message: m2, replacedId: tmp.id });
         this.store.touchChat(chat.id, m2.ts, previewText(m2), false);
         this.emit({ type: 'chat', chat: this.store.getChat(chat.id)! });
+        this.fire(this.own, chat, m2);
         return m2;
       }
       return null;

@@ -58,8 +58,8 @@ export interface Chat {
   link?: string | null;
   /** Bei zusammengeführten Kontakten: Chat, über den gesendet wird (null = automatisch) */
   sendVia?: string | null;
-  /** out = eigene Nachrichten übersetzen (Standard: ja) */
-  translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean } | null;
+  /** out = eigene Nachrichten übersetzen (Standard: ja). fixed = Sprache von Hand gewählt, nicht automatisch erkennen */
+  translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean; fixed?: boolean } | null;
 }
 
 /** Was der Messenger über einen Kontakt oder eine Gruppe verrät */
@@ -125,6 +125,9 @@ export interface Message {
   transcript?: string | null;
   /** Eingehend: deutsche Übersetzung. Eigene: der deutsche Originaltext vor dem Übersetzen */
   translation?: string | null;
+  /** Sprache des Nachrichtentexts (deutscher Name), wenn translation eine Übersetzung ins Deutsche ist.
+   *  Bei eigenen, übersetzt gesendeten Nachrichten leer: dann ist translation das deutsche Original. */
+  translationFrom?: string | null;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

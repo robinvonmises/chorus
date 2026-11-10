@@ -12,14 +12,16 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
-  chat: Chat; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
+export function Composer({ chat, onPickLang, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
+  chat: Chat; onPickLang?: () => void; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
   // Live-Übersetzung: eigene Nachrichten in der Sprache des Chatpartners senden (pro Nachricht abschaltbar)
   const tr = chat.translate;
   const canTr = !!(tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName);
+  // Übersetzung an, aber noch keine Sprache bekannt: Hinweis zum Wählen
+  const trUnknown = !!(tr?.on && tr.out !== false && !tr.lang);
   const [noTr, setNoTr] = useState(false);
   const [when, setWhen] = useState(false);
   const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '');
@@ -195,6 +197,13 @@ export function Composer({ chat, draftId, placeholder, onResize, disabled, reply
           <Icon name="globe" size={15} />
           <span>{noTr ? "Ohne Übersetzung senden" : `Antwort wird auf ${tr!.langName} übersetzt`}</span>
           <button className="link-btn" onClick={() => setNoTr((v) => !v)}>{noTr ? "Übersetzen" : "Original"}</button>
+        </div>
+      )}
+      {trUnknown && !editing && (
+        <div className="tr-chip">
+          <Icon name="globe" size={15} />
+          <span>Sprache noch unbekannt</span>
+          {onPickLang && <button className="link-btn" onClick={onPickLang}>Sprache wählen</button>}
         </div>
       )}
       {(replyTo || editing) && (

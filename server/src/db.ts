@@ -49,6 +49,7 @@ export class Store {
     const cols = (this.db.prepare('PRAGMA table_info(chats)').all() as { name: string }[]).map((c) => c.name);
     const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
+    if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
     for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
@@ -158,7 +159,7 @@ export class Store {
       .all(chatId) as { id: string; name: string }[]).map(({ id, name }) => ({ id, name }));
   }
   untranslated(chatId: string, limit: number): Message[] {
-    return this.db.prepare(`SELECT * FROM messages WHERE chat_id=? AND from_me=0 AND deleted=0 AND translation IS NULL AND (text<>'' OR transcript IS NOT NULL) ORDER BY ts DESC LIMIT ?`)
+    return this.db.prepare(`SELECT * FROM messages WHERE chat_id=? AND deleted=0 AND translation IS NULL AND remote_id NOT LIKE 'local-%' AND (text<>'' OR transcript IS NOT NULL) ORDER BY ts DESC LIMIT ?`)
       .all(chatId, limit).map((r) => this.rowToMsg(r)).reverse();
   }
   chatAiEnabled(id: string): boolean {
@@ -176,6 +177,7 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
+      translationFrom: r.translation_from ?? null,
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -213,8 +215,8 @@ export class Store {
     this.db.prepare('UPDATE messages SET id=?, remote_id=? WHERE id=?').run(newId, newRemoteId, oldId);
     return this.getMessage(newId);
   }
-  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation'>>) {
-    const map: Record<string, string> = { translation: 'translation', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
+  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
+    const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
       if (!map[k]) continue;
       const val = typeof v === 'boolean' ? Number(v) : Array.isArray(v) ? JSON.stringify(v) : v;

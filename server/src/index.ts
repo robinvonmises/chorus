@@ -23,7 +23,7 @@ import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
 import { Ai, AiError } from './ai.js';
 import { AutopilotRunner } from './autopilot.js';
-import { Translator } from './translate.js';
+import { Translator, guessLang } from './translate.js';
 import { Planner } from './planner.js';
 import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
 import { exportZip, slug } from './export.js';
@@ -562,17 +562,35 @@ app.post('/api/planned/:id/now', async (req) => {
   return { ok: true };
 });
 
-/** Live-Übersetzung ein/aus. Schaltet die KI für den Chat mit ein und übersetzt die letzten Nachrichten. */
+/** Vorschlag für die Sprache aus der Ländervorwahl (für die Sprachauswahl) */
+app.get('/api/chats/:id/translate', async (req) => {
+  const c = H(req).store.getChat((req.params as any).id);
+  if (!c) throw new AiError(404, 'Chat nicht gefunden');
+  return { guess: guessLang(c) };
+});
+/** Live-Übersetzung ein/aus und Sprache wählen. Schaltet die KI für den Chat mit ein und übersetzt die letzten Nachrichten.
+ *  lang: Sprachcode und langName = feste Sprache, lang: null = automatisch erkennen, fehlt = unverändert */
 app.put('/api/chats/:id/translate', async (req) => {
   const id = (req.params as any).id;
   const h = H(req);
   const c = h.store.getChat(id);
   if (!c) throw new AiError(404, 'Chat nicht gefunden');
-  const on = !!(req.body as any)?.on;
+  const b = (req.body ?? {}) as { on?: boolean; out?: boolean; lang?: string | null; langName?: string | null };
+  const on = !!b.on;
   if (on && !A(req).publicSettings().features.text) throw new AiError(400, 'Für die Übersetzung bitte zuerst in den Einstellungen einen Claude-Schlüssel eintragen.');
   if (on && !c.aiEnabled) h.setChatAi(id, true);
-  const out = (req.body as any)?.out;
-  h.store.setTranslate(id, { ...(c.translate ?? {}), on, ...(typeof out === 'boolean' ? { out } : {}) });
+  const t: NonNullable<Chat['translate']> = { ...(c.translate ?? {}), on, ...(typeof b.out === 'boolean' ? { out: b.out } : {}) };
+  // Zurück auf automatisch: die von Hand gewählte Sprache gilt nicht mehr, bis wieder etwas erkannt ist
+  if (b.lang === null) { if (t.fixed) { const g = guessLang(c); t.lang = g?.lang ?? null; t.langName = g?.langName ?? null; } t.fixed = false; }
+  else if (typeof b.lang === 'string' || typeof b.langName === 'string') {
+    const name = String(b.langName ?? '').trim().slice(0, 40);
+    if (!name) throw new AiError(400, 'Bitte eine Sprache angeben.');
+    const code = String(b.lang ?? '').trim().toLowerCase().slice(0, 8) || 'x-' + name.toLowerCase().replace(/[^a-zäöüß]/g, '').slice(0, 6);
+    Object.assign(t, { lang: code, langName: name, fixed: true });
+  }
+  // Noch keine Sprache bekannt: aus der Ländervorwahl vorschlagen, damit schon die erste eigene Nachricht übersetzt wird
+  if (on && !t.fixed && !t.lang) { const g = guessLang(c); if (g) Object.assign(t, g); }
+  h.store.setTranslate(id, t);
   const chat = h.store.getChat(id)!;
   h.emit({ type: 'chat', chat });
   if (on) void C(req).translator!.run(id, 30);
