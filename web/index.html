@@ -10,6 +10,17 @@
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
     <link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <script>
+      // Kann ein Skript nicht geladen werden (z. B. alte Version nach einem Update), einmal frisch neu laden statt leer zu bleiben
+      (function () {
+        function retry() {
+          var last = Number(sessionStorage.getItem('inbox:reload') || 0);
+          if (Date.now() - last > 30000) { sessionStorage.setItem('inbox:reload', String(Date.now())); location.reload(); }
+        }
+        window.addEventListener('error', function (e) { var t = e.target; if (t && (t.tagName === 'SCRIPT' || t.tagName === 'LINK')) retry(); }, true);
+        window.addEventListener('vite:preloadError', function (e) { e.preventDefault(); retry(); });
+      })();
+    </script>
     <title>Chorus</title>
   </head>
   <body>

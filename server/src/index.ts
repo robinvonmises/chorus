@@ -638,10 +638,14 @@ app.get('/api/search', async (req) => {
 });
 
 // ---------- Live-Ereignisse ----------
-/** Sockets, deren App gerade im Vordergrund ist (meldet der Browser per visibilitychange) */
-const visibleSockets = new WeakSet<object>();
+/** Wann eine App zuletzt gemeldet hat, dass sie im Vordergrund ist. Die App wiederholt das alle 20 s.
+ *  Ein eingefrorenes iPhone meldet sich nicht ab, die Verbindung wirkt aber noch offen.
+ *  Deshalb gilt eine App nur als sichtbar, solange die letzte Meldung frisch ist, sonst kommt die Push-Benachrichtigung. */
+const visibleSince = new WeakMap<object, number>();
+const VISIBLE_FRESH_MS = 45_000;
 function appVisible(c: Ctx) {
-  for (const ws of c.sockets) if (ws.readyState === 1 && visibleSockets.has(ws)) return true;
+  const now = Date.now();
+  for (const ws of c.sockets) { const t = visibleSince.get(ws); if (ws.readyState === 1 && t && now - t < VISIBLE_FRESH_MS) return true; }
   return false;
 }
 function broadcast(c: Ctx, e: unknown) {
@@ -657,20 +661,38 @@ app.register(async (f) => {
     socket.on('message', (d) => {
       try {
         const m = JSON.parse(String(d));
-        if (m?.type === 'visibility') { if (m.visible) visibleSockets.add(socket); else visibleSockets.delete(socket); }
+        if (m?.type === 'visibility') { if (m.visible) visibleSince.set(socket, Date.now()); else visibleSince.delete(socket); }
       } catch { /* ignorieren */ }
     });
-    const ping = setInterval(() => socket.readyState === 1 && socket.ping(), 25_000);
+    // Tote Verbindungen (Handy eingefroren, Netz weg) erkennen und schließen: wer auf zwei Pings nicht antwortet, fliegt raus
+    let alive = true;
+    socket.on('pong', () => { alive = true; });
+    const ping = setInterval(() => {
+      if (socket.readyState !== 1) return;
+      if (!alive) { visibleSince.delete(socket); socket.terminate(); return; }
+      alive = false; socket.ping();
+    }, 25_000);
     socket.on('close', () => clearInterval(ping));
   });
 });
 
 // ---------- Oberfläche ----------
 if (existsSync(WEB_DIR)) {
-  await app.register(fastifyStatic, { root: WEB_DIR, wildcard: false });
+  await app.register(fastifyStatic, {
+    root: WEB_DIR, wildcard: false, cacheControl: false,
+    // index.html und Service Worker immer frisch prüfen, die Dateien unter /assets/ tragen eine Prüfsumme im Namen und ändern sich nie
+    setHeaders: (res: any, path: string) => {
+      const v = /[\\/]assets[\\/]/.test(path) ? 'public, max-age=31536000, immutable' : 'no-cache';
+      if (typeof res.setHeader === 'function') res.setHeader('Cache-Control', v); else res.header('Cache-Control', v);
+    },
+  });
   app.setNotFoundHandler((req, reply) => {
-    if (req.url.startsWith('/api/')) return reply.code(404).send({ error: 'Nicht gefunden' });
-    return reply.sendFile('index.html');
+    const path = req.url.split('?')[0];
+    if (path.startsWith('/api/')) return reply.code(404).send({ error: 'Nicht gefunden' });
+    // Fehlende Dateien (z. B. Skripte einer alten Version) ehrlich mit 404 beantworten, nicht mit der Startseite:
+    // sonst bekommt der Browser HTML statt JavaScript und die App bleibt leer
+    if (path.startsWith('/assets/') || /\.[a-z0-9]+$/i.test(path)) return reply.code(404).type('text/plain').send('Nicht gefunden');
+    return reply.header('Cache-Control', 'no-cache').sendFile('index.html');
   });
 }
 

@@ -218,13 +218,15 @@ export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online:
   // Dem Server sagen, ob die App gerade sichtbar ist: dann kommt keine Push-Benachrichtigung
   const sendVisibility = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', visible: document.visibilityState === 'visible' })); };
   const onVis = () => { sendVisibility(); wake(); };
+  // Solange die App offen ist, regelmäßig „sichtbar“ melden; bleibt das aus (App eingefroren), schickt der Server wieder Push
+  const beat = setInterval(() => { if (document.visibilityState === 'visible') sendVisibility(); }, 20_000);
   document.addEventListener('visibilitychange', onVis);
   window.addEventListener('pagehide', sendVisibility);
   window.addEventListener('pageshow', wake);
   window.addEventListener('online', wake);
   open();
   return () => {
-    closed = true; if (timer) clearTimeout(timer);
+    closed = true; if (timer) clearTimeout(timer); clearInterval(beat);
     document.removeEventListener('visibilitychange', onVis); window.removeEventListener('pagehide', sendVisibility);
     window.removeEventListener('pageshow', wake); window.removeEventListener('online', wake); ws?.close();
   };
