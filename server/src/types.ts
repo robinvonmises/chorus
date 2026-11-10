@@ -53,6 +53,10 @@ export interface Chat {
   note?: string | null;
   aiEnabled?: boolean;
   autopilot?: Autopilot | null;
+  /** Live-Übersetzung: lang = Sprache des Chatpartners (ISO-Code), langName auf Deutsch */
+  /** Verknüpfter Kontakt: Chats mit derselben link-ID gehören zu einer Person (über mehrere Messenger) */
+  link?: string | null;
+  translate?: { on: boolean; lang?: string | null; langName?: string | null } | null;
 }
 
 /** Was der Messenger über einen Kontakt oder eine Gruppe verrät */
@@ -106,6 +110,8 @@ export interface Message {
   reactions: Reaction[];
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received';
   transcript?: string | null;
+  /** Eingehend: deutsche Übersetzung. Eigene: der deutsche Originaltext vor dem Übersetzen */
+  translation?: string | null;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

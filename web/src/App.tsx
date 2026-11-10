@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { syncPush } from './push';
+import { setPlanned, usePlanned } from './plannedState';
+import { Gallery } from './components/Gallery';
 import { api, connectEvents, type Account, type Chat, type HubEvent, type Message, type Network, type ServerState } from './api';
 import { keyStore, lastProfile } from './keys';
 import { Lock } from './components/Lock';
@@ -95,6 +97,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
 
   // Erstes Laden
   useEffect(() => {
+    api.planned().then(setPlanned).catch(() => {});
     api.accounts().then((a) => { setAccounts(a); if (!a.length) setPanel('add'); });
     api.chats().then(async (cs) => {
       setChats(new Map(cs.map((c) => [c.id, c])));
@@ -129,7 +132,16 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         else { next = [...next, e.message]; next.sort((a, b) => a.ts - b.ts); }
         return new Map(ms).set(e.message.chatId, next);
       });
-      if (e.message.chatId === activeRef.current && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
+      if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
+    } else if (e.type === 'planned') setPlanned(e.items);
+    else if (e.type === 'reminder') {
+      const c = e.chat;
+      if (c) {
+        setBanner((b) => ({ chat: c, text: `⏰ ${e.item.note ? e.item.note + ': ' : ''}${e.item.text || 'Erinnerung'}`, n: (b?.n ?? 0) + 1, msgId: e.item.messageId ?? undefined }));
+        if (bannerTimer.current) clearTimeout(bannerTimer.current);
+        reminderUntil.current = Date.now() + 12000;
+        bannerTimer.current = setTimeout(() => setBanner(null), 12000);
+      }
     } else if (e.type === 'notify') {
       // App offen: kein System-Hinweis, nur ein dezentes Banner für andere Chats
       if (document.visibilityState === 'visible') { if (e.chat.id !== activeRef.current) showBanner(e.chat, e.message); }
@@ -137,9 +149,11 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     }
   }, onlineStatus, onLocked, () => refreshRef.current()), [onLocked]);
 
-  const [banner, setBanner] = useState<{ chat: Chat; text: string; n: number } | null>(null);
+  const [banner, setBanner] = useState<{ chat: Chat; text: string; n: number; msgId?: string } | null>(null);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reminderUntil = useRef(0);
   function showBanner(c: Chat, m: Message) {
+    if (Date.now() < reminderUntil.current) return; // Erinnerung nicht von normalen Hinweisen verdrängen lassen
     const text = c.kind === 'direct' ? previewOf(m) : `${m.senderName}: ${previewOf(m)}`;
     setBanner((b) => ({ chat: c, text, n: (b?.n ?? 0) + 1 }));
     if (bannerTimer.current) clearTimeout(bannerTimer.current);
@@ -175,6 +189,37 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     setActive(id);
   }, []);
 
+  // Zusammengeführter Kontakt: alle Chats derselben Person gemeinsam anzeigen
+  const linkedIds = useMemo(() => {
+    const c = active ? chats.get(active) : null;
+    if (!c?.link) return active ? [active] : [];
+    return [c.id, ...[...chats.values()].filter((x) => x.link === c.link && x.id !== c.id).map((x) => x.id)];
+  }, [active, chats]);
+  const linkedRef = useRef<string[]>([]);
+  linkedRef.current = linkedIds;
+  useEffect(() => {
+    for (const id of linkedIds.slice(1)) { void prefetch(id); api.markRead(id).catch(() => {}); }
+  }, [linkedIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Zu einer bestimmten Nachricht springen (Suche, Galerie, Erinnerung): Chat öffnen und bis dorthin nachladen
+  const [focus, setFocus] = useState<{ id: string; remoteId: string; n: number } | null>(null);
+  const [gallery, setGallery] = useState<{ ids?: string[]; title: string } | null>(null);
+  const openAt = useCallback(async (m: Pick<Message, 'id' | 'chatId' | 'ts' | 'remoteId'>) => {
+    const rep = chats.get(m.chatId);
+    const target = rep?.link ? [...chats.values()].filter((x) => x.link === rep.link).sort((a, b) => b.lastTs - a.lastTs)[0]?.id ?? m.chatId : m.chatId;
+    setGallery(null);
+    openChat(target);
+    let list = await api.messages(m.chatId).catch(() => [] as Message[]);
+    for (let i = 0; i < 20 && list.length && list[0].ts > m.ts; i++) {
+      const older = await api.messages(m.chatId, list[0].ts).catch(() => [] as Message[]);
+      if (!older.length) break;
+      list = [...older, ...list];
+    }
+    loaded.current.add(m.chatId);
+    setMessages((mm) => new Map(mm).set(m.chatId, list));
+    setFocus({ id: m.id, remoteId: m.remoteId, n: Date.now() });
+  }, [chats]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Nachrichten des aktiven Chats laden
   useEffect(() => {
     if (!active) return;
@@ -193,16 +238,26 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     return () => { cancelled = true; };
   }, [active]);
 
+  const loadOlderOne = useCallback(async (id: string) => {
+    const list = messages.get(id) ?? [];
+    const older = await api.messages(id, list[0]?.ts);
+    if (older.length) { setMessages((m) => new Map(m).set(id, [...older, ...(m.get(id) ?? [])])); return true; }
+    await api.history(id).catch(() => {});
+    const again = await api.messages(id, list[0]?.ts);
+    if (again.length) setMessages((m) => new Map(m).set(id, [...again, ...(m.get(id) ?? [])]));
+    return again.length > 0;
+  }, [messages]);
   const loadOlder = useCallback(async () => {
     if (!active) return false;
-    const list = messages.get(active) ?? [];
-    const older = await api.messages(active, list[0]?.ts);
-    if (older.length) { setMessages((m) => new Map(m).set(active, [...older, ...(m.get(active) ?? [])])); return true; }
-    await api.history(active).catch(() => {});
-    const again = await api.messages(active, list[0]?.ts);
-    if (again.length) setMessages((m) => new Map(m).set(active, [...again, ...(m.get(active) ?? [])]));
-    return again.length > 0;
-  }, [active, messages]);
+    const r = await Promise.all(linkedIds.map((id) => loadOlderOne(id).catch(() => false)));
+    return r.some(Boolean);
+  }, [active, linkedIds, loadOlderOne]);
+  const merged = useMemo(() => {
+    if (linkedIds.length < 2) return active ? messages.get(active) : undefined;
+    const lists = linkedIds.map((id) => messages.get(id));
+    if (!lists[0]) return undefined;
+    return lists.flatMap((l) => l ?? []).sort((a, b) => a.ts - b.ts);
+  }, [linkedIds, messages, active]);
 
   // Nach dem Wiederverbinden (z. B. App aus dem Hintergrund geholt): Chatliste und offenen Chat frisch laden
   const refreshRef = useRef<() => void>(() => {});
@@ -238,6 +293,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const problems = accounts.filter((a) => a.status.state !== 'connected' && a.status.state !== 'connecting');
 
   const playing = !!usePlayer().track;
+  const planned = usePlanned();
   return (
     <div className={`app ${chat ? 'has-chat' : ''} ${playing ? 'with-player' : ''}`}>
       <PlayerBar chatTitle={(id) => chats.get(id)?.title ?? ''} onOpen={openChat} />
@@ -247,10 +303,13 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         onAdd={() => setPanel('add')} onSettings={() => setPanel('settings')} onNew={() => setPanel('new')} online={online} problems={problems}
         onFixAccount={() => setPanel('settings')} previewOf={previewOf} onReload={reload}
         onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })}
+        onOpenMessage={openAt} onGallery={() => setGallery({ title: 'Medien, Dateien & Links' })}
       />
       <main className="pane-chat">
         {chat ? (
-          <ChatView key={chat.id} chat={chat} account={account} messages={messages.get(chat.id)} onBack={() => openChat(null)} loadOlder={loadOlder}
+          <ChatView key={chat.id} chat={chat} account={account} messages={merged} onBack={() => openChat(null)} loadOlder={loadOlder}
+            linked={linkedIds.map((id) => chats.get(id)!).filter(Boolean)} accounts={accounts} focus={focus} planned={planned}
+            onGallery={() => setGallery({ ids: linkedIds, title: chat.title })} onOpenMessage={openAt}
             onPatchChat={async (p) => { const c = await api.patchChat(chat.id, p); setChats((cs) => new Map(cs).set(c.id, c)); }}
             onChat={(c) => setChats((cs) => new Map(cs).set(c.id, c))} />
         ) : (
@@ -266,11 +325,12 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       {panel === 'new' && <NewChat chats={sortedChats} accounts={accounts} onOpen={openChat} onClose={() => setPanel(null)} />}
       <Lightbox />
       {banner && (
-        <button key={banner.n} className="in-app-banner" onClick={() => { setBanner(null); openChat(banner.chat.id); }}>
+        <button key={banner.n} className="in-app-banner" onClick={() => { setBanner(null); const mm = banner.msgId ? [...messages.values()].flat().find((x) => x.id === banner.msgId) : null; if (mm) void openAt(mm); else openChat(banner.chat.id); }}>
           <Avatar name={banner.chat.alias || banner.chat.title} src={banner.chat.avatar} network={banner.chat.network} size={36} />
           <span className="iab-text"><b>{banner.chat.alias || banner.chat.title}</b><span>{banner.text}</span></span>
         </button>
       )}
+      {gallery && <Gallery chatIds={gallery.ids} title={gallery.title} chats={chats} onClose={() => setGallery(null)} onOpen={(m) => void openAt(m)} />}
       {panel === 'settings' && <Settings server={server} accounts={accounts} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} />}
     </div>
   );

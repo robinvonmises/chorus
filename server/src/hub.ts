@@ -16,7 +16,9 @@ export type HubEvent =
   | { type: 'account_removed'; id: string }
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
-  | { type: 'notify'; chat: Chat; message: Message };
+  | { type: 'notify'; chat: Chat; message: Message }
+  | { type: 'planned'; items: import('./planner.js').Planned[] }
+  | { type: 'reminder'; item: import('./planner.js').Planned; chat: Chat | null };
 
 /** Zentrale: hält alle Adapter, speichert Ereignisse, verteilt sie an verbundene Browser */
 export { fixKind } from './kinds.js';
@@ -41,7 +43,7 @@ export class Hub {
   ) {}
 
   subscribe(fn: (e: HubEvent) => void) { this.subscribers.add(fn); return () => this.subscribers.delete(fn); }
-  private emit(e: HubEvent) { for (const s of this.subscribers) { try { s(e); } catch { /* ignore */ } } }
+  emit(e: HubEvent) { for (const s of this.subscribers) { try { s(e); } catch { /* ignore */ } } }
 
   get availableNetworks(): Network[] { return Object.keys(this.factories) as Network[]; }
 

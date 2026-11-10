@@ -88,6 +88,8 @@ export function ContactSheet({ chat, account, onClose, onChat }: { chat: Chat; a
               onChange={(e) => setNote(e.target.value)} onBlur={() => note !== (chat.note ?? '') && save({ note })} />
           </label>
 
+          {!group && <LinkSection chat={chat} onChat={onChat} />}
+
           <div className="contact-actions">
             <button className="btn ghost" onClick={() => save({ muted: !chat.muted })}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? 'Ton an' : 'Stumm'}</button>
             <button className="btn ghost" onClick={() => save({ pinned: !chat.pinned })}><Icon name="pin" size={18} />{chat.pinned ? 'Lösen' : 'Anheften'}</button>
@@ -97,6 +99,62 @@ export function ContactSheet({ chat, account, onClose, onChat }: { chat: Chat; a
           {msg && <p className="muted small">{msg}</p>}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Dieselbe Person bei mehreren Messengern: Chats zu einem Kontakt zusammenführen */
+function LinkSection({ chat, onChat }: { chat: Chat; onChat: (c: Chat) => void }) {
+  const [data, setData] = useState<{ linked: Chat[]; suggestions: Chat[] } | null>(null);
+  const [pick, setPick] = useState(false);
+  const [all, setAll] = useState<Chat[]>([]);
+  const [q, setQ] = useState('');
+  const [err, setErr] = useState('');
+  const load = () => api.links(chat.id).then(setData).catch(() => {});
+  useEffect(() => { load(); }, [chat.id, chat.link]); // eslint-disable-line react-hooks/exhaustive-deps
+  const link = async (other: Chat) => {
+    setErr('');
+    try { const cs = await api.link(chat.id, other.id); cs.forEach(onChat); setPick(false); setQ(''); load(); }
+    catch (e: any) { setErr(e.message ?? 'Fehler'); }
+  };
+  const unlink = async (c: Chat) => { try { await api.unlink(c.id); load(); } catch (e: any) { setErr(e.message ?? 'Fehler'); } };
+  const openPick = async () => { setPick(true); if (!all.length) setAll(await api.chats().catch(() => [])); };
+  const s = q.trim().toLowerCase();
+  const linkedIds = new Set([chat.id, ...(data?.linked ?? []).map((c) => c.id)]);
+  const candidates = all.filter((c) => c.kind === 'direct' && !linkedIds.has(c.id) && (!s || c.title.toLowerCase().includes(s) || (c.info?.phone ?? '').replace(/\s/g, '').includes(s.replace(/\s/g, '')))).slice(0, 30);
+  return (
+    <div className="link-section">
+      <h4>Auch bei anderen Messengern</h4>
+      <p className="muted small">Zusammengeführte Chats erscheinen als ein Kontakt mit gemeinsamem Verlauf. Beim Antworten wählst du, über welchen Messenger.</p>
+      {data?.linked.map((c) => (
+        <div key={c.id} className="contact-row">
+          <span className="dot big" style={{ background: NETWORKS[c.network].color }} />
+          <span><small>{NETWORKS[c.network].name}</small><b>{c.title}</b></span>
+          <button className="btn small ghost" onClick={() => unlink(c)}>Trennen</button>
+        </div>
+      ))}
+      {data?.suggestions.map((c) => (
+        <div key={c.id} className="contact-row suggest">
+          <span className="dot big" style={{ background: NETWORKS[c.network].color }} />
+          <span><small>Vorschlag · {NETWORKS[c.network].name}</small><b>{c.title}</b></span>
+          <button className="btn small primary" onClick={() => link(c)}>Zusammenführen</button>
+        </div>
+      ))}
+      {!pick ? (
+        <button className="btn small ghost" onClick={openPick}><Icon name="link" size={16} /> Chat auswählen …</button>
+      ) : (
+        <div className="link-pick">
+          <input className="input" autoFocus placeholder="Name oder Nummer suchen" value={q} onChange={(e) => setQ(e.target.value)} />
+          <ul>
+            {candidates.map((c) => (
+              <li key={c.id}><button onClick={() => link(c)}><span className="dot" style={{ background: NETWORKS[c.network].color }} /><b>{c.title}</b><small>{NETWORKS[c.network].name}</small></button></li>
+            ))}
+            {!candidates.length && <li className="muted small">Kein passender Chat.</li>}
+          </ul>
+          <button className="btn small ghost" onClick={() => setPick(false)}>Abbrechen</button>
+        </div>
+      )}
+      {err && <p className="muted small">{err}</p>}
     </div>
   );
 }

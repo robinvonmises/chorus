@@ -22,6 +22,8 @@ export function AiSettingsSection() {
     try { setVoices(await api.ai.voices()); } catch (e: any) { setVoices([]); setMsg(e.message); }
   };
   useEffect(() => { if (ai?.hasElevenKey && !voices) loadVoices(); }, [ai?.hasElevenKey]);
+  const [searchAll, setSearchAll] = useState<boolean | null>(null);
+  useEffect(() => { api.aiSearchScope().then((r) => setSearchAll(r.all)).catch(() => {}); }, []);
 
   if (!ai) return <p className="muted">Lade …</p>;
   const pickVoice = (id: string) => {
@@ -69,6 +71,12 @@ export function AiSettingsSection() {
         </label>
       )}
     </div>
+    {ai.hasAnthropicKey && searchAll !== null && (
+      <label className="toggle">
+        <input type="checkbox" checked={searchAll} onChange={async (e) => { const v = e.target.checked; setSearchAll(v); await api.setAiSearchScope(v).catch(() => setSearchAll(!v)); }} />
+        <span><b>KI-Suche in allen Chats</b><small>Aus: Die KI durchsucht nur Chats, in denen du sie eingeschaltet hast. An: alle Chats. Übertragen werden nur die Nachrichten, die zu deiner Frage passen.</small></span>
+      </label>
+    )}
     {msg && <small>{msg}</small>}
   </>);
 }
