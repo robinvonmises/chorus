@@ -133,14 +133,22 @@ Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.`
   }
 
   /** Autopilot: Antwort auf die letzten Nachrichten, oder null, wenn keine Antwort nötig ist */
-  async autoReply(chatId: string, note: string, left: number): Promise<string | null> {
+  async autoReply(chatId: string, note: string, left: number, opt: { rule?: string; style?: 'me' | 'short' | 'creative'; group?: boolean; trigger?: 'me' | 'direct' | 'all' } = {}): Promise<string | null> {
     const t = this.transcript(chatId, 40);
+    const style = opt.style === 'short' ? 'Stil: kurz, sachlich und freundlich, ohne Emojis und ohne Smalltalk.'
+      : opt.style === 'creative' ? 'Stil: kreativ, witzig und locker, gern mit einem Augenzwinkern und passenden Emojis, aber nie verletzend. Bleib trotzdem bei den Regeln unten.'
+      : 'Stil: wie der Nutzer selbst.';
+    const rule = opt.rule?.trim() ? `\nEigene Bedingung des Nutzers: Antworte NUR, wenn das zutrifft: "${opt.rule.trim()}". Trifft es auf die neuesten Nachrichten nicht zu, setze send auf false.` : '';
+    const groupRule = !opt.group ? '' : opt.trigger === 'all'
+      ? 'In Gruppen: Du darfst dich an jedem Gespräch beteiligen, aber nur, wenn eine Antwort des Nutzers natürlich wäre. Sonst setze send auf false.'
+      : 'In Gruppen: Antworte nur auf das, was an den Nutzer oder an alle gerichtet ist (z. B. eine Frage in die Runde), knapp und ohne andere Gespräche zu kommentieren. Richtet sich die Frage erkennbar nur an jemand anderen, setze send auf false.';
     const raw = await this.ask(
       `Du antwortest stellvertretend für den Nutzer ("Ich"), der gerade nicht selbst antworten kann. Schreibe die nächste Nachricht an den Chatpartner.
 Schreibe in der Sprache, im Ton und im Stil des Nutzers aus dem Verlauf (Duzen/Siezen, Länge, Emojis), kurz wie eine echte Chatnachricht.
 Mache keine Zusagen, Termine, Bestellungen, Zahlungen oder Versprechen, die nicht ausdrücklich in den Hinweisen des Nutzers stehen. Gib keine privaten Daten heraus. Bei wichtigen oder heiklen Fragen sag freundlich, dass sich der Nutzer selbst meldet.
 Ist keine Antwort nötig (z. B. nur "ok", ein Emoji, ein Danke oder das Gespräch ist beendet), setze send auf false.
-In Gruppen: Antworte nur auf das, was an den Nutzer oder an alle gerichtet ist (z. B. eine Frage in die Runde), knapp und ohne andere Gespräche zu kommentieren. Richtet sich die Frage erkennbar nur an jemand anderen, setze send auf false.
+${groupRule}
+${style}${rule}
 Noch ${left} automatische Antwort(en) erlaubt.${left <= 1 ? ' Das ist die letzte: Schließe freundlich ab und kündige an, dass sich der Nutzer später selbst meldet.' : ''}`,
       `${t.text}\n\nHinweise des Nutzers für die Vertretung: ${note || '(keine)'}`,
       { maxTokens: 1500, schema: { type: 'object', properties: { send: { type: 'boolean' }, text: { type: 'string' } }, required: ['send', 'text'], additionalProperties: false } });

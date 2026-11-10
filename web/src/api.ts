@@ -17,10 +17,14 @@ export interface Chat {
   autopilot?: Autopilot | null;
   translate?: { on: boolean; lang?: string | null; langName?: string | null } | null;
   link?: string | null;
+  sendVia?: string | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
   info?: { phone?: string; username?: string; about?: string; description?: string; members?: number; fetchedAt?: number } | null;
 }
-export interface Autopilot { on: boolean; max: number; used: number; note: string; mark: boolean }
+export interface Autopilot {
+  on: boolean; max: number; used: number; note: string; mark: boolean;
+  trigger?: 'me' | 'direct' | 'all'; only?: string[]; rule?: string; style?: 'me' | 'short' | 'creative';
+}
 export interface Attachment {
   fileId: string | null; name: string; mime: string; size: number;
   kind: 'image' | 'video' | 'audio' | 'voice' | 'file' | 'sticker'; durationSec?: number; width?: number; height?: number;
@@ -143,6 +147,7 @@ export const api = {
   links: (id: string) => req<{ linked: Chat[]; suggestions: Chat[] }>('GET', `/api/chats/${enc(id)}/link`),
   link: (id: string, other: string) => req<Chat[]>('POST', `/api/chats/${enc(id)}/link`, { other }),
   unlink: (id: string) => req('DELETE', `/api/chats/${enc(id)}/link`),
+  setVia: (id: string, via: string | null) => req<Chat[]>('PUT', `/api/chats/${enc(id)}/via`, { via }),
   upload: (id: string, file: Blob, name: string, opts: { caption?: string; replyTo?: string | null; voice?: boolean; duration?: number; video?: { start: number; end: number; crop?: { x: number; y: number; w: number; h: number } }; onProgress?: (p: number) => void } = {}) => {
     const fd = new FormData();
     if (opts.caption) fd.append('caption', opts.caption);
@@ -187,6 +192,7 @@ export const api = {
     voice: (id: string, text: string, replyTo?: string | null) => req<{ ok: true }>('POST', `/api/chats/${enc(id)}/ai/voice`, { text, replyTo }),
     preview: (id: string, text: string) => req<{ audio: string; mime: string }>('POST', `/api/chats/${enc(id)}/ai/voice`, { text, preview: true }),
     autopilot: (id: string, patch: Partial<Autopilot> & { reset?: boolean }) => req<Chat>('PUT', `/api/chats/${enc(id)}/autopilot`, patch),
+    participants: (id: string) => req<{ id: string; name: string }[]>('GET', `/api/chats/${enc(id)}/participants`),
     compose: (id: string, instruction: string, mode: 'text' | 'voice') => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/compose`, { instruction, mode }),
     dictate: (audio: Blob) => { const fd = new FormData(); fd.append('file', audio, 'auftrag.' + (audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm')); return req<{ text: string }>('POST', '/api/ai/dictate', fd); },
     transcribe: (msgId: string) => req<Message>('POST', `/api/messages/${enc(msgId)}/transcribe`, {}),

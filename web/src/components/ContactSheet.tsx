@@ -117,6 +117,7 @@ function LinkSection({ chat, onChat }: { chat: Chat; onChat: (c: Chat) => void }
     try { const cs = await api.link(chat.id, other.id); cs.forEach(onChat); setPick(false); setQ(''); load(); }
     catch (e: any) { setErr(e.message ?? 'Fehler'); }
   };
+  const setVia = async (via: string | null) => { setErr(''); try { (await api.setVia(chat.id, via)).forEach(onChat); } catch (e: any) { setErr(e.message ?? 'Fehler'); } };
   const unlink = async (c: Chat) => { try { await api.unlink(c.id); load(); } catch (e: any) { setErr(e.message ?? 'Fehler'); } };
   const openPick = async () => { setPick(true); if (!all.length) setAll(await api.chats().catch(() => [])); };
   const s = q.trim().toLowerCase();
@@ -125,7 +126,7 @@ function LinkSection({ chat, onChat }: { chat: Chat; onChat: (c: Chat) => void }
   return (
     <div className="link-section">
       <h4>Auch bei anderen Messengern</h4>
-      <p className="muted small">Zusammengeführte Chats erscheinen als ein Kontakt mit gemeinsamem Verlauf. Beim Antworten wählst du, über welchen Messenger.</p>
+      <p className="muted small">Zusammengeführte Chats erscheinen als ein Kontakt mit gemeinsamem Verlauf. Darunter legst du fest, über welchen Messenger du antwortest.</p>
       {data?.linked.map((c) => (
         <div key={c.id} className="contact-row">
           <span className="dot big" style={{ background: NETWORKS[c.network].color }} />
@@ -133,6 +134,23 @@ function LinkSection({ chat, onChat }: { chat: Chat; onChat: (c: Chat) => void }
           <button className="btn small ghost" onClick={() => unlink(c)}>Trennen</button>
         </div>
       ))}
+      {!!data?.linked.length && (
+        <div className="via-setting">
+          <h4>Senden über</h4>
+          {[null, chat, ...data.linked].map((c) => {
+            const id = c?.id ?? null;
+            const cur = chat.sendVia ?? null;
+            const same = c && [chat, ...data.linked].filter((x) => x.network === c.network).length > 1;
+            return (
+              <label key={id ?? 'auto'} className="radio-row">
+                <input type="radio" name={`via-${chat.id}`} checked={cur === id} onChange={() => setVia(id)} />
+                {c ? <><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name}{same ? ` · ${c.netTitle ?? c.title}` : ''}</>
+                  : <span>Automatisch <small className="muted">(wo zuletzt geschrieben wurde)</small></span>}
+              </label>
+            );
+          })}
+        </div>
+      )}
       {data?.suggestions.map((c) => (
         <div key={c.id} className="contact-row suggest">
           <span className="dot big" style={{ background: NETWORKS[c.network].color }} />

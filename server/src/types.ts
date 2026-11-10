@@ -56,6 +56,8 @@ export interface Chat {
   /** Live-Übersetzung: lang = Sprache des Chatpartners (ISO-Code), langName auf Deutsch */
   /** Verknüpfter Kontakt: Chats mit derselben link-ID gehören zu einer Person (über mehrere Messenger) */
   link?: string | null;
+  /** Bei zusammengeführten Kontakten: Chat, über den gesendet wird (null = automatisch) */
+  sendVia?: string | null;
   translate?: { on: boolean; lang?: string | null; langName?: string | null } | null;
 }
 
@@ -71,7 +73,17 @@ export interface ContactInfo {
 }
 
 /** Claude antwortet selbstständig, höchstens `max` Mal */
-export interface Autopilot { on: boolean; max: number; used: number; note: string; mark: boolean }
+export interface Autopilot {
+  on: boolean; max: number; used: number; note: string; mark: boolean;
+  /** Gruppen: worauf reagieren. me = Frage in die Runde, Erwähnung oder Antwort auf mich; direct = nur Erwähnung oder Antwort auf mich; all = jede Nachricht (KI entscheidet) */
+  trigger?: 'me' | 'direct' | 'all';
+  /** Gruppen: nur auf diese Teilnehmer (senderId) reagieren; leer = alle */
+  only?: string[];
+  /** Eigene Bedingung, z. B. „nur wenn es um das Training geht“ */
+  rule?: string;
+  /** Stil: me = wie ich, short = kurz und sachlich, creative = kreativ und witzig */
+  style?: 'me' | 'short' | 'creative';
+}
 
 export interface Attachment {
   /** intern, verschlüsselt gespeichert; null = noch nicht heruntergeladen (wird bei Bedarf geholt) */

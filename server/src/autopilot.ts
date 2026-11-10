@@ -6,7 +6,7 @@ const DEBOUNCE_MS = Number(process.env.AUTOPILOT_DELAY_MS ?? 20_000);
 
 /**
  * Autopilot: Claude antwortet in freigegebenen Chats selbst, höchstens `max` Mal.
- * In Gruppen nur, wenn jemand eine Frage stellt, den Nutzer erwähnt oder direkt auf ihn antwortet.
+ * In Gruppen je nach Einstellung (trigger, only): Frage in die Runde, Erwähnung, Antwort auf den Nutzer oder jede Nachricht.
  * Kurz warten, damit mehrere Nachrichten am Stück nur eine Antwort auslösen.
  */
 export class AutopilotRunner {
@@ -17,10 +17,11 @@ export class AutopilotRunner {
     hub.incoming.add((chat, msg) => this.onIncoming(chat, msg));
   }
 
-  /** Gruppe: Frage, Erwähnung (Nummer/@Name) oder Antwort auf eine eigene Nachricht */
-  private concernsMe(chat: Chat, msg: Message): boolean {
+  /** Gruppe: je nach Einstellung Frage, Erwähnung (Nummer/@Name) oder Antwort auf eine eigene Nachricht */
+  private concernsMe(chat: Chat, msg: Message, trigger: Autopilot['trigger'] = 'me'): boolean {
     const t = msg.text ?? '';
-    if (t.includes('?')) return true;
+    if (trigger === 'all') return true;
+    if (trigger === 'me' && t.includes('?')) return true;
     if (msg.replyToRemoteId && this.hub.store.getMessage(`${chat.id}:${msg.replyToRemoteId}`)?.fromMe) return true;
     const self = this.hub.selfOf(chat.accountId)?.replace(/[^\d]/g, '');
     if (self && self.length > 6 && t.replace(/[\s+]/g, '').includes(self.slice(-9))) return true;
@@ -30,7 +31,10 @@ export class AutopilotRunner {
   private onIncoming(chat: Chat, msg: Message) {
     const a = chat.autopilot;
     if (!a?.on || !chat.aiEnabled || chat.kind === 'channel' || a.used >= a.max) return;
-    if (chat.kind === 'group' && !this.concernsMe(chat, msg)) return;
+    if (chat.kind === 'group') {
+      if (a.only?.length && !a.only.includes(msg.senderId)) return;
+      if (!this.concernsMe(chat, msg, a.trigger)) return;
+    }
     clearTimeout(this.timers.get(chat.id));
     this.timers.set(chat.id, setTimeout(() => this.reply(chat.id), DEBOUNCE_MS));
   }
@@ -43,7 +47,7 @@ export class AutopilotRunner {
       const chat = this.hub.store.getChat(chatId);
       const a = chat?.autopilot;
       if (!chat || !a?.on || !chat.aiEnabled || a.used >= a.max) return;
-      const text = await this.ai.autoReply(chatId, a.note, a.max - a.used);
+      const text = await this.ai.autoReply(chatId, a.note, a.max - a.used, { rule: a.rule, style: a.style, group: chat.kind === 'group', trigger: a.trigger });
       if (!text) return;
       // Kennzeichnung: 🤖 als Reaktion auf die eigene Nachricht; Telegram erlaubt 🤖 nicht als Reaktion, dort „– 🤖“ anhängen
       const suffix = a.mark && chat.network === 'telegram';

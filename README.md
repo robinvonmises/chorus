@@ -50,6 +50,11 @@ The interface is deliberately quiet and iOS-like: soft colours, smooth motion an
 - **Archive** that stays quiet: archived chats don't count towards the badge and don't notify
 - **Contact profiles** with your own alias, picture and notes; number, status and members come from the messenger
 - Profile pictures are fetched automatically and gently, without hitting rate limits
+- **Merge contacts** across messengers: the same person on Signal and WhatsApp becomes one chat with a shared history; pick in the contact profile which messenger you reply through (or let Chorus use the one they last wrote on)
+- **Send later**: hold the send button and pick a time; scheduled messages wait in the chat until they go out
+- **Reminders** on any message ("remind me tomorrow morning"), with a notification that jumps right back to it
+- **Search across all messengers**: messages, transcripts and file names, with a jump to the hit in the chat
+- **Gallery** of all photos, videos, files, links and voice messages, per chat or across all chats
 
 ### Media
 - Send photos, videos, voice messages and files (drag & drop or paste on the desktop)
@@ -64,7 +69,9 @@ Bring your own [Anthropic](https://console.anthropic.com) and [ElevenLabs](https
 - **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**. Everything the AI wrote is marked with a 🤖 reaction (on Telegram, which does not allow it as a reaction, with a 🤖 at the end)
 - **Suggested replies**, optionally with a direction ("politely decline")
 - **Transcribe** voice messages
-- **Autobot**: Claude answers on your behalf up to a limit you set, also in groups when someone asks a question, mentions you or replies to you. Answers are marked with a 🤖 reaction
+- **Live translation** per chat: foreign messages get a German translation under the bubble, and what you write in German goes out in their language
+- **Ask your chats**: "When did Lisa want to come over?" gets an answer with the messages it is based on
+- **Autobot**: Claude answers on your behalf up to a limit you set, in groups you choose what it answers (questions to everyone, only mentions and replies to you, or everything), from whom, under which condition and in which style (like you, short, or creative). Answers are marked with a 🤖 reaction
 
 Nothing is sent to an AI provider unless you enable AI for that chat and press a button.
 

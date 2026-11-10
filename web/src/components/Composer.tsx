@@ -12,8 +12,8 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, draftId, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
-  chat: Chat; draftId?: string; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
+export function Composer({ chat, draftId, placeholder, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo }: {
+  chat: Chat; draftId?: string; placeholder?: string; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
@@ -241,7 +241,7 @@ export function Composer({ chat, draftId, disabled, replyTo, editing, inject, on
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
           {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
-          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
+          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : placeholder ?? 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
           {ai?.features.voice && !editing && !files.length && text.trim() && (

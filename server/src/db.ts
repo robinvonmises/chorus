@@ -50,7 +50,7 @@ export class Store {
     const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
-    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT']] as const)
+    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
   }
 
@@ -105,7 +105,7 @@ export class Store {
       id: r.id, accountId: r.account_id, network: r.network, remoteId: r.remote_id, title: r.title, kind: r.kind,
       lastTs: r.last_ts, lastText: r.last_text, unread: r.unread, pinned: !!r.pinned, muted: !!r.muted,
       avatarFileId: r.avatar_file_id, aiEnabled: !!r.ai_enabled, autopilot: r.autopilot ? JSON.parse(r.autopilot) : null,
-      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null,
+      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null,
       avatar: (r.custom_avatar || r.avatar_file_id) ? `/api/chats/${encodeURIComponent(r.id)}/avatar?v=${String(r.custom_avatar || r.avatar_file_id).slice(0, 8)}` : null,
     };
     if (r.alias) c.title = r.alias;
@@ -152,6 +152,11 @@ export class Store {
     this.db.prepare('UPDATE chats SET translate=? WHERE id=?').run(t ? JSON.stringify(t) : null, id);
   }
   /** Neueste eingehende Nachrichten mit Text, aber ohne Übersetzung */
+  /** Wer in einem Chat zuletzt geschrieben hat (für die Autobot-Einstellungen in Gruppen) */
+  participants(chatId: string): { id: string; name: string }[] {
+    return (this.db.prepare(`SELECT sender_id AS id, sender_name AS name, MAX(ts) AS t FROM messages WHERE chat_id=? AND from_me=0 GROUP BY sender_id ORDER BY t DESC LIMIT 100`)
+      .all(chatId) as { id: string; name: string }[]).map(({ id, name }) => ({ id, name }));
+  }
   untranslated(chatId: string, limit: number): Message[] {
     return this.db.prepare(`SELECT * FROM messages WHERE chat_id=? AND from_me=0 AND deleted=0 AND translation IS NULL AND (text<>'' OR transcript IS NOT NULL) ORDER BY ts DESC LIMIT ?`)
       .all(chatId, limit).map((r) => this.rowToMsg(r)).reverse();
@@ -249,7 +254,9 @@ export class Store {
     return this.db.prepare(`SELECT * FROM messages WHERE deleted=0 AND ${cond} ${inChats} ${beforeTs ? 'AND ts<?' : ''} ORDER BY ts DESC LIMIT ?`)
       .all(...([...(chatIds ?? []), ...(beforeTs ? [beforeTs] : []), limit] as unknown[])).map((r) => this.rowToMsg(r));
   }
-  setLink(id: string, link: string | null) { this.db.prepare('UPDATE chats SET link=? WHERE id=?').run(link, id); }
+  setLink(id: string, link: string | null) { this.db.prepare(link ? 'UPDATE chats SET link=? WHERE id=?' : 'UPDATE chats SET link=?, send_via=NULL WHERE id=?').run(link, id); }
+  /** Zusammengeführter Kontakt: fester Messenger zum Senden (null = wo zuletzt geschrieben wurde) */
+  setSendVia(link: string, via: string | null) { this.db.prepare('UPDATE chats SET send_via=? WHERE link=?').run(via, link); }
   linkedIds(link: string): string[] { return (this.db.prepare('SELECT id FROM chats WHERE link=?').all(link) as { id: string }[]).map((r) => r.id); }
 
   // ---------- Dateien (AES-GCM verschlüsselt) ----------

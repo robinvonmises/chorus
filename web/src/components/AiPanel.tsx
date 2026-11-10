@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { api, type Chat, type Message } from '../api';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { api, type Autopilot, type Chat, type Message } from '../api';
 import { useAi } from '../aiState';
 import { Icon } from './Icon';
 
@@ -187,23 +187,64 @@ function OverviewTab({ chat, busy, run, onUse }: { chat: Chat; busy: Busy; run: 
   );
 }
 
-/** Reiter „Autopilot“: Claude antwortet selbst, mit Limit */
+/** Was der Autobot gerade tut, in einem Satz */
+function describeAuto(a: Autopilot, group: boolean, names: Map<string, string>): string {
+  const who = a.only?.length ? `nur ${a.only.map((id) => names.get(id) ?? 'unbekannt').join(', ')}` : group ? 'alle' : '';
+  const when = !group ? 'auf neue Nachrichten' : a.trigger === 'direct' ? 'wenn dich jemand erwähnt oder dir antwortet' : a.trigger === 'all' ? 'auf alle Nachrichten, wenn eine Antwort passt' : 'auf Fragen in die Runde, Erwähnungen und Antworten an dich';
+  const style = a.style === 'short' ? 'kurz und sachlich' : a.style === 'creative' ? 'kreativ und witzig' : 'in deinem Stil';
+  return `Antwortet ${when}${who ? ` (${who})` : ''}${a.rule?.trim() ? `, nur wenn: „${a.rule.trim()}“` : ''}, ${style}.`;
+}
+
+/** Reiter „Autobot“: Claude antwortet selbst, mit Limit und Regeln */
 function AutoTab({ chat, onError }: { chat: Chat; onError: (t: string) => void }) {
-  const a = chat.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
+  const a: Autopilot = chat.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
+  const group = chat.kind === 'group';
   const [note, setNote] = useState(a.note);
-  useEffect(() => { setNote(a.note); }, [chat.id]);
+  const [rule, setRule] = useState(a.rule ?? '');
+  const [people, setPeople] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => { setNote(a.note); setRule(a.rule ?? ''); }, [chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (group) api.ai.participants(chat.id).then(setPeople).catch(() => {}); }, [chat.id, group]);
+  const names = useMemo(() => new Map(people.map((p) => [p.id, p.name])), [people]);
   if (chat.kind === 'channel') return <div className="ai-body ai-empty"><p>In Kanälen gibt es keinen Autobot.</p></div>;
   const save = (patch: Parameters<typeof api.ai.autopilot>[1]) => api.ai.autopilot(chat.id, patch).catch((e) => onError(e.message));
   const left = a.max - a.used;
+  const only = a.only ?? [];
+  const toggle = (id: string) => save({ only: only.includes(id) ? only.filter((x) => x !== id) : [...only, id] });
   return (
     <div className="ai-body">
       <label className={`switch-row ${a.on ? 'on' : ''}`}>
         <span>
-          <b>{a.on ? 'Autobot ist an' : 'Autobot ist aus'}</b>
-          <small>{a.on ? `Claude antwortet selbst. Noch ${left} von ${a.max}.` : a.used >= a.max && a.used > 0 ? `Limit erreicht. Zum Weitermachen wieder einschalten.` : chat.kind === 'group' ? 'Antwortet in der Gruppe, wenn jemand eine Frage stellt, dich erwähnt oder dir antwortet.' : 'Claude antwortet für dich, bis das Limit erreicht ist.'}</small>
+          <b>{a.on ? `Autobot ist an · noch ${left} von ${a.max}` : 'Autobot ist aus'}</b>
+          <small>{!a.on && a.used >= a.max && a.used > 0 ? 'Limit erreicht. Zum Weitermachen wieder einschalten. ' : ''}{describeAuto(a, group, names)}</small>
         </span>
-        <input type="checkbox" className="switch" checked={a.on} onChange={(e) => save({ on: e.target.checked, note })} />
+        <input type="checkbox" className="switch" checked={a.on} onChange={(e) => save({ on: e.target.checked, note, rule })} />
       </label>
+      {group && (
+        <div className="auto-set">
+          <span className="auto-label">Antworten auf</span>
+          <div className="auto-seg">
+            {([['me', 'Wenn ich gemeint bin'], ['direct', 'Nur direkt an mich'], ['all', 'Auf alles']] as const).map(([k, l]) => (
+              <button key={k} className={(a.trigger ?? 'me') === k ? 'on' : ''} onClick={() => save({ trigger: k })}>{l}</button>
+            ))}
+          </div>
+          <span className="auto-label">Von wem</span>
+          <div className="auto-chips">
+            <button className={`pill ${!only.length ? 'on' : ''}`} onClick={() => save({ only: [] })}>Alle</button>
+            {people.map((p) => <button key={p.id} className={`pill ${only.includes(p.id) ? 'on' : ''}`} onClick={() => toggle(p.id)}>{p.name}</button>)}
+          </div>
+        </div>
+      )}
+      <div className="auto-set">
+        <span className="auto-label">Nur wenn (optional)</span>
+        <input className="input small" maxLength={500} value={rule} onChange={(e) => setRule(e.target.value)} onBlur={() => rule !== (a.rule ?? '') && save({ rule })}
+          placeholder="z. B. es um das Training am Sonntag geht" />
+        <span className="auto-label">Stil</span>
+        <div className="auto-seg">
+          {([['me', 'Wie ich'], ['short', 'Kurz & sachlich'], ['creative', 'Kreativ & witzig']] as const).map(([k, l]) => (
+            <button key={k} className={(a.style ?? 'me') === k ? 'on' : ''} onClick={() => save({ style: k })}>{l}</button>
+          ))}
+        </div>
+      </div>
       <textarea className="input small" rows={2} maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} onBlur={() => note !== a.note && save({ note })}
         placeholder="Hinweise für Claude, z. B. „Bin bis 18 Uhr im Meeting, keine Termine zusagen“" />
       <div className="ai-row">
