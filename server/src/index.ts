@@ -452,17 +452,23 @@ function splitBotMark(text: string): { text: string; bot: boolean } {
   const rest = text.replace(BOT_MARK, '').trim();
   return rest && rest !== text.trim() ? { text: rest, bot: true } : { text, bot: false };
 }
+/** Sprache, in die eigene Nachrichten in diesem Chat übersetzt werden, oder null */
+function outLang(h: Hub, id: string): string | null {
+  const chat = h.store.getChat(id);
+  // Bei zusammengeführten Kontakten gilt die Übersetzung des ganzen Kontakts
+  const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
+  const tr = src?.translate;
+  return tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled ? tr.langName : null;
+}
 async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, raw: string, replyTo: string | null, translate: boolean) {
   const chat = h.store.getChat(id);
   const { text, bot } = splitBotMark(raw);
   const tg = chat?.network === 'telegram';
   const out = (t: string) => (bot && tg ? `${t} – 🤖` : t);
-  // Bei zusammengeführten Kontakten gilt die Übersetzung des ganzen Kontakts
-  const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
-  const tr = src?.translate;
+  const langName = translate ? outLang(h, id) : null;
   let m: Message | null;
-  if (translate && tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled) {
-    const t = await ai.translateOut(id, text, tr.langName);
+  if (langName) {
+    const t = await ai.translateOut(id, text, langName);
     m = await h.sendText(id, out(t), replyTo);
     if (m) { const u = h.store.patchMessage(m.id, { translation: text }); if (u) { m = u; h.emit({ type: 'message', message: u }); } }
   } else m = await h.sendText(id, out(text), replyTo);
@@ -487,10 +493,20 @@ app.post('/api/chats/:id/upload', async (req) => {
     data = await editVideo(data, vEdit);
     name = name.replace(/\.[a-z0-9]+$/i, '') + '.mp4'; mime = 'video/mp4';
   }
-  await H(req).sendFile((req.params as any).id, {
+  // Bildunterschrift mit Live-Übersetzung: übersetzt senden, das deutsche Original darunter zeigen
+  const id = (req.params as any).id, h = H(req);
+  const orig = val('caption')?.trim() || undefined;
+  const langName = orig && val('translate') === '1' ? outLang(h, id) : null;
+  const caption = langName ? await A(req).translateOut(id, orig!, langName) : orig;
+  const r = await h.sendFile(id, {
     data, name, mime,
     voice: val('voice') === '1', durationSec: val('duration') ? Number(val('duration')) : undefined,
-  }, val('caption'), val('replyTo') || null);
+  }, caption, val('replyTo') || null);
+  if (langName) {
+    const mark = (m: Message | null) => { const u = m && h.store.patchMessage(m.id, { translation: orig!, translationFrom: null }); if (u) h.emit({ type: 'message', message: u }); };
+    mark(r.pending);
+    void r.done.then(mark);
+  }
   return { ok: true };
 });
 

@@ -5,6 +5,8 @@ import type { AdapterFactory } from '../hub.js';
 export class DemoAdapter implements Adapter {
   readonly network = 'demo' as const;
   private n = 1000;
+  /** Neue Nachrichten brauchen IDs, die auch nach einem Neustart frei sind (die Startnachrichten zählen ab 1000) */
+  private uid() { return `d${Date.now().toString(36)}${(this.n++).toString(36)}`; }
   private timers: NodeJS.Timeout[] = [];
   constructor(private ev: AdapterEvents) {}
 
@@ -45,19 +47,19 @@ export class DemoAdapter implements Adapter {
   private reply(chat: string, text: string) {
     this.timers.push(setTimeout(() => {
       this.ev.message({
-        chatRemoteId: chat, remoteId: String(this.n++), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : chat === 'bram' ? 'Bram' : 'Lena',
+        chatRemoteId: chat, remoteId: this.uid(), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : chat === 'bram' ? 'Bram' : 'Lena',
         fromMe: false, ts: Date.now(), text, edited: false, deleted: false, attachments: [], status: 'received',
       });
     }, 1500));
   }
   async sendText(chat: string, text: string) {
-    const id = String(this.n++);
+    const id = this.uid();
     this.reply(chat, chat === 'bram' ? 'Hoi! Alles goed hier, en met jou?' : chat === 'emma' ? (text.includes('?') ? 'Good question, let me check 🤔' : 'Sounds great, see you soon!') : text.includes('?') ? 'Gute Frage, ich schau nach 🤔' : 'Alles klar 👍');
     return id;
   }
   async sendFile(chat: string, f: OutgoingFile) {
     this.reply(chat, f.voice ? 'Danke für die Sprachnachricht!' : 'Danke, hab die Datei bekommen');
-    return String(this.n++);
+    return this.uid();
   }
   async react() {}
   async edit() {}
