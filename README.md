@@ -69,7 +69,7 @@ Bring your own [Anthropic](https://console.anthropic.com) and [ElevenLabs](https
 - **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**. Everything the AI wrote is marked with a 🤖 reaction (on Telegram, which does not allow it as a reaction, with a 🤖 at the end)
 - **Suggested replies**, optionally with a direction ("politely decline")
 - **Transcribe** voice messages
-- **Live translation** per chat: foreign messages get a German translation under the bubble, and what you write in German goes out in their language
+- **Live translation** per chat: foreign messages get a German translation under the bubble (with the source language), and what you write in German goes out in their language (can be switched off per chat or per message)
 - **Ask your chats**: "When did Lisa want to come over?" gets an answer with the messages it is based on
 - **Autobot**: Claude answers on your behalf up to a limit you set, in groups you choose what it answers (questions to everyone, only mentions and replies to you, or everything), from whom, under which condition and in which style (like you, short, or creative). Answers are marked with a 🤖 reaction
 
