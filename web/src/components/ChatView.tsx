@@ -220,7 +220,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             ))}
           </div>
         )}
-        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
