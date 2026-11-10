@@ -2,7 +2,7 @@
   "name": "inbox-web",
   "private": true,
   "type": "module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p . --noEmit && vite build",

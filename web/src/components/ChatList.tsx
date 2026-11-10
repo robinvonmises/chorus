@@ -267,7 +267,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       <Avatar name={c.title} src={c.avatar} />
       <span className="chat-main">
         <span className="chat-top">
-          <span className="chat-title">{c.title}{c.linkedNets && <span className="linked-dots" title="Zusammengeführter Kontakt">{c.linkedNets.map((n) => <span key={n} className="dot" style={{ background: NETWORKS[n].color }} />)}</span>}</span>
+          <span className="chat-title">{c.title}</span>
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">

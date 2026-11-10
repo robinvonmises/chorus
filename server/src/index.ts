@@ -29,7 +29,7 @@ import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
 import { exportZip, slug } from './export.js';
 import * as totp from './totp.js';
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const require_ = createRequire(import.meta.url);
@@ -583,13 +583,21 @@ app.put('/api/chats/:id/autopilot', async (req) => {
   const c = needAi(req, id);
   if (c.kind === 'channel') throw new AiError(400, 'In Kanälen gibt es keinen Autobot.');
   if (!A(req).publicSettings().features.text) throw new AiError(400, 'Bitte zuerst einen Claude-Schlüssel eintragen.');
-  const b = (req.body ?? {}) as { on?: boolean; max?: number; note?: string; mark?: boolean; reset?: boolean };
+  const b = (req.body ?? {}) as { on?: boolean; max?: number; note?: string; mark?: boolean; reset?: boolean; trigger?: string; only?: string[]; rule?: string; style?: string };
   const cur = c.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
   const max = Math.max(1, Math.min(50, Math.round(Number(b.max ?? cur.max) || 5)));
   const turningOn = b.on === true && !cur.on;
   const used = b.reset || turningOn ? 0 : cur.used;
-  return C(req).autopilot!.set(id, { on: b.on ?? cur.on, max, used, note: String(b.note ?? cur.note).slice(0, 1000), mark: b.mark ?? cur.mark });
+  const pick = <T extends string>(v: unknown, ok: readonly T[], d: T | undefined) => (ok.includes(v as T) ? (v as T) : d);
+  return C(req).autopilot!.set(id, {
+    on: b.on ?? cur.on, max, used, note: String(b.note ?? cur.note).slice(0, 1000), mark: b.mark ?? cur.mark,
+    trigger: pick(b.trigger, ['me', 'direct', 'all'] as const, cur.trigger ?? 'me'),
+    only: Array.isArray(b.only) ? b.only.map(String).slice(0, 100) : cur.only ?? [],
+    rule: String(b.rule ?? cur.rule ?? '').slice(0, 500),
+    style: pick(b.style, ['me', 'short', 'creative'] as const, cur.style ?? 'me'),
+  });
 });
+app.get('/api/chats/:id/participants', async (req) => H(req).store.participants((req.params as any).id));
 app.post('/api/chats/:id/ai/compose', async (req) => {
   const id = (req.params as any).id;
   const c = H(req).store.getChat(id);
@@ -780,8 +788,21 @@ app.delete('/api/chats/:id/link', async (req) => {
   h.store.setLink(c.id, null);
   const rest = h.store.linkedIds(c.link);
   if (rest.length === 1) h.store.setLink(rest[0], null); // Einzelner Rest ist keine Gruppe mehr
+  else if (rest.length && h.store.getChat(rest[0])?.sendVia === c.id) h.store.setSendVia(c.link, null);
   for (const id of [c.id, ...rest]) h.emit({ type: 'chat', chat: h.store.getChat(id)! });
   return { ok: true };
+});
+app.put('/api/chats/:id/via', async (req) => {
+  const h = H(req);
+  const c = h.store.getChat((req.params as any).id);
+  if (!c?.link) throw Object.assign(new Error('Dieser Chat ist mit keinem anderen zusammengeführt.'), { statusCode: 400 });
+  const via = (req.body as any)?.via ? String((req.body as any).via) : null;
+  const ids = h.store.linkedIds(c.link);
+  if (via && !ids.includes(via)) throw Object.assign(new Error('Chat gehört nicht zu diesem Kontakt.'), { statusCode: 400 });
+  h.store.setSendVia(c.link, via);
+  const out = ids.map((id) => h.store.getChat(id)!);
+  for (const x of out) h.emit({ type: 'chat', chat: x });
+  return out;
 });
 
 // ---------- Live-Ereignisse ----------

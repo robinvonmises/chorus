@@ -52,10 +52,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   useLayoutEffect(() => { const el = scroller.current; if (el && pending.length) el.scrollTop = el.scrollHeight; }, [pending.length]);
   const byRemote = useMemo(() => new Map((messages ?? []).map((m) => [m.remoteId, m])), [messages]);
   const group = chat.kind !== 'direct';
-  // Zusammengeführter Kontakt: Antworten über den Messenger, über den zuletzt etwas kam (umschaltbar)
+  // Zusammengeführter Kontakt: Senden über den im Kontaktprofil gewählten Messenger, sonst über den, über den zuletzt etwas kam
   const multi = linked.length > 1;
   const netOf = useMemo(() => new Map(linked.map((c) => [c.id, c.network])), [linked]);
-  const [via, setVia] = useState<string | null>(null);
+  const via = linked.find((c) => c.sendVia)?.sendVia ?? null;
   const lastIn = useMemo(() => [...(messages ?? [])].reverse().find((m) => !m.fromMe)?.chatId, [messages]);
   const sendChat = linked.find((c) => c.id === (via ?? lastIn)) ?? chat;
   const sendAccount = multi ? accounts.find((a) => a.id === sendChat.accountId) : account;
@@ -220,17 +220,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             ))}
           </div>
         )}
-        {multi && (
-          <div className="via-bar" role="radiogroup" aria-label="Senden über">
-            <span>Senden über</span>
-            {linked.map((c) => (
-              <button key={c.id} role="radio" aria-checked={c.id === sendChat.id} className={`pill ${c.id === sendChat.id ? 'on' : ''}`} onClick={() => setVia(c.id)}>
-                <span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name}{linked.filter((x) => x.network === c.network).length > 1 ? ` · ${c.netTitle ?? c.title}` : ''}
-              </button>
-            ))}
-          </div>
-        )}
-        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} draftId={chat.id} onInfo={flash} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        <Composer chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
