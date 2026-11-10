@@ -52,7 +52,7 @@ export function AiSettingsSection() {
     </div>
 
     <div className="stack">
-      <b>ElevenLabs (Sprachnachrichten abtippen, in deiner Stimme antworten)</b>
+      <b>ElevenLabs (Sprachnachrichten transkribieren, in deiner Stimme antworten)</b>
       <small className="muted">Schlüssel unter <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noreferrer">elevenlabs.io</a> anlegen, mit Rechten für Sprache-zu-Text, Text-zu-Sprache und Stimmen lesen. Deine eigene Stimme legst du bei ElevenLabs unter „Voices“ an (Voice Cloning).</small>
       <div className="row">
         <input className="input" type="password" autoComplete="off" placeholder={ai.hasElevenKey ? '•••••••• gespeichert' : 'ElevenLabs-API-Schlüssel'} value={elevenKey} onChange={(e) => setElevenKey(e.target.value)} />
