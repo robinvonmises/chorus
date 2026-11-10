@@ -23,6 +23,14 @@ export type HubEvent =
 /** Zentrale: hält alle Adapter, speichert Ereignisse, verteilt sie an verbundene Browser */
 export { fixKind } from './kinds.js';
 import { fixKind, sniffKind } from './kinds.js';
+import { imageSize } from './imagesize.js';
+
+/** Bildgröße nachtragen, wenn der Messenger keine geliefert hat: so kann die Oberfläche den Platz freihalten */
+function withSize<T extends { kind: string; width?: number; height?: number }>(a: T, data: Buffer): T {
+  if ((a.kind !== 'image' && a.kind !== 'sticker') || (a.width && a.height)) return a;
+  const s = imageSize(data);
+  return s ? { ...a, ...s } : a;
+}
 
 const rank: Record<string, number> = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
 const MAX_AUTO_MEDIA = Number(process.env.MAX_AUTO_MEDIA_MB ?? 200) * 1024 * 1024;
@@ -239,7 +247,8 @@ export class Hub {
     }
     const fileId = this.store.storeFile(file.data);
     const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';
-    const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec }]);
+    const dims = kind === 'image' ? imageSize(file.data) : file.width && file.height ? { width: file.width, height: file.height } : null;
+    const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec, ...(dims ?? {}) }]);
     // Nicht auf den Messenger warten: Die Nachricht steht ab jetzt im Chat und zeigt selbst „wird gesendet“, „gesendet“ oder „fehlgeschlagen“.
     const done = this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
       .catch((e) => { console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`); return null; });
@@ -330,13 +339,22 @@ export class Hub {
     const att = msg.attachments[index];
     if (!att) throw new Error('Anhang nicht gefunden');
     const cached = att.fileId ? this.store.readFile(att.fileId) : null;
-    if (cached) return cached;
+    if (cached) {
+      // Ältere Bilder ohne gespeicherte Größe: einmal nachtragen
+      const sized = withSize(att, cached);
+      if (sized !== att) {
+        const cur = this.store.getMessage(msg.id) ?? msg;
+        const m2 = this.store.patchMessage(msg.id, { attachments: cur.attachments.map((a, j) => (j === index ? { ...a, width: sized.width, height: sized.height } : a)) });
+        if (m2) this.emit({ type: 'message', message: m2 });
+      }
+      return cached;
+    }
     const data = await this.fetchAttachment(this.chatOrThrow(msg.chatId), msg.remoteId, index, att);
     const fileId = this.store.storeFile(data);
     const cur = this.store.getMessage(msg.id) ?? msg;
-    const fixed = sniffKind(cur.attachments[index] ?? att, data);
+    const fixed = withSize(sniffKind(cur.attachments[index] ?? att, data), data);
     const m2 = this.store.patchMessage(msg.id, { attachments: cur.attachments.map((a, j) => (j === index ? { ...fixed, fileId, size: data.length } : a)) });
-    if (m2 && fixed.kind !== att.kind) this.emit({ type: 'message', message: m2 });
+    if (m2 && (fixed.kind !== att.kind || fixed.width !== att.width)) this.emit({ type: 'message', message: m2 });
     return data;
   }
 

@@ -501,6 +501,8 @@ app.post('/api/chats/:id/upload', async (req) => {
   const r = await h.sendFile(id, {
     data, name, mime,
     voice: val('voice') === '1', durationSec: val('duration') ? Number(val('duration')) : undefined,
+    // Nach dem Zuschneiden im Video-Editor stimmen die gemessenen Maße nicht mehr
+    ...(!vEdit?.crop && Number(val('width')) > 0 && Number(val('height')) > 0 ? { width: Math.round(Number(val('width'))), height: Math.round(Number(val('height'))) } : {}),
   }, caption, val('replyTo') || null);
   if (langName) {
     const mark = (m: Message | null) => { const u = m && h.store.patchMessage(m.id, { translation: orig!, translationFrom: null }); if (u) h.emit({ type: 'message', message: u }); };

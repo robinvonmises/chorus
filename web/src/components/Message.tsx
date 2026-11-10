@@ -133,15 +133,17 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
   const pending = m.status === 'pending';
   if (failed) return <FileCard m={m} a={a} i={i} note="Vorschau nicht verfügbar" />;
   if (a.kind === 'image' || a.kind === 'sticker') {
-    const ratio = a.width && a.height ? `${a.width} / ${a.height}` : undefined;
+    // Größe bekannt: Breite und Seitenverhältnis fest vorgeben, damit beim Laden nichts springt
+    const sized = a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined;
     return (
-      <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={{ aspectRatio: ratio }}
+      <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true) }); }}>
         {!pending && <img src={url} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
       </a>
     );
   }
-  if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} controls preload="none" playsInline />;
+  if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} controls preload="none" playsInline
+    style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined} />;
   if (a.kind === 'voice' || a.kind === 'audio') return <VoicePlayer m={m} i={i} url={pending ? null : `${url}&play=1`} dur={a.durationSec} voice={a.kind === 'voice'} name={a.name} />;
   return <FileCard m={m} a={a} i={i} />;
 }

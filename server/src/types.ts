@@ -154,6 +154,9 @@ export interface OutgoingFile {
   mime: string;
   voice?: boolean;
   durationSec?: number;
+  /** Bildmaße eines Videos (vom Browser gemessen), damit der Platz im Chat freigehalten wird */
+  width?: number;
+  height?: number;
 }
 
 export interface Adapter {

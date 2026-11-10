@@ -151,10 +151,11 @@ export const api = {
   link: (id: string, other: string) => req<Chat[]>('POST', `/api/chats/${enc(id)}/link`, { other }),
   unlink: (id: string) => req('DELETE', `/api/chats/${enc(id)}/link`),
   setVia: (id: string, via: string | null) => req<Chat[]>('PUT', `/api/chats/${enc(id)}/via`, { via }),
-  upload: (id: string, file: Blob, name: string, opts: { caption?: string; translate?: boolean; replyTo?: string | null; voice?: boolean; duration?: number; video?: { start: number; end: number; crop?: { x: number; y: number; w: number; h: number } }; onProgress?: (p: number) => void } = {}) => {
+  upload: (id: string, file: Blob, name: string, opts: { caption?: string; width?: number; height?: number; translate?: boolean; replyTo?: string | null; voice?: boolean; duration?: number; video?: { start: number; end: number; crop?: { x: number; y: number; w: number; h: number } }; onProgress?: (p: number) => void } = {}) => {
     const fd = new FormData();
     if (opts.caption) fd.append('caption', opts.caption);
     if (opts.translate) fd.append('translate', '1');
+    if (opts.width && opts.height) { fd.append('width', String(opts.width)); fd.append('height', String(opts.height)); }
     if (opts.replyTo) fd.append('replyTo', opts.replyTo);
     if (opts.voice) fd.append('voice', '1');
     if (opts.duration) fd.append('duration', String(opts.duration));

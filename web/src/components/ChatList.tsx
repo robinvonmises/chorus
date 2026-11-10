@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
 import { NETWORKS, dayLabel, listTime } from '../util';
@@ -83,6 +83,12 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const allSel = !!sel && shown.length > 0 && shown.every((c) => sel.has(c.id));
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s ?? []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const done = () => setSel(null);
+  // Feste Funktionen für die Zeilen: so wird nur die Zeile neu gezeichnet, in der sich etwas ändert
+  const live = useRef({ act, sel, onOpen });
+  live.current = { act, sel, onOpen };
+  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => { void live.current.act([id], what); }, []);
+  const rowClick = useCallback((id: string) => { if (live.current.sel) toggleSel(id); else live.current.onOpen(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowLong = useCallback((id: string) => { if (!live.current.sel) setSel(new Set([id])); }, []);
 
   // Ziehen zum Aktualisieren
   const listRef = useRef<HTMLUListElement>(null);
@@ -169,17 +175,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             </button>
           </li>
         )}
-        {shown.map((c) => (
-          <li key={c.id}>
-            <SwipeRow disabled={!!sel}
-              left={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => act([c.id], c.unread ? 'read' : 'unread') }}
-              right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => act([c.id], c.archived ? 'unarchive' : 'archive') }}>
-              <ChatRow c={c} active={c.id === active} selecting={!!sel} selected={!!sel?.has(c.id)}
-                onClick={() => (sel ? toggleSel(c.id) : onOpen(c.id))}
-                onLong={() => { if (!sel) setSel(new Set([c.id])); }} />
-            </SwipeRow>
-          </li>
-        ))}
+        {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
         {q.trim().length >= 2 && (
           <li className="search-results">
             {q.trim().length >= 3 && (
@@ -250,6 +246,21 @@ function HitRow({ m, chat, q, onOpen }: { m: Message; chat?: Chat; q?: string; o
     </button>
   );
 }
+
+const ChatListItem = memo(function ChatListItem({ c, active, selecting, selected, onAct, onClick, onLong }: {
+  c: Chat & { linkedNets?: Network[] }; active: boolean; selecting: boolean; selected: boolean;
+  onAct: (id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => void; onClick: (id: string) => void; onLong: (id: string) => void;
+}) {
+  return (
+    <li>
+      <SwipeRow disabled={selecting}
+        left={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}
+        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}>
+        <ChatRow c={c} active={active} selecting={selecting} selected={selected} onClick={() => onClick(c.id)} onLong={() => onLong(c.id)} />
+      </SwipeRow>
+    </li>
+  );
+});
 
 function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
   c: Chat & { linkedNets?: Network[] }; active: boolean; selecting: boolean; selected: boolean; onClick: () => void; onLong: () => void;

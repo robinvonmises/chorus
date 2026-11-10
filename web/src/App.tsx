@@ -16,6 +16,24 @@ import { usePlayer } from './player';
 import { Rail, Avatar } from './components/Rail';
 import { previewOf } from './components/Message';
 
+/**
+ * Frisch geladene Liste mit der alten abgleichen: Unveränderte Einträge behalten ihr altes Objekt.
+ * So zeichnet die Oberfläche nach dem Neuladen (z. B. App aus dem Hintergrund geholt) nur, was sich wirklich geändert hat.
+ */
+function keepSame<T extends { id: string }>(cur: T[] | undefined, next: T[]): T[] {
+  if (!cur) return next;
+  const old = new Map(cur.map((x) => [x.id, x]));
+  let same = cur.length === next.length;
+  const out = next.map((x, i) => {
+    const o = old.get(x.id);
+    const keep = o && JSON.stringify(o) === JSON.stringify(x) ? o : x;
+    if (cur[i] !== keep) same = false;
+    return keep;
+  });
+  return same ? cur : out;
+}
+const keepChats = (cur: Map<string, Chat>, cs: Chat[]) => new Map(keepSame([...cur.values()], cs).map((c) => [c.id, c]));
+
 export type Filter = { nets: Network[]; unread: boolean; archived: boolean };
 export type Panel = null | 'settings' | 'add' | 'new';
 
@@ -228,9 +246,8 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     api.messages(active).then((ms) => {
       if (cancelled) return;
       setMessages((m) => {
-        const cur = m.get(active);
-        if (cur && cur.length === ms.length && cur.at(-1)?.id === ms.at(-1)?.id) return m; // unverändert: nicht neu zeichnen
-        return new Map(m).set(active, ms);
+        const cur = m.get(active), next = keepSame(cur, ms);
+        return next === cur ? m : new Map(m).set(active, next); // unverändert: nicht neu zeichnen
       });
       if (ms.length < 20) api.history(active).catch(() => {});
     });
@@ -262,16 +279,15 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   // Nach dem Wiederverbinden (z. B. App aus dem Hintergrund geholt): Chatliste und offenen Chat frisch laden
   const refreshRef = useRef<() => void>(() => {});
   refreshRef.current = () => {
-    api.chats().then((cs) => setChats(new Map(cs.map((c) => [c.id, c])))).catch(() => {});
+    api.chats().then((cs) => setChats((cur) => keepChats(cur, cs))).catch(() => {});
     api.accounts().then(setAccounts).catch(() => {});
     loaded.current.clear(); // andere Chats beim Öffnen neu holen
     const id = activeRef.current;
     if (id) {
       loaded.current.add(id);
       api.messages(id).then((ms) => setMessages((m) => {
-        const cur = m.get(id);
-        if (cur && cur.length === ms.length && cur.at(-1)?.id === ms.at(-1)?.id && cur.at(-1)?.status === ms.at(-1)?.status) return m;
-        return new Map(m).set(id, ms);
+        const cur = m.get(id), next = keepSame(cur, ms);
+        return next === cur ? m : new Map(m).set(id, next);
       })).catch(() => {});
       if (document.visibilityState === 'visible') api.markRead(id).catch(() => {});
     }
@@ -280,8 +296,8 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const reload = useCallback(async () => {
     const [as, cs] = await Promise.all([api.accounts(), api.sync().catch(() => api.chats())]);
     setAccounts(as);
-    setChats(new Map(cs.map((c) => [c.id, c])));
-    if (activeRef.current) api.messages(activeRef.current).then((ms) => setMessages((m) => new Map(m).set(activeRef.current!, ms))).catch(() => {});
+    setChats((cur) => keepChats(cur, cs));
+    if (activeRef.current) { const id = activeRef.current; api.messages(id).then((ms) => setMessages((m) => new Map(m).set(id, keepSame(m.get(id), ms)))).catch(() => {}); }
   }, []);
 
   const sortedChats = useMemo(() => [...chats.values()].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs), [chats]);
