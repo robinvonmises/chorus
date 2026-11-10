@@ -1,4 +1,4 @@
-import { StrictMode } from 'react';
+import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
@@ -24,6 +24,8 @@ if (vv) {
     root.classList.toggle('kbd', kbd);
   };
   const fit = () => {
+    // Im Hintergrund meldet iOS teils unsinnige Größen (bis 0). Die nicht übernehmen, sonst bleibt die App beim Öffnen leer.
+    if (document.visibilityState === 'hidden' || vv.height < 150) return;
     maxH = Math.max(maxH, vv.height);
     const diff = maxH - vv.height;
     if (diff > 120 && Math.abs(diff - kbH) > 4) { kbH = diff; localStorage.setItem('inbox:kbh', String(Math.round(diff))); }
@@ -46,7 +48,11 @@ if (vv) {
     set(maxH || vv.height, false);
     requestAnimationFrame(() => requestAnimationFrame(() => root.classList.add('vv-ready')));
   };
+  let hiddenAt = 0;
   document.addEventListener('visibilitychange', () => {
+    // Nach langer Pause (über 15 Minuten) die App frisch laden: iOS hat sie dann oft halb abgeräumt
+    if (document.visibilityState === 'hidden') hiddenAt = Date.now();
+    else if (hiddenAt && Date.now() - hiddenAt > 15 * 60_000) { location.reload(); return; }
     if (!touch) return;
     if (document.visibilityState === 'hidden') { (document.activeElement as HTMLElement | null)?.blur?.(); snap(); }
     else if (!typing()) snap();
@@ -58,4 +64,23 @@ if (vv) {
   requestAnimationFrame(() => root.classList.add('vv-ready'));
 }
 
-createRoot(document.getElementById('root')!).render(<StrictMode><App /></StrictMode>);
+/** Stürzt die Oberfläche ab, nicht leer stehen bleiben: einmal automatisch neu laden, danach einen Knopf zeigen */
+class Guard extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() { return { failed: true }; }
+  componentDidCatch(e: unknown) {
+    console.error(e);
+    const last = Number(sessionStorage.getItem('inbox:crash') || 0);
+    if (Date.now() - last > 60_000) { sessionStorage.setItem('inbox:crash', String(Date.now())); location.reload(); }
+  }
+  render() {
+    if (!this.state.failed) return this.props.children;
+    return (
+      <div style={{ display: 'grid', placeItems: 'center', height: '100dvh', padding: 24, textAlign: 'center', gap: 12 }}>
+        <div><p>Da ist etwas schiefgelaufen.</p><button className="btn primary" onClick={() => location.reload()}>Neu laden</button></div>
+      </div>
+    );
+  }
+}
+
+createRoot(document.getElementById('root')!).render(<StrictMode><Guard><App /></Guard></StrictMode>);
