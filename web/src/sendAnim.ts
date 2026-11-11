@@ -21,8 +21,8 @@ export const takeRise = () => { const ok = Date.now() - armedAt < 15000; armedAt
 /**
  * Ablauf nach iMessage (Bild für Bild aus Waynes Bildschirmaufnahme, 30 fps):
  * 1. Das Eingabefeld wird zur Blase: Hintergrund so breit wie das Feld, Text an seiner Stelle im Feld.
- * 2. ~170 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
- * 3. ~390 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
+ * 2. ~270 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
+ * 3. ~630 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
  * Die echte Blase bleibt dabei an ihrem Platz und ist nur unsichtbar; eine Kopie fliegt in einer
  * fixierten Ebene darüber (nur transform), damit sie über dem Eingabefeld sichtbar ist und nichts am Scrollen ändert.
  */
@@ -34,8 +34,22 @@ export function rise(msg: Element | null | undefined) {
   const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect();
   if (!b.width || !f.width || b.height > 400) return;
   const host = msg.closest('.chat-view') ?? document.body;
+  const list = msg.parentElement;
   let layer: HTMLDivElement | null = null;
-  const restore = () => { msg.style.opacity = ''; layer?.remove(); layer = null; };
+  // Der Server ersetzt die gerade gesendete Nachricht oft kurz danach durch eine neue (andere ID → neues Element).
+  // Alles, was während des Flugs als eigene Blase dazukommt, bleibt bis zur Landung unsichtbar, sonst ist sie doppelt da.
+  const hidden: HTMLElement[] = [msg];
+  const hide = (el: HTMLElement) => { el.style.opacity = '0'; hidden.push(el); };
+  const mo = typeof MutationObserver !== 'undefined' && list ? new MutationObserver((recs) => {
+    for (const r of recs) r.addedNodes.forEach((n) => { if (n instanceof HTMLElement && n.matches('.msg.out')) hide(n); });
+  }) : null;
+  let done = false;
+  const restore = () => {
+    if (done) return; done = true;
+    mo?.disconnect();
+    hidden.forEach((el) => { el.style.opacity = ''; });
+    layer?.remove(); layer = null;
+  };
   try {
     const cs = getComputedStyle(bubble);
     layer = document.createElement('div');
@@ -51,12 +65,13 @@ export function rise(msg: Element | null | undefined) {
     const o = layer.getBoundingClientRect();
     layer.style.left = `${b.left - o.left}px`; layer.style.top = `${b.top - o.top}px`;
     msg.style.opacity = '0';
+    if (mo && list) mo.observe(list, { childList: true });
 
     const dy = Math.round((f.top + f.height / 2) - (b.top + b.height / 2)); // senkrecht mittig im Feld
     const dx = Math.round(Math.min(0, f.right - b.right));                   // rechte Kante wie das Feld
     const bw0 = Math.max(b.width, f.width);                                   // Hintergrund anfangs feldbreit (Breite statt scaleX, damit die Rundung rund bleibt)
     const tx = Math.round(Math.min(0, f.left - (b.left + dx)));               // Text anfangs links im Feld
-    const T = 560, A = 0.3; // Wayne: „einen Ticken langsamer und smoother“
+    const T = 900, A = 0.3; // Wayne: eher 0,8–1 s
     const slide = 'cubic-bezier(.45, .05, .25, 1)', up = 'cubic-bezier(.3, .75, .3, 1)';
     const anims = [
       layer.animate([
