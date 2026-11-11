@@ -314,12 +314,16 @@ input, textarea { font: inherit; color: inherit; }
   .mobile-only { display: inline-grid; }
   .pane-list, .pane-chat { grid-area: 1 / 1; border: 0; }
   .pane-chat { display: none; }
-  /* Wie iOS: Chat schiebt sich von rechts über die Liste, die Liste weicht ein Stück nach links aus */
-  .app.has-chat .pane-chat, .app.chat-leaving .pane-chat { display: block; z-index: 2; box-shadow: -6px 0 24px rgba(0,0,0,.10); }
-  .app.has-chat .pane-chat { animation: push-in .5s var(--ios) both; }
-  .app.has-chat .pane-list { animation: list-under .5s var(--ios) both; }
-  .app.chat-leaving .pane-chat { animation: push-out .4s var(--ios) both; pointer-events: none; }
-  .app.chat-leaving .pane-list { animation: list-back .4s var(--ios) both; }
+  /* Liste bleibt unsichtbar aufgebaut: Zurück geht so ohne Neuaufbau, und die Scrollposition bleibt */
+  .app.has-chat .pane-list { visibility: hidden; }
+  .app.has-chat .pane-chat { display: block; z-index: 2; }
+  .app.nav-enter .pane-list { visibility: visible; }
+  /* Übergang (useNavSlide in App.tsx): nur währenddessen liegen beide Seiten übereinander */
+  .app.nav-enter .pane-list, .app.nav-leave .pane-list { pointer-events: none; }
+  .app.nav-enter .pane-chat, .app.nav-leave .pane-chat { display: block; z-index: 2; box-shadow: -6px 0 24px rgba(0,0,0,.10); }
+  .app.nav-enter .pane-chat { transform: translateX(100%); }
+  .app.nav-leave .pane-chat { pointer-events: none; }
+  .app.nav-leave .pane-list { transform: translateX(-30%); }
   .chat-head .back { display: inline-grid; margin-left: -6px; }
   .messages { padding: 14px 14px 12px; }
   .msg { max-width: 80%; }
@@ -509,10 +513,7 @@ input, textarea { font: inherit; color: inherit; }
 /* Chatwechsel */
 .chat-view { animation: fade-in .2s var(--ease-out) both; }
 @media (max-width: 860px) { .app.has-chat .pane-chat .chat-view { animation: none; } }
-@keyframes push-in { from { transform: translateX(100%); } }
-@keyframes push-out { to { transform: translateX(100%); } }
-@keyframes list-under { to { transform: translateX(-30%); visibility: hidden; } }
-@keyframes list-back { from { transform: translateX(-30%); } }
+
 
 /* Kleine Rückmeldungen */
 .icon-btn, .btn, .send-btn, .seg-mini button, .ai-tabs button { transition: background-color .18s ease, color .18s ease, transform .18s var(--ease-out), opacity .18s ease; }

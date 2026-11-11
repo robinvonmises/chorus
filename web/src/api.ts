@@ -216,7 +216,7 @@ export const thumbUrl = (m: Message, i: number) => {
   return `${attachmentUrl(m, i)}&thumb=1`;
 };
 /** Fotos der letzten Nachrichten im Hintergrund vorladen, damit sie beim Öffnen des Chats schon da sind */
-export function warmImages(ms: Message[], max = 6) {
+export function warmImages(ms: Message[], max = 3) {
   let n = 0;
   for (let k = ms.length - 1; k >= 0 && n < max; k--) {
     const m = ms[k];
@@ -224,7 +224,8 @@ export function warmImages(ms: Message[], max = 6) {
     m.attachments.forEach((a, i) => {
       if (n >= max || !(a.kind === 'image' || a.kind === 'video' || (a.kind === 'file' && /^image\//i.test(a.mime)))) return;
       n++;
-      const img = new Image(); img.decoding = 'async'; img.src = thumbUrl(m, i);
+      // Nur in den Speicher des Service Workers holen, nicht entpacken (spart Arbeitsspeicher)
+      fetch(thumbUrl(m, i), { credentials: 'same-origin', priority: 'low' } as RequestInit).catch(() => {});
     });
   }
 }
