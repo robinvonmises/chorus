@@ -15,6 +15,7 @@ export type HubEvent =
   | { type: 'account'; account: Account }
   | { type: 'account_removed'; id: string }
   | { type: 'chat'; chat: Chat }
+  | { type: 'chat_removed'; id: string }
   | { type: 'message'; message: Message; replacedId?: string }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: import('./planner.js').Planned[] }
@@ -441,6 +442,21 @@ export class Hub {
     return m;
   }
 
+  /** E-Mail: auf dem Server archivieren (bzw. zurückholen), dann in Chorus */
+  async archiveChat(chatId: string, archived: boolean) {
+    const chat = this.chatOrThrow(chatId);
+    const a = this.adapters.get(chat.accountId);
+    if (a?.archiveChat) await a.archiveChat(chat.remoteId, archived);
+  }
+  /** E-Mail: Mails in den Papierkorb; andere Messenger: Chat nur aus Chorus entfernen (kommt bei neuer Nachricht wieder) */
+  async deleteChat(chatId: string) {
+    const chat = this.chatOrThrow(chatId);
+    const a = this.adapters.get(chat.accountId);
+    if (a?.deleteChat) await a.deleteChat(chat.remoteId);
+    else if (chat.network === 'email') throw new Error('E-Mail ist nicht verbunden');
+    this.store.deleteChat(chatId);
+    this.emit({ type: 'chat_removed', id: chatId });
+  }
   emitChat(chatId: string) {
     const c = this.store.getChat(chatId);
     if (c) this.emit({ type: 'chat', chat: c });

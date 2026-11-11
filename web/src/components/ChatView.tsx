@@ -12,14 +12,15 @@ import { AiPanel } from './AiPanel';
 import { useExit } from '../useExit';
 import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
+import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
-export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
+export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage, onRemove }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
   linked?: Chat[]; accounts?: Account[]; focus?: { id: string; remoteId: string; n: number } | null; planned?: Planned[];
-  onGallery?: () => void; onOpenMessage?: (m: Message) => void;
+  onGallery?: () => void; onOpenMessage?: (m: Message) => void; onRemove: () => void;
   onPatchChat: (p: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived'>>) => Promise<void>; onChat: (c: Chat) => void;
 }) {
   const [contact, setContact] = useState(false);
@@ -72,6 +73,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const reminders = useMemo(() => new Map(mine.filter((p) => p.kind === 'remind' && p.messageId).map((p) => [p.messageId!, p.at])), [mine]);
   const [showPlanned, setShowPlanned] = useState(false);
   const [remindFor, setRemindFor] = useState<Message | null>(null);
+  const [forward, setForward] = useState<Message | null>(null);
   const tr = chat.translate;
   const [trSheet, setTrSheet] = useState(false);
 
@@ -185,10 +187,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       <header className="chat-head">
         <button className="icon-btn back" onClick={onBack} aria-label="Zurück"><Icon name="back" /></button>
         <button className="chat-head-who" onClick={() => setContact(true)} aria-label="Profil anzeigen">
-        <Avatar name={chat.title} size={40} src={chat.avatar} />
+        <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
-          <small>{multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autobot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
+          <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? `${chat.peer.name} · ` : ''}{chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autobot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
         </div>
         </button>
         <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>
@@ -203,6 +205,11 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? `Übersetzung · ${tr.langName ?? 'an'}` : 'Live-Übersetzung'}</button>
               {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
+              {chat.network === 'email' && <button onClick={async () => {
+                setHeadMenu(false);
+                if (!confirm(`Alle E-Mails zu „${chat.title}“ in den Papierkorb verschieben?`)) return;
+                onRemove();
+              }}><Icon name="trash" size={18} />E-Mails löschen</button>}
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
             </div>
           )}
@@ -272,9 +279,11 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               </div>
               <div className="menu-list">
                 <button onClick={() => { setReplyTo(menu.m); setEditing(null); setMenu(null); }}><Icon name="reply" size={18} />Antworten</button>
+                {!menu.m.deleted && (menu.m.text || menu.m.attachments.length > 0) && <button onClick={() => { setForward(menu.m); setMenu(null); }}><Icon name="forward" size={18} />Weiterleiten</button>}
                 {reminders.has(menu.m.id)
                   ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash('Erinnerung gelöscht'); }); }}><Icon name="alarm" size={18} />Erinnerung löschen</button>
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
+                {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash('Wird übersetzt …'); api.ai.translateOne(m.id).then((r) => { if (r.already) flash('Die Nachricht ist schon Deutsch.'); }).catch((e: any) => flash(e.message ?? 'Fehler')); }}><Icon name="globe" size={18} />Übersetzen</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
                 {menu.m.attachments.map((a, i) => (
                   <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
@@ -290,6 +299,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       {remindFor && <WhenPicker title="Erinnern" confirm="Erinnern" hint="Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist."
         onClose={() => setRemindFor(null)}
         onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(`Erinnerung ${whenLabel(at)}`); }); }} />}
+      {forward && <ForwardSheet message={forward} onClose={() => setForward(null)} onDone={(t) => { setForward(null); flash(t); }} />}
       {toast && <div className="toast">{toast}</div>}
       {trSheet && <TranslateSheet chat={chat} onChat={onChat} onClose={() => setTrSheet(false)} onError={flash} />}
       {contact && <ContactSheet chat={chat} account={account} onClose={() => setContact(false)} onChat={onChat} />}

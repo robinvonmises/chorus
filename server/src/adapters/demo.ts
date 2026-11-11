@@ -32,6 +32,9 @@ export class DemoAdapter implements Adapter {
       { remoteId: 'verein', title: 'Laufgruppe Sonntag', kind: 'group' as const },
       { remoteId: 'emma', title: 'Emma (London)', kind: 'direct' as const },
       { remoteId: 'bram', title: 'Bram (Utrecht)', kind: 'direct' as const },
+      // So sehen E-Mails aus: ein Absender, darin die Betreffe
+      { remoteId: 'mail-angebot', title: 'Angebot Küche', kind: 'direct' as const, peer: { id: 'info@kuechen-berger.de', name: 'Küchenstudio Berger' } },
+      { remoteId: 'mail-termin', title: 'Aufmaß-Termin', kind: 'direct' as const, peer: { id: 'info@kuechen-berger.de', name: 'Küchenstudio Berger' } },
     ];
     const script: Record<string, [string, string, number][]> = {
       anna: [['Anna', 'Hey! Kommst du heute Abend noch vorbei?', 50], ['me', 'Ja, so gegen 19 Uhr 🙂', 48], ['Anna', 'Super, bring gern was zu trinken mit', 47]],
@@ -41,6 +44,8 @@ export class DemoAdapter implements Adapter {
       tom: [['Tom', 'Hast du die Unterlagen schon angeschaut?', 1500]],
       verein: [['Jonas', 'Treffpunkt wie immer 9 Uhr am Parkplatz', 3000], ['Sarah', '👍', 2900]],
       emma: [['Emma', 'Hi! Are you still coming to London next month?', 4000], ['Emma', 'Let me know your dates, you can stay with us 😊', 3990]],
+      'mail-angebot': [['Küchenstudio Berger', 'Hallo Herr von Ometzinski,\n\nanbei wie besprochen unser Angebot für die Küche.', 900], ['me', 'Danke! Ist die Arbeitsplatte in Eiche schon drin?', 800], ['Küchenstudio Berger', 'Ja, Position 4.', 700]],
+      'mail-termin': [['Küchenstudio Berger', 'Passt Ihnen Montag um 10 Uhr für das Aufmaß?', 2000]],
       bram: [['me', 'Hoi Bram, stuur me even een berichtje als je tijd hebt 😅', 5]],
     };
     // DEMO_BULK=1: viele Chats und ein langer Verlauf, um zu messen, wie flüssig die Oberfläche bleibt
@@ -65,7 +70,7 @@ export class DemoAdapter implements Adapter {
         this.ev.message({
           chatRemoteId: c.remoteId, remoteId: String(this.n++), senderId: who, senderName: who === 'me' ? 'Ich' : who,
           fromMe: who === 'me', ts: now - minAgo * 60_000, text, edited: false, deleted: false,
-          attachments: pic ? [{ fileId: null, name: `bild-${k}.png`, mime: 'image/png', size: 0, kind: 'image', ...(k % 30 === 7 ? {} : { width: w, height: h }), remoteRef: `${w}x${h}` }] : [],
+          attachments: c.remoteId === 'mail-angebot' && text.startsWith('Hallo') ? [{ fileId: null, name: 'Angebot-2026-114.pdf', mime: 'application/pdf', size: 184_000, kind: 'file' }] : pic ? [{ fileId: null, name: `bild-${k}.png`, mime: 'image/png', size: 0, kind: 'image', ...(k % 30 === 7 ? {} : { width: w, height: h }), remoteRef: `${w}x${h}` }] : [],
           status: who === 'me' ? 'read' : 'received', reactions: c.remoteId === 'familie' && text.startsWith('Bin dabei') ? [{ emoji: '❤️', senderId: 'Mama', fromMe: false }] : [],
         });
       }

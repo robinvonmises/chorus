@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Chat, Message } from './types.js';
+import type { Chat, Message, OutgoingFile } from './types.js';
 import { createRequire } from 'node:module';
 import { Push } from './push.js';
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
@@ -22,6 +22,7 @@ import { telegramFactory } from './adapters/telegram.js';
 import { demoFactory } from './adapters/demo.js';
 import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
+import { emailFactory } from './adapters/email.js';
 import { Ai, AiError } from './ai.js';
 import { AutopilotRunner } from './autopilot.js';
 import { Translator, guessLang } from './translate.js';
@@ -30,7 +31,7 @@ import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
 import { exportZip, slug } from './export.js';
 import * as totp from './totp.js';
 
-const VERSION = '0.2.1';
+const VERSION = '0.4.1';
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const require_ = createRequire(import.meta.url);
@@ -40,7 +41,7 @@ const WEB_DIR = resolve(process.env.WEB_DIR ?? join(dirname(fileURLToPath(import
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 100);
 mkdirSync(DATA_DIR, { recursive: true });
 
-const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory };
+const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory, email: emailFactory };
 if (process.env.DEMO === '1') factories.demo = demoFactory;
 
 const registry = new ProfileRegistry(DATA_DIR);
@@ -110,7 +111,9 @@ const logStream = {
     } catch { /* ignore */ }
   },
 };
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logStream }, trustProxy: trustProxySetting() as boolean | string, bodyLimit: 2 * 1024 * 1024 });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logStream }, trustProxy: trustProxySetting() as boolean | string, bodyLimit: 2 * 1024 * 1024,
+  // Nachrichten-IDs in Signal-Gruppen (Konto + Gruppen-ID + Zeit + UUID) sind länger als die Standardgrenze von 100 Zeichen → sonst „Bad Request“
+  routerOptions: { maxParamLength: 1000 } });
 await app.register(cookie);
 await app.register(websocket);
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 1 } });
@@ -396,6 +399,25 @@ app.post('/api/accounts', async (req) => {
   return H(req).addAccount(network, label || network, config ?? {});
 });
 app.delete('/api/accounts/:id', async (req) => { await H(req).removeAccount((req.params as any).id); return { ok: true }; });
+// E-Mail: Einstellungen (Server, Signaturen) lesen und ändern. Das Passwort wird nie zurückgegeben.
+app.get('/api/accounts/:id/config', async (req) => {
+  const row = H(req).store.getAccountRow((req.params as any).id);
+  if (!row || row.network !== 'email') throw new Error('Nur für E-Mail-Konten');
+  const { password: _p, ...cfg } = JSON.parse(row.config);
+  return cfg;
+});
+app.patch('/api/accounts/:id/config', async (req) => {
+  const id = (req.params as any).id;
+  const row = H(req).store.getAccountRow(id);
+  if (!row || row.network !== 'email') throw new Error('Nur für E-Mail-Konten');
+  const allowed = ['name', 'user', 'password', 'imapHost', 'imapPort', 'smtpHost', 'smtpPort', 'signature', 'hideSignatures', 'hideBulk', 'days'];
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const cfg = JSON.parse(row.config);
+  for (const k of allowed) if (k in body && !(k === 'password' && !body[k])) cfg[k] = body[k];
+  H(req).store.setAccountConfig(id, cfg);
+  await H(req).startAccount(id);
+  return { ok: true };
+});
 app.post('/api/accounts/:id/restart', async (req) => { await H(req).startAccount((req.params as any).id); return { ok: true }; });
 app.post('/api/accounts/:id/input', async (req) => {
   const { field, value } = req.body as { field: string; value: string };
@@ -406,8 +428,13 @@ app.post('/api/accounts/:id/input', async (req) => {
 app.get('/api/chats', async (req) => H(req).store.listChats());
 app.patch('/api/chats/:id', async (req) => {
   const id = (req.params as any).id;
-  H(req).store.updateChat(id, req.body as any);
+  const body = (req.body ?? {}) as any;
+  // E-Mail: Archivieren verschiebt die Mails auch auf dem Server
+  if ('archived' in body && H(req).store.getChat(id)?.network === 'email') await H(req).archiveChat(id, !!body.archived);
+  H(req).store.updateChat(id, body);
   return H(req).emitChat(id);
+});
+app.delete('/api/chats/:id', async (req) => { await H(req).deleteChat((req.params as any).id); return { ok: true };
 });
 app.post('/api/chats/:id/unread', async (req) => {
   const id = (req.params as any).id; const h = H(req);
@@ -523,6 +550,39 @@ app.post('/api/chats/:id/upload', async (req) => {
   return { ok: true };
 });
 
+// Weiterleiten: an beliebige Chats, auch über Messenger hinweg. Gesendet wird immer als neue Nachricht mit Text und Anhängen
+// (native Weiterleitung gibt es nur innerhalb desselben Messengers und Kontos; so verhält es sich überall gleich).
+app.post('/api/messages/:id/forward', async (req) => {
+  const h = H(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg || msg.deleted) throw Object.assign(new Error('Nachricht nicht gefunden'), { statusCode: 404 });
+  const ids = [...new Set(((req.body as any)?.chatIds ?? []) as string[])].filter((c) => typeof c === 'string' && h.store.getChat(c)).slice(0, 20);
+  if (!ids.length) throw Object.assign(new Error('Kein Zielchat gewählt'), { statusCode: 400 });
+  const text = (msg.text || '').trim();
+  const files: OutgoingFile[] = [];
+  for (let i = 0; i < msg.attachments.length; i++) {
+    const a = msg.attachments[i];
+    let data: Buffer;
+    try { data = await h.attachmentData(msg, i); }
+    catch (e: any) { throw Object.assign(new Error(`Anhang „${a.name}“ konnte nicht geladen werden: ${e?.message ?? e}`), { statusCode: 502 }); }
+    files.push({ data, name: a.name || 'datei', mime: a.mime || 'application/octet-stream', voice: a.kind === 'voice', durationSec: a.durationSec,
+      ...(a.width && a.height ? { width: a.width, height: a.height } : {}) });
+  }
+  if (!text && !files.length) throw Object.assign(new Error('Nichts zum Weiterleiten'), { statusCode: 400 });
+  // Pro Ziel der Reihe nach (Reihenfolge der Anhänge bleibt), Ziele parallel. Fehler zeigt die Nachricht selbst als „fehlgeschlagen“.
+  for (const id of ids) {
+    void (async () => {
+      try {
+        if (!files.length) { await h.sendText(id, text); return; }
+        // Text als Bildunterschrift des ersten Anhangs; Sprachnachrichten haben keine Unterschrift, dann Text extra
+        const capFirst = !!text && !files[0].voice;
+        for (let i = 0; i < files.length; i++) await (await h.sendFile(id, files[i], i === 0 && capFirst ? text : undefined)).done;
+        if (text && !capFirst) await h.sendText(id, text);
+      } catch (e: any) { req.log.warn({ id, err: e?.message }, 'Weiterleiten fehlgeschlagen'); }
+    })();
+  }
+  return { ok: true, count: ids.length };
+});
 app.post('/api/messages/:id/react', async (req) => {
   const { emoji } = req.body as { emoji: string | null };
   await H(req).react((req.params as any).id, emoji);
@@ -692,6 +752,22 @@ app.post('/api/messages/:id/transcribe', async (req) => {
   const data = await h.attachmentData(msg, i);
   const text = await A(req).transcribe(data, att.mime, att.name);
   return h.setTranscript(msg.id, text);
+});
+
+/** Eine einzelne Nachricht ins Deutsche übersetzen (Langdruck → „Übersetzen“).
+ *  Bewusst ohne KI-Freigabe des Chats: der Nutzer stößt das pro Nachricht selbst an, und nur der Text dieser einen Nachricht geht an die KI. */
+app.post('/api/messages/:id/translate', async (req) => {
+  const h = H(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
+  if (!A(req).publicSettings().features.text) throw new AiError(400, 'Zum Übersetzen bitte zuerst in den Einstellungen einen KI-Schlüssel eintragen.');
+  const text = [msg.text, msg.transcript].filter(Boolean).join('\n').trim();
+  if (!text) throw new AiError(400, 'Diese Nachricht enthält keinen Text.');
+  const [r] = await A(req).translateIn([{ id: msg.id, text }]);
+  if (!r?.translation) return { message: msg, already: true };
+  const upd = h.store.patchMessage(msg.id, { translation: r.translation, translationFrom: r.langName || null });
+  if (upd) h.emit({ type: 'message', message: upd });
+  return { message: upd ?? msg, already: false };
 });
 
 /** Anhang ausliefern; wird bei Bedarf erst beim Messenger abgeholt.

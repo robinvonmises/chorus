@@ -1,5 +1,5 @@
 import { trustStore } from './keys';
-export type Network = 'telegram' | 'signal' | 'whatsapp' | 'demo';
+export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
 
 export interface AccountStatus {
   state: 'disconnected' | 'connecting' | 'need_input' | 'qr' | 'connected' | 'error';
@@ -17,9 +17,15 @@ export interface Chat {
   autopilot?: Autopilot | null;
   translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean; fixed?: boolean } | null;
   link?: string | null;
+  /** E-Mail: Gegenüber. Alle Betreffe eines Absenders erscheinen als ein Kontakt */
+  peer?: { id: string; name: string } | null;
   sendVia?: string | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
   info?: { phone?: string; username?: string; about?: string; description?: string; members?: number; fetchedAt?: number } | null;
+}
+export interface EmailConfig {
+  address: string; name?: string; user?: string; imapHost: string; imapPort?: number; smtpHost: string; smtpPort?: number;
+  signature?: string; hideSignatures?: string[]; hideBulk?: boolean; days?: number;
 }
 export interface Autopilot {
   on: boolean; max: number; used: number; note: string; mark: boolean;
@@ -50,6 +56,7 @@ export interface ServerState {
 export type HubEvent =
   | { type: 'account'; account: Account }
   | { type: 'account_removed'; id: string }
+  | { type: 'chat_removed'; id: string }
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
   | { type: 'notify'; chat: Chat; message: Message }
@@ -109,10 +116,13 @@ export const api = {
   accounts: () => req<Account[]>('GET', '/api/accounts'),
   addAccount: (network: Network, label: string, config: Record<string, unknown>) => req<Account>('POST', '/api/accounts', { network, label, config }),
   removeAccount: (id: string) => req('DELETE', `/api/accounts/${id}`),
+  emailConfig: (id: string) => req<EmailConfig>('GET', `/api/accounts/${id}/config`),
+  setEmailConfig: (id: string, cfg: Partial<EmailConfig> & { password?: string }) => req('PATCH', `/api/accounts/${id}/config`, cfg),
   restartAccount: (id: string) => req('POST', `/api/accounts/${id}/restart`),
   input: (id: string, field: string, value: string) => req('POST', `/api/accounts/${id}/input`, { field, value }),
 
   chats: () => req<Chat[]>('GET', '/api/chats'),
+  deleteChat: (id: string) => req('DELETE', `/api/chats/${enc(id)}`),
   patchChat: (id: string, patch: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived' | 'alias' | 'note'>>) => req<Chat>('PATCH', `/api/chats/${enc(id)}`, patch),
   markUnread: (id: string) => req<Chat>('POST', `/api/chats/${enc(id)}/unread`),
   /** Profilbilder der Absender in einer Gruppe (senderId → Bild-URL); pending: weitere werden gerade geholt */
@@ -184,6 +194,7 @@ export const api = {
     });
   },
   react: (msgId: string, emoji: string | null) => req('POST', `/api/messages/${enc(msgId)}/react`, { emoji }),
+  forward: (msgId: string, chatIds: string[]) => req<{ ok: boolean; count: number }>('POST', `/api/messages/${enc(msgId)}/forward`, { chatIds }),
   edit: (msgId: string, text: string) => req('PATCH', `/api/messages/${enc(msgId)}`, { text }),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
   startChat: (accountId: string, phone: string) => req<Chat>('POST', `/api/accounts/${accountId}/start-chat`, { phone }),
@@ -204,6 +215,7 @@ export const api = {
     compose: (id: string, instruction: string, mode: 'text' | 'voice') => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/compose`, { instruction, mode }),
     dictate: (audio: Blob) => { const fd = new FormData(); fd.append('file', audio, 'auftrag.' + (audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm')); return req<{ text: string }>('POST', '/api/ai/dictate', fd); },
     transcribe: (msgId: string) => req<Message>('POST', `/api/messages/${enc(msgId)}/transcribe`, {}),
+    translateOne: (msgId: string) => req<{ message: Message; already: boolean }>('POST', `/api/messages/${enc(msgId)}/translate`, {}),
   },
 };
 

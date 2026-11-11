@@ -4,7 +4,7 @@ import { api, type Account, type Network, type ServerState } from '../api';
 import { NETWORKS } from '../util';
 import { Icon } from './Icon';
 
-const ORDER: Network[] = ['whatsapp', 'signal', 'telegram', 'demo'];
+const ORDER: Network[] = ['whatsapp', 'signal', 'telegram', 'email', 'demo'];
 
 export function AccountWizard({ server, accounts, onClose }: { server: ServerState; accounts: Account[]; onClose: () => void }) {
   const [net, setNet] = useState<Network | null>(null);
@@ -39,6 +39,7 @@ export function AccountWizard({ server, accounts, onClose }: { server: ServerSta
             </>
           )}
           {net === 'telegram' && !accId && <TelegramSetup onCreated={setAccId} />}
+          {net === 'email' && !accId && <EmailSetup onCreated={setAccId} />}
           {(net === 'signal' || net === 'whatsapp') && !accId && <QrIntro net={net} onCreated={setAccId} />}
           {net === 'demo' && !accId && (
             <div className="stack">
@@ -56,6 +57,7 @@ export function AccountWizard({ server, accounts, onClose }: { server: ServerSta
 function QrIntro({ net, onCreated }: { net: 'signal' | 'whatsapp'; onCreated: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ok, setOk] = useState(net !== 'whatsapp');
   const [method, setMethod] = useState<'qr' | 'phone'>(matchMedia('(pointer: coarse)').matches && net === 'whatsapp' ? 'phone' : 'qr');
   const go = async () => {
     setBusy(true); setErr('');
@@ -77,9 +79,79 @@ function QrIntro({ net, onCreated }: { net: 'signal' | 'whatsapp'; onCreated: (i
           </div>
         </div>
       )}
+      {net === 'whatsapp' && (
+        <div className="wa-risk">
+          <p><b>Bitte kurz lesen:</b> Chorus ist kein offizieller WhatsApp-Client, sondern nutzt eine inoffizielle Anbindung (Baileys). Das verstößt gegen die Nutzungsbedingungen von WhatsApp, und WhatsApp kann Konten deshalb sperren.</p>
+          <p>Bei normaler privater Nutzung kommt das selten vor. Betroffen sind vor allem Konten, die massenhaft oder automatisiert Nachrichten verschicken oder ganz neu sind. Ausschließen lässt sich eine Sperre aber nicht. Die Nutzung erfolgt auf eigenes Risiko.</p>
+          <label className="wa-risk-ok"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> Verstanden, ich verbinde WhatsApp auf eigenes Risiko.</label>
+        </div>
+      )}
       {err && <div className="error">{err}</div>}
-      <button className="btn primary wide" disabled={busy} onClick={go}>{busy ? 'Einen Moment …' : method === 'qr' ? 'QR-Code anzeigen' : 'Weiter'}</button>
+      <button className="btn primary wide" disabled={busy || !ok} onClick={go}>{busy ? 'Einen Moment …' : method === 'qr' ? 'QR-Code anzeigen' : 'Weiter'}</button>
     </div>
+  );
+}
+
+/** Bekannte Anbieter: Server werden aus der Adresse erraten (änderbar) */
+const MAIL_PRESETS: [RegExp, string, string, string?][] = [
+  [/^(gmail|googlemail)\.com$/, 'imap.gmail.com', 'smtp.gmail.com', 'Gmail: App-Passwort unter myaccount.google.com → Sicherheit → App-Passwörter (2-Faktor muss an sein).'],
+  [/^(icloud|me|mac)\.com$/, 'imap.mail.me.com', 'smtp.mail.me.com', 'iCloud: App-Passwort unter account.apple.com → Anmelden und Sicherheit → App-spezifische Passwörter.'],
+  [/^(outlook|hotmail|live)\.(com|de)$/, 'outlook.office365.com', 'smtp.office365.com', 'Outlook.com erlaubt Passwort-Anmeldung oft nicht mehr; dann klappt es nur mit einem App-Passwort.'],
+  [/^gmx\.(de|net|at|ch)$/, 'imap.gmx.net', 'mail.gmx.net', 'GMX: IMAP-Zugriff in den GMX-Einstellungen unter „POP3/IMAP“ erlauben.'],
+  [/^web\.de$/, 'imap.web.de', 'smtp.web.de', 'WEB.DE: IMAP-Zugriff in den Einstellungen unter „POP3/IMAP“ erlauben.'],
+  [/^t-online\.de$/, 'secureimap.t-online.de', 'securesmtp.t-online.de', 'Telekom: eigenes E-Mail-Passwort im Kundencenter anlegen.'],
+  [/^posteo\.(de|net)$/, 'posteo.de', 'posteo.de'],
+  [/^mailbox\.org$/, 'imap.mailbox.org', 'smtp.mailbox.org'],
+  [/^(yahoo)\.(com|de)$/, 'imap.mail.yahoo.com', 'smtp.mail.yahoo.com', 'Yahoo: App-Passwort in den Kontosicherheits-Einstellungen anlegen.'],
+];
+
+function EmailSetup({ onCreated }: { onCreated: (id: string) => void }) {
+  const [f, setF] = useState({ address: '', name: '', password: '', user: '', imapHost: '', imapPort: '993', smtpHost: '', smtpPort: '465' });
+  const [more, setMore] = useState(false);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const domain = f.address.split('@')[1]?.toLowerCase() ?? '';
+  const preset = MAIL_PRESETS.find(([r]) => r.test(domain));
+  const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const imapHost = f.imapHost || preset?.[1] || (domain ? `imap.${domain}` : '');
+  const smtpHost = f.smtpHost || preset?.[2] || (domain ? `smtp.${domain}` : '');
+  const go = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr('');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.address.trim())) return setErr('Bitte eine gültige E-Mail-Adresse eingeben.');
+    if (!f.password) return setErr('Bitte das (App-)Passwort eingeben.');
+    setBusy(true);
+    try {
+      const a = await api.addAccount('email', f.address.trim(), {
+        address: f.address.trim(), name: f.name.trim() || undefined, user: f.user.trim() || undefined, password: f.password,
+        imapHost, imapPort: Number(f.imapPort) || 993, smtpHost, smtpPort: Number(f.smtpPort) || 465, hideBulk: true, days: 30,
+      });
+      onCreated(a.id);
+    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <form className="stack" onSubmit={go}>
+      <p>Chorus holt deine Mails per IMAP ab und sendet Antworten per SMTP. Jeder Absender erscheint wie ein Kontakt, darin die einzelnen Betreffe als Chats.</p>
+      <label className="field"><span>E-Mail-Adresse</span><input className="input" type="email" autoComplete="email" value={f.address} onChange={set('address')} placeholder="du@example.de" /></label>
+      <label className="field"><span>Dein Name (als Absender)</span><input className="input" value={f.name} onChange={set('name')} placeholder="z. B. Wayne von Ometzinski" /></label>
+      <label className="field"><span>Passwort oder App-Passwort</span><input className="input" type="password" autoComplete="off" value={f.password} onChange={set('password')} /></label>
+      {preset?.[3] && <small className="muted">{preset[3]}</small>}
+      {!more && <button type="button" className="btn small ghost" onClick={() => setMore(true)}>Server: {imapHost || '…'} / {smtpHost || '…'} ändern</button>}
+      {more && <>
+        <label className="field"><span>Benutzername (falls nicht die Adresse)</span><input className="input" value={f.user} onChange={set('user')} autoComplete="off" /></label>
+        <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+          <label className="field grow"><span>IMAP-Server</span><input className="input" value={f.imapHost} onChange={set('imapHost')} placeholder={imapHost} /></label>
+          <label className="field" style={{ width: 90 }}><span>Port</span><input className="input" inputMode="numeric" value={f.imapPort} onChange={set('imapPort')} /></label>
+        </div>
+        <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+          <label className="field grow"><span>SMTP-Server</span><input className="input" value={f.smtpHost} onChange={set('smtpHost')} placeholder={smtpHost} /></label>
+          <label className="field" style={{ width: 90 }}><span>Port</span><input className="input" inputMode="numeric" value={f.smtpPort} onChange={set('smtpPort')} /></label>
+        </div>
+        <small className="muted">Port 993 = IMAP mit SSL, 465 = SMTP mit SSL, 587 = SMTP mit STARTTLS.</small>
+      </>}
+      <small className="muted">Beim ersten Abruf holt Chorus die Mails der letzten 30 Tage. Newsletter werden ausgeblendet (in den Einstellungen änderbar).</small>
+      {err && <div className="error">{err}</div>}
+      <button className="btn primary wide" disabled={busy}>{busy ? 'Verbinde …' : 'Verbinden'}</button>
+    </form>
   );
 }
 

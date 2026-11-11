@@ -40,7 +40,7 @@ self.addEventListener('push', (e) => {
     if (open && !ios) return;
     return self.registration.showNotification(d.title || 'Chorus', {
       body: d.body || '', tag: d.tag || d.chatId || undefined, renotify: true,
-      data: { chatId: d.chatId || null }, icon: '/icon-192.png', badge: '/icon-192.png',
+      data: { chatId: d.chatId || null }, icon: '/icon-192.png?v=2', badge: '/icon-192.png?v=2',
     });
   }));
 });

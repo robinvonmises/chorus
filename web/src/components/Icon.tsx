@@ -10,6 +10,7 @@ const P: Record<string, string> = {
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM19 11a7 7 0 0 1-14 0M12 18v3',
   smile: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM8.5 14.5s1.3 2 3.5 2 3.5-2 3.5-2M9 9.5h.01M15 9.5h.01',
   reply: 'M9 14L4 9l5-5M4 9h11a5 5 0 0 1 5 5v5',
+  forward: 'M15 14l5-5-5-5M20 9H9a5 5 0 0 0-5 5v5',
   more: 'M12 6h.01M12 12h.01M12 18h.01',
   close: 'M18 6L6 18M6 6l12 12',
   download: 'M12 4v12M7 11l5 5 5-5M5 20h14',

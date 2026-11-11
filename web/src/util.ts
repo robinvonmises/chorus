@@ -4,6 +4,7 @@ export const NETWORKS: Record<Network, { name: string; short: string; color: str
   telegram: { name: 'Telegram', short: 'T', color: 'var(--net-telegram)' },
   signal: { name: 'Signal', short: 'S', color: 'var(--net-signal)' },
   whatsapp: { name: 'WhatsApp', short: 'W', color: 'var(--net-whatsapp)' },
+  email: { name: 'E-Mail', short: '@', color: 'var(--net-email)' },
   demo: { name: 'Demo', short: 'D', color: 'var(--net-demo)' },
 };
 

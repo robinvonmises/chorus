@@ -5,18 +5,17 @@ import { NETWORKS, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 
-export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onReload, onChats, onOpenMessage, onGallery }: {
+export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
   chats: Chat[]; accounts: Account[]; filter: Filter; setFilter: (f: Filter) => void; active: string | null;
   onOpen: (id: string) => void; onAdd: () => void; onSettings: () => void; onNew: () => void; online: boolean; problems: Account[];
-  onFixAccount: () => void; previewOf: (m: Message) => string; onReload: () => Promise<void>; onChats: (cs: Chat[]) => void;
+  onFixAccount: () => void; previewOf: (m: Message) => string; onChats: (cs: Chat[]) => void; onRemove: (ids: string[]) => Promise<string>;
 }) {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Set<string> | null>(null);
   const [toast, setToast] = useState('');
   const nets = [...new Set(accounts.map((a) => a.network))];
   const archivedCount = useMemo(() => chats.filter((c) => c.archived && c.lastTs > 0).length, [chats]);
-  const archivedUnread = useMemo(() => chats.filter((c) => c.archived && c.unread > 0 && !c.muted).length, [chats]);
 
   // Zusammengeführte Kontakte: nur eine Zeile pro Person (der zuletzt aktive Chat), Ungelesene zusammengezählt
   const groups = useMemo(() => {
@@ -24,21 +23,40 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     for (const c of chats) if (c.link) g.set(c.link, [...(g.get(c.link) ?? []), c]);
     return g;
   }, [chats]);
+  // E-Mail: ein Kontakt pro Absender, darin die einzelnen Betreffe
+  const [sender, setSender] = useState<string | null>(null);
+  const mailKey = (c: Chat) => (c.peer ? `${c.accountId}|${c.peer.id}` : null);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const seen = new Set<string>();
-    return chats.filter((c) =>
+    if (sender && !s) return chats.filter((c) => mailKey(c) === sender && (c.lastTs > 0 || c.id === active));
+    const list = chats.filter((c) =>
       (c.lastTs > 0 || c.id === active || !!s) &&
       (s ? true : filter.archived ? !!c.archived : !c.archived) &&
       (!filter.unread || c.unread > 0) &&
       (!filter.nets.length || filter.nets.includes(c.network)) &&
-      (!s || c.title.toLowerCase().includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)))
+      (!s || c.title.toLowerCase().includes(s) || (c.peer?.name ?? '').toLowerCase().includes(s) || (c.peer?.id ?? '').includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)))
       .filter((c) => { if (!c.link || (groups.get(c.link)?.length ?? 0) < 2) return true; if (seen.has(c.link)) return false; seen.add(c.link); return true; })
       .map((c) => {
         const g = c.link ? groups.get(c.link) : undefined;
         return g && g.length > 1 ? { ...c, unread: g.reduce((n, x) => n + x.unread, 0), linkedNets: [...new Set(g.map((x) => x.network))] } : c;
       });
-  }, [chats, filter, q, active, groups]);
+    if (s) return list;
+    // Mehrere Betreffe eines Absenders: eine Zeile mit dem Namen, Vorschau = neuester Betreff
+    const mail = new Map<string, Chat[]>();
+    for (const c of list) { const k = mailKey(c); if (k) mail.set(k, [...(mail.get(k) ?? []), c]); }
+    const done = new Set<string>();
+    return list.flatMap((c): (Chat & { mailGroup?: string; groupIds?: string[] })[] => {
+      const k = mailKey(c);
+      if (!k) return [c];
+      if (done.has(k)) return [];
+      done.add(k);
+      const g = mail.get(k)!;
+      return [{ ...c, title: c.peer!.name, lastText: `${c.title}: ${c.lastText}`, unread: g.reduce((n, x) => n + x.unread, 0), mailGroup: g.length > 1 ? k : undefined, groupIds: g.map((x) => x.id) }];
+    });
+  }, [chats, filter, q, active, groups, sender]); // eslint-disable-line react-hooks/exhaustive-deps
+  const senderName = sender ? chats.find((c) => mailKey(c) === sender)?.peer?.name ?? '' : '';
+  useEffect(() => { if (sender && !shown.length && !q) setSender(null); }, [sender, shown.length, q]);
 
   // Nachrichten durchsuchen (ab 2 Zeichen) und KI-Suche
   const [hits, setHits] = useState<Message[]>([]);
@@ -64,59 +82,52 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const toggleNet = (n: Network) => setFilter({ ...filter, nets: filter.nets.includes(n) ? filter.nets.filter((x) => x !== n) : [...filter.nets, n] });
 
   // Aktionen für eine oder mehrere Chats
-  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin') => {
+  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin' | 'delete'): Promise<boolean | void> => {
+    if (what === 'delete') {
+      const mail = ids.every((id) => chats.find((c) => c.id === id)?.network === 'email');
+      const n = ids.length;
+      if (!confirm(mail ? (n > 1 ? `${n} E-Mail-Unterhaltungen in den Papierkorb verschieben?` : 'Diese E-Mail-Unterhaltung in den Papierkorb verschieben?')
+        : (n > 1 ? `${n} Chats löschen?` : 'Chat löschen?') + ' Er verschwindet aus Chorus, auf dem Handy bleibt er erhalten.')) return false;
+      setSel(null);
+      // Sofort weg, der Rest läuft im Hintergrund; bei Fehler kommt der Chat zurück
+      void onRemove(ids).then((err) => flash(err || (n > 1 ? `${n} gelöscht` : 'Gelöscht')));
+      return true;
+    }
     const out: Chat[] = [];
+    let err = '';
     await Promise.all(ids.map(async (id) => {
       try {
         if (what === 'read') { await api.markRead(id); const c = chats.find((x) => x.id === id); if (c) out.push({ ...c, unread: 0 }); }
         else if (what === 'unread') out.push(await api.markUnread(id));
         else out.push(await api.patchChat(id, what === 'archive' || what === 'unarchive' ? { archived: what === 'archive' } : what === 'mute' || what === 'unmute' ? { muted: what === 'mute' } : { pinned: what === 'pin' }));
-      } catch { /* einzelne Fehler ignorieren */ }
+      } catch (e: any) { err = e?.message ?? 'Fehler'; }
     }));
     onChats(out);
+    if (err) { flash(err); return; }
     if (what === 'archive') flash(ids.length > 1 ? `${ids.length} Chats archiviert` : 'Archiviert');
     if (what === 'unarchive') flash(ids.length > 1 ? `${ids.length} Chats zurückgeholt` : 'Aus dem Archiv geholt');
   };
 
-  const selIds = sel ? [...sel] : [];
-  const selChats = chats.filter((c) => sel?.has(c.id));
+  // Ausgewählte Absender-Zeilen stehen für alle ihre Betreffe
+  const rowInfo = new Map(shown.map((c) => [c.id, c as Chat & { mailGroup?: string; groupIds?: string[] }]));
+  const selIds = sel ? [...new Set([...sel].flatMap((id) => rowInfo.get(id)?.groupIds ?? [id]))] : [];
+  const selChats = chats.filter((c) => selIds.includes(c.id));
+  const senderIds = sender && !q ? shown.map((c) => c.id) : [];
   const allSel = !!sel && shown.length > 0 && shown.every((c) => sel.has(c.id));
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s ?? []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const done = () => setSel(null);
   // Feste Funktionen für die Zeilen: so wird nur die Zeile neu gezeichnet, in der sich etwas ändert
-  const live = useRef({ act, sel, onOpen });
-  live.current = { act, sel, onOpen };
-  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => { void live.current.act([id], what); }, []);
-  const rowClick = useCallback((id: string) => { if (live.current.sel) toggleSel(id); else live.current.onOpen(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const live = useRef({ act, sel, onOpen, rowInfo });
+  live.current = { act, sel, onOpen, rowInfo };
+  // Absender-Zeile: Aktionen gelten für alle Betreffe
+  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete') => live.current.act(live.current.rowInfo.get(id)?.groupIds ?? [id], what), []);
+  const rowClick = useCallback((id: string) => {
+    const g = live.current.rowInfo.get(id)?.mailGroup;
+    if (live.current.sel) toggleSel(id); else if (g) setSender(g); else live.current.onOpen(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rowLong = useCallback((id: string) => { if (!live.current.sel) setSel(new Set([id])); }, []);
 
-  // Ziehen zum Aktualisieren
   const listRef = useRef<HTMLUListElement>(null);
-  const [pull, setPull] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  // Archiv-Zeile erscheint erst nach dem Herunterziehen und verschwindet beim Weiterscrollen wieder
-  const [showArchive, setShowArchive] = useState(false);
-  const pullStart = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => { if ((listRef.current?.scrollTop ?? 1) <= 0 && !refreshing) pullStart.current = e.touches[0].clientY; };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (pullStart.current === null) return;
-    const d = e.touches[0].clientY - pullStart.current;
-    // Finger geht nach oben oder Liste ist schon gescrollt: Geste gehört dem normalen Scrollen
-    if (d < 0 || (listRef.current?.scrollTop ?? 0) > 0) { pullStart.current = null; setPull(0); return; }
-    if (d < 12) return;
-    setPull(Math.min(110, (d - 12) * 0.5));
-  };
-  const onTouchEnd = async () => {
-    if (pullStart.current === null) return;
-    pullStart.current = null;
-    if (pull >= 40) setShowArchive(true);
-    if (pull >= 64) {
-      setRefreshing(true); setPull(56);
-      await onReload().catch(() => {});
-      setRefreshing(false);
-    }
-    setPull(0);
-  };
 
   return (
     <section className="pane-list">
@@ -128,15 +139,20 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
         </header>
       ) : (
         <header className="list-head">
-          {filter.archived ? (
+          {sender && !q ? (
+            <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'archive')} title="Alle archivieren" aria-label="Alle archivieren"><Icon name="archive" /></button>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'delete')} title="Alle löschen" aria-label="Alle löschen"><Icon name="trash" /></button></>
+          ) : filter.archived ? (
             <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label="Zurück"><Icon name="back" /></button><h1>Archiv</h1></>
           ) : <h1>Chats</h1>}
-          <div className="row">
+          {!(sender && !q) && <div className="row">
             <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
+            {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={`Archiv (${archivedCount})`} aria-label="Archiv"><Icon name="archive" /></button>}
             <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
             <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
-          </div>
+          </div>}
         </header>
       )}
       <div className="search">
@@ -160,22 +176,8 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           <span><b>{NETWORKS[a.network].name}</b>: {a.status.state === 'qr' || a.status.state === 'need_input' ? 'Anmeldung nicht abgeschlossen' : a.status.message || 'nicht verbunden'}. Tippen zum Beheben.</span>
         </button>
       ))}
-      <div className="pull" style={{ height: pull, opacity: Math.min(1, pull / 56) }} aria-hidden={!pull}>
-        <span className={`pull-spin ${refreshing ? 'on' : ''}`} style={{ transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}><Icon name="refresh" size={20} /></span>
-      </div>
-      <ul className="chats" ref={listRef} onScroll={(e) => { if (showArchive && e.currentTarget.scrollTop > 90) setShowArchive(false); }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{ transition: pull ? 'none' : undefined }}>
-        {!filter.archived && !q && archivedCount > 0 && showArchive && (
-          <li>
-            <button className="chat-item archive-row reveal" onClick={() => setFilter({ ...filter, archived: true })}>
-              <span className="avatar archive-icon" style={{ width: 48, height: 48 }}><Icon name="archive" /></span>
-              <span className="chat-main"><span className="chat-top"><span className="chat-title">Archiv</span></span>
-                <span className="chat-bottom"><span className="chat-preview">{archivedCount} {archivedCount === 1 ? 'Chat' : 'Chats'}</span>
-                  {archivedUnread > 0 && <span className="badge muted">{archivedUnread}</span>}</span></span>
-            </button>
-          </li>
-        )}
-        {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
+      <ul className="chats" ref={listRef}>
+        {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active || (!!active && !!(c as { groupIds?: string[] }).groupIds?.includes(active))} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
         {q.trim().length >= 2 && (
           <li className="search-results">
             {q.trim().length >= 3 && (
@@ -213,12 +215,13 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             const allArchived = selChats.length > 0 && selChats.every((c) => c.archived);
             const allMuted = selChats.length > 0 && selChats.every((c) => c.muted);
             const allPinned = selChats.length > 0 && selChats.every((c) => c.pinned);
-            const run = async (w: Parameters<typeof act>[1]) => { await act(selIds, w); done(); };
+            const run = async (w: Parameters<typeof act>[1]) => { if ((await act(selIds, w)) !== false) done(); };
             return <>
               <button disabled={dis} onClick={() => run(anyUnread ? 'read' : 'unread')}><Icon name={anyUnread ? 'checks' : 'dot'} size={20} />{anyUnread ? 'Gelesen' : 'Ungelesen'}</button>
               <button disabled={dis} onClick={() => run(allArchived ? 'unarchive' : 'archive')}><Icon name="archive" size={20} />{allArchived ? 'Zurückholen' : 'Archivieren'}</button>
               <button disabled={dis} onClick={() => run(allMuted ? 'unmute' : 'mute')}><Icon name={allMuted ? 'bell' : 'belloff'} size={20} />{allMuted ? 'Ton an' : 'Stumm'}</button>
               <button disabled={dis} onClick={() => run(allPinned ? 'unpin' : 'pin')}><Icon name="pin" size={20} />{allPinned ? 'Lösen' : 'Anheften'}</button>
+              {selChats.length > 0 && <button onClick={() => run('delete')}><Icon name="trash" size={20} />Löschen</button>}
             </>;
           })()}
         </div>
@@ -249,13 +252,14 @@ function HitRow({ m, chat, q, onOpen }: { m: Message; chat?: Chat; q?: string; o
 
 const ChatListItem = memo(function ChatListItem({ c, active, selecting, selected, onAct, onClick, onLong }: {
   c: Chat & { linkedNets?: Network[] }; active: boolean; selecting: boolean; selected: boolean;
-  onAct: (id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => void; onClick: (id: string) => void; onLong: (id: string) => void;
+  onAct: (id: string, what: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete') => Promise<boolean | void>; onClick: (id: string) => void; onLong: (id: string) => void;
 }) {
   return (
     <li>
       <SwipeRow disabled={selecting}
-        left={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}
-        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}>
+        left={{ icon: 'trash', label: 'Löschen', color: 'var(--danger)', run: () => onAct(c.id, 'delete') }}
+        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}
+        far={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}>
         <ChatRow c={c} active={active} selecting={selecting} selected={selected} onClick={() => onClick(c.id)} onLong={() => onLong(c.id)} />
       </SwipeRow>
     </li>
@@ -275,7 +279,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       onClick={() => { if (longFired.current) { longFired.current = false; return; } onClick(); }}
       onTouchStart={start} onTouchEnd={cancel} onTouchMove={cancel} onContextMenu={(e) => { e.preventDefault(); onLong(); }}>
       {selecting && <span className={`sel-check ${selected ? 'on' : ''}`}>{selected && <Icon name="check" size={14} />}</span>}
-      <Avatar name={c.title} src={c.avatar} />
+      <Avatar name={c.peer?.name ?? c.title} src={c.avatar} />
       <span className="chat-main">
         <span className="chat-top">
           <span className="chat-title">{c.title}</span>
@@ -293,30 +297,37 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
   );
 }
 
-type SwipeAction = { icon: string; label: string; color: string; run: () => void };
+type SwipeAction = { icon: string; label: string; color: string; run: () => unknown };
 
-/** Zeile zum Wischen: nach links archivieren, nach rechts gelesen/ungelesen */
-function SwipeRow({ children, left, right, disabled }: { children: React.ReactNode; left: SwipeAction; right: SwipeAction; disabled?: boolean }) {
+/** Zeile zum Wischen: nach links löschen, nach rechts archivieren, weit nach rechts gelesen/ungelesen */
+function SwipeRow({ children, left, right, far, disabled }: { children: React.ReactNode; left: SwipeAction; right: SwipeAction; far: SwipeAction; disabled?: boolean }) {
   const [dx, setDx] = useState(0);
   const [anim, setAnim] = useState(false);
   const s = useRef<{ x: number; y: number; dir: 0 | 1 | 2 } | null>(null); // dir: 0 offen, 1 waagrecht, 2 senkrecht
   const W = 84;
+  const FAR = Math.max(170, Math.round(window.innerWidth * 0.5));
   const onStart = (e: React.TouchEvent) => { if (disabled) return; const t = e.touches[0]; s.current = { x: t.clientX, y: t.clientY, dir: 0 }; setAnim(false); };
   const onMove = (e: React.TouchEvent) => {
     const st = s.current; if (!st) return;
     const t = e.touches[0]; const ddx = t.clientX - st.x, ddy = t.clientY - st.y;
     if (st.dir === 0) { if (Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy) * 1.3) st.dir = 1; else if (Math.abs(ddy) > 10) st.dir = 2; }
     if (st.dir !== 1) return;
-    setDx(Math.max(-220, Math.min(220, ddx)));
+    setDx(Math.max(-220, Math.min(FAR + 60, ddx)));
+  };
+  // Zeile hinausschieben, dann Aktion; bei Abbruch (z.B. Rückfrage verneint) zurück
+  const out = (to: number, run: () => unknown) => {
+    setDx(to);
+    setTimeout(async () => { const r = await run(); setAnim(r === false); setDx(0); }, 220);
   };
   const onEnd = () => {
     const st = s.current; s.current = null; setAnim(true);
     if (!st || st.dir !== 1) { setDx(0); return; }
-    if (dx < -W) { setDx(-window.innerWidth); setTimeout(() => { right.run(); setAnim(false); setDx(0); }, 220); }
-    else if (dx > W) { left.run(); setDx(0); }
+    if (dx < -W) out(-window.innerWidth, left.run);
+    else if (dx > FAR) { far.run(); setDx(0); }
+    else if (dx > W) out(window.innerWidth, right.run);
     else setDx(0);
   };
-  const act = dx < 0 ? right : left;
+  const act = dx < 0 ? left : dx > FAR ? far : right;
   const armed = Math.abs(dx) > W;
   return (
     <div className="swipe">
