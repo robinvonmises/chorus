@@ -16,7 +16,6 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const [toast, setToast] = useState('');
   const nets = [...new Set(accounts.map((a) => a.network))];
   const archivedCount = useMemo(() => chats.filter((c) => c.archived && c.lastTs > 0).length, [chats]);
-  const archivedUnread = useMemo(() => chats.filter((c) => c.archived && c.unread > 0 && !c.muted).length, [chats]);
 
   // Zusammengeführte Kontakte: nur eine Zeile pro Person (der zuletzt aktive Chat), Ungelesene zusammengezählt
   const groups = useMemo(() => {
@@ -129,8 +128,6 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const listRef = useRef<HTMLUListElement>(null);
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  // Archiv-Zeile erscheint erst nach dem Herunterziehen und verschwindet beim Weiterscrollen wieder
-  const [showArchive, setShowArchive] = useState(false);
   const pullStart = useRef<number | null>(null);
   const onTouchStart = (e: React.TouchEvent) => { if ((listRef.current?.scrollTop ?? 1) <= 0 && !refreshing) pullStart.current = e.touches[0].clientY; };
   const onTouchMove = (e: React.TouchEvent) => {
@@ -144,7 +141,6 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const onTouchEnd = async () => {
     if (pullStart.current === null) return;
     pullStart.current = null;
-    if (pull >= 40) setShowArchive(true);
     if (pull >= 64) {
       setRefreshing(true); setPull(56);
       await onReload().catch(() => {});
@@ -173,6 +169,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           {!(sender && !q) && <div className="row">
             <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
+            {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={`Archiv (${archivedCount})`} aria-label="Archiv"><Icon name="archive" /></button>}
             <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
             <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
           </div>}
@@ -202,18 +199,8 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
       <div className="pull" style={{ height: pull, opacity: Math.min(1, pull / 56) }} aria-hidden={!pull}>
         <span className={`pull-spin ${refreshing ? 'on' : ''}`} style={{ transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}><Icon name="refresh" size={20} /></span>
       </div>
-      <ul className="chats" ref={listRef} onScroll={(e) => { if (showArchive && e.currentTarget.scrollTop > 90) setShowArchive(false); }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+      <ul className="chats" ref={listRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{ transition: pull ? 'none' : undefined }}>
-        {!filter.archived && !q && !sender && archivedCount > 0 && showArchive && (
-          <li>
-            <button className="chat-item archive-row reveal" onClick={() => setFilter({ ...filter, archived: true })}>
-              <span className="avatar archive-icon" style={{ width: 48, height: 48 }}><Icon name="archive" /></span>
-              <span className="chat-main"><span className="chat-top"><span className="chat-title">Archiv</span></span>
-                <span className="chat-bottom"><span className="chat-preview">{archivedCount} {archivedCount === 1 ? 'Chat' : 'Chats'}</span>
-                  {archivedUnread > 0 && <span className="badge muted">{archivedUnread}</span>}</span></span>
-            </button>
-          </li>
-        )}
         {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active || (!!active && !!(c as { groupIds?: string[] }).groupIds?.includes(active))} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
         {q.trim().length >= 2 && (
           <li className="search-results">
