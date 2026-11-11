@@ -268,7 +268,9 @@ export class SignalAdapter implements Adapter {
   async resolvePhone(phone: string) {
     const r = await this.call<{ number: string; uuid?: string; isRegistered: boolean }[]>('getUserStatus', { recipient: [phone] }).catch(() => null);
     if (r && r[0] && r[0].isRegistered === false) throw new Error('Diese Nummer ist nicht bei Signal registriert.');
-    return { remoteId: phone, title: phone };
+    // Signal adressiert Kontakte über die UUID; mit der Nummer entstünde ein zweiter Chat neben dem des Kontakts
+    const id = r?.[0]?.uuid || phone;
+    return { remoteId: id, title: this.names.get(id) ?? phone };
   }
 
   private target(chat: string): Record<string, unknown> {
@@ -383,7 +385,12 @@ export class SignalAdapter implements Adapter {
     return out;
   }
 
-  async resync() { await this.call('sendSyncRequest').catch(() => {}); await this.loadDirectory(); }
+  async resync() {
+    await this.call('sendSyncRequest').catch(() => {});
+    await this.loadDirectory();
+    // Die Kontaktliste vom Hauptgerät kommt erst ein paar Sekunden nach der Anfrage an
+    setTimeout(() => { if (!this.stopped) this.loadDirectory().catch(() => {}); }, 15_000);
+  }
 
   async logout() {
     await this.call('unregister', {}).catch(() => {}); // entfernt nur dieses gekoppelte Gerät

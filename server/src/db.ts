@@ -134,6 +134,12 @@ export class Store {
   listChats(): Chat[] {
     return this.db.prepare('SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id ORDER BY c.pinned DESC, c.last_ts DESC LIMIT 1000').all().map((r) => this.rowToChat(r));
   }
+  /** Chats/Kontakte nach Name, Alias oder Nummer suchen – auch solche ohne Nachrichten, die in listChats() wegen des Limits fehlen können */
+  searchChats(q: string, limit = 100): Chat[] {
+    const like = '%' + q.replace(/[\\%_]/g, (m) => '\\' + m) + '%';
+    return this.db.prepare(`SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id
+      WHERE c.title LIKE ? ESCAPE '\\' OR c.alias LIKE ? ESCAPE '\\' OR c.remote_id LIKE ? ESCAPE '\\' ORDER BY c.last_ts DESC LIMIT ?`).all(like, like, like, limit).map((r) => this.rowToChat(r));
+  }
   updateChat(id: string, patch: Partial<Pick<Chat, 'pinned' | 'muted' | 'unread' | 'archived' | 'alias' | 'note'>> & { aiEnabled?: boolean }) {
     const cols: Record<string, string> = { pinned: 'pinned', muted: 'muted', unread: 'unread', aiEnabled: 'ai_enabled', archived: 'archived', alias: 'alias', note: 'note' };
     for (const [k, v] of Object.entries(patch)) {

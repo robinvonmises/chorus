@@ -197,6 +197,7 @@ export const api = {
   forward: (msgId: string, chatIds: string[]) => req<{ ok: boolean; count: number }>('POST', `/api/messages/${enc(msgId)}/forward`, { chatIds }),
   edit: (msgId: string, text: string) => req('PATCH', `/api/messages/${enc(msgId)}`, { text }),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
+  searchChats: (q: string) => req<Chat[]>('GET', `/api/chats/search?q=${encodeURIComponent(q)}`),
   startChat: (accountId: string, phone: string) => req<Chat>('POST', `/api/accounts/${accountId}/start-chat`, { phone }),
   search: (q: string, chats?: string[]) => req<Message[]>('GET', `/api/search?q=${encodeURIComponent(q)}${chats ? `&chats=${chats.map(enc).join(',')}` : ''}`),
 
