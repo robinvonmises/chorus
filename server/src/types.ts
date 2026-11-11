@@ -130,6 +130,8 @@ export interface Message {
   /** Sprache des Nachrichtentexts (deutscher Name), wenn translation eine Übersetzung ins Deutsche ist.
    *  Bei eigenen, übersetzt gesendeten Nachrichten leer: dann ist translation das deutsche Original. */
   translationFrom?: string | null;
+  /** Nur live bei fehlgeschlagenem Senden: Grund (wird nicht gespeichert) */
+  error?: string;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

@@ -275,6 +275,7 @@ export class Store {
     this.db.prepare('UPDATE messages SET id=?, remote_id=? WHERE id=?').run(newId, newRemoteId, oldId);
     return this.getMessage(newId);
   }
+  removeMessage(id: string) { this.db.prepare('DELETE FROM messages WHERE id=?').run(id); }
   patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
     const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
