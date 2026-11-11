@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useExit } from './useExit';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { syncPush } from './push';
 import { setPlanned, usePlanned } from './plannedState';
 import { Gallery } from './components/Gallery';
@@ -130,7 +129,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const prefetch = useCallback(async (id: string) => {
     if (loaded.current.has(id)) return;
     loaded.current.add(id);
-    try { const ms = await api.messages(id); setMessages((m) => (m.has(id) ? m : new Map(m).set(id, ms))); warmImages(ms); }
+    try { const ms = await api.messages(id); setMessages((m) => (m.has(id) ? m : new Map(m).set(id, ms))); if (loaded.current.size <= 8) warmImages(ms); }
     catch { loaded.current.delete(id); }
   }, []);
 
@@ -321,10 +320,10 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   ) : null;
   const lastChatView = useRef<ReactNode>(null);
   if (chatView) lastChatView.current = chatView;
-  const exit = useExit(!!chat, 400);
-  const leaving = exit.closing && window.matchMedia('(max-width: 860px)').matches ? lastChatView.current : null;
+  const nav = useNavSlide(!!chat);
+  const leaving = nav === 'leave' ? lastChatView.current : null;
   return (
-    <div className={`app ${chat ? 'has-chat' : ''} ${leaving ? 'chat-leaving' : ''} ${playing ? 'with-player' : ''}`}>
+    <div className={`app ${chat ? 'has-chat' : ''} ${nav ? `nav-${nav}` : ''} ${playing ? 'with-player' : ''}`}>
       <PlayerBar chatTitle={(id) => chats.get(id)?.title ?? ''} onOpen={openChat} />
       <Rail filter={filter} setFilter={setFilter} accounts={accounts} chats={sortedChats} onSettings={() => setPanel('settings')} />
       <ChatList
@@ -365,4 +364,40 @@ function notify(chat: Chat, m: Message) {
   const body = chat.kind === 'direct' ? previewOf(m) : `${m.senderName}: ${previewOf(m)}`;
   navigator.serviceWorker?.ready.then((reg) => reg.showNotification(chat.title, { body, tag: chat.id, data: { chatId: chat.id }, icon: '/icon-192.png' }))
     .catch(() => new Notification(chat.title, { body, tag: chat.id }));
+}
+
+/** Handy: Chat gleitet wie bei iOS von rechts herein bzw. hinaus, die Liste weicht ein Stück nach links aus.
+ *  Die Bewegung startet erst, wenn der Chat einmal fertig gezeichnet ist: Safari zählt die Animationszeit
+ *  sonst schon während des Aufbaus mit, und der Chat steht beim ersten Bild bereits am Ziel.
+ *  Nach dem Ende bleibt nichts verschoben oder als eigene Ebene zurück (Safari hält das schlecht aus). */
+function useNavSlide(open: boolean): 'enter' | 'leave' | null {
+  const [nav, setNav] = useState<'enter' | 'leave' | null>(null);
+  const prev = useRef(open);
+  const anims = useRef<Animation[]>([]);
+  useLayoutEffect(() => {
+    if (open === prev.current) return;
+    prev.current = open;
+    anims.current.forEach((a) => a.cancel()); anims.current = [];
+    const narrow = window.matchMedia('(max-width: 860px)').matches;
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    setNav(narrow && !reduce && typeof Element.prototype.animate === 'function' ? (open ? 'enter' : 'leave') : null);
+  }, [open]);
+  useEffect(() => {
+    if (!nav) return;
+    let r2 = 0;
+    const r1 = requestAnimationFrame(() => { r2 = requestAnimationFrame(() => {
+      const chat = document.querySelector<HTMLElement>('.pane-chat'), list = document.querySelector<HTMLElement>('.pane-list');
+      if (!chat || !list) { setNav(null); return; }
+      const enter = nav === 'enter';
+      const o: KeyframeAnimationOptions = { duration: enter ? 500 : 400, easing: 'cubic-bezier(.32, .72, 0, 1)', fill: 'forwards' };
+      const a = chat.animate(enter ? [{ transform: 'translateX(100%)' }, { transform: 'translateX(0)' }] : [{ transform: 'translateX(0)' }, { transform: 'translateX(100%)' }], o);
+      const b = list.animate(enter ? [{ transform: 'translateX(0)' }, { transform: 'translateX(-30%)' }] : [{ transform: 'translateX(-30%)' }, { transform: 'translateX(0)' }], o);
+      anims.current = [a, b];
+      a.onfinish = () => setNav((n) => (n === nav ? null : n));
+    }); });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [nav]);
+  // Erst nachdem die Übergangs-Klassen weg sind, die Animationen entfernen: so springt nichts zurück
+  useLayoutEffect(() => { if (!nav) { anims.current.forEach((a) => a.cancel()); anims.current = []; } }, [nav]);
+  return nav;
 }
