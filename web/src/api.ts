@@ -209,26 +209,6 @@ export const api = {
 
 export const enc = encodeURIComponent;
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
-/** Kleine Vorschau (Foto oder Video-Standbild) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */
-export const thumbUrl = (m: Message, i: number) => {
-  const a = m.attachments[i];
-  if (!a || a.kind === 'sticker' || /gif/i.test(a.mime)) return attachmentUrl(m, i);
-  return `${attachmentUrl(m, i)}&thumb=1`;
-};
-/** Fotos der letzten Nachrichten im Hintergrund vorladen, damit sie beim Öffnen des Chats schon da sind */
-export function warmImages(ms: Message[], max = 3) {
-  let n = 0;
-  for (let k = ms.length - 1; k >= 0 && n < max; k--) {
-    const m = ms[k];
-    if (m.status === 'pending') continue;
-    m.attachments.forEach((a, i) => {
-      if (n >= max || !(a.kind === 'image' || a.kind === 'video' || (a.kind === 'file' && /^image\//i.test(a.mime)))) return;
-      n++;
-      // Nur in den Speicher des Service Workers holen, nicht entpacken (spart Arbeitsspeicher)
-      fetch(thumbUrl(m, i), { credentials: 'same-origin', priority: 'low' } as RequestInit).catch(() => {});
-    });
-  }
-}
 
 /** WebSocket mit automatischem Wiederverbinden */
 export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online: boolean) => void, onUnauthorized: () => void, onReconnect?: () => void) {
