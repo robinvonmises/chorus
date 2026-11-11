@@ -48,14 +48,16 @@ function Row({ tile, title, sub, value, onClick, chevron = true, danger }: {
   );
 }
 
-export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfileChanged }: {
-  server: ServerState; accounts: Account[]; onClose: () => void; onAdd: () => void; onLocked: () => void; onProfileChanged: () => void;
+export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfileChanged, onReload }: {
+  server: ServerState; accounts: Account[]; onClose: () => void; onAdd: () => void; onLocked: () => void; onProfileChanged: () => void; onReload: () => Promise<void>;
 }) {
   const me = server.profile!;
   const [comfort, setComfort] = useState(me.comfort);
   const pid = me.id;
   const [pw, setPw] = useState({ a: '', b: '', msg: '' });
   const [page, setPage] = useState<Page | null>(null);
+  const [sync, setSync] = useState<'' | 'läuft …' | 'Fertig' | 'Fehlgeschlagen'>('');
+  const runSync = async () => { if (sync === 'läuft …') return; setSync('läuft …'); try { await onReload(); setSync('Fertig'); } catch { setSync('Fehlgeschlagen'); } };
   const [last, setLast] = useState<Page | null>(null);
   const anim = useExit(!!page, 320);
   const shown = page ?? last;
@@ -165,6 +167,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
                   value={<span className={`state ${a.status.state}`}>{STATE_TEXT[a.status.state]}</span>} onClick={() => go(`acc:${a.id}`)} />
               ))}
               <Row tile={<Tile color="#34c759" icon="plus" />} title="Messenger hinzufügen" onClick={onAdd} />
+              <Row tile={<Tile color="#007aff" icon="refresh" />} title="Jetzt abgleichen" sub="Holt verpasste Nachrichten von allen Messengern" value={sync || undefined} chevron={false} onClick={() => void runSync()} />
             </div>
 
             <div className="ios-card">

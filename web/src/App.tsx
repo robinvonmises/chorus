@@ -320,7 +320,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       <ChatList
         chats={sortedChats} accounts={accounts} filter={filter} setFilter={setFilter} active={active} onOpen={openChat}
         onAdd={() => setPanel('add')} onSettings={() => setPanel('settings')} onNew={() => setPanel('new')} online={online} problems={problems}
-        onFixAccount={() => setPanel('settings')} previewOf={previewOf} onReload={reload}
+        onFixAccount={() => setPanel('settings')} previewOf={previewOf}
         onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })}
         onOpenMessage={openAt} onGallery={() => setGallery({ title: 'Medien, Dateien & Links' })}
       />
@@ -350,7 +350,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         </button>
       )}
       {gallery && <Gallery chatIds={gallery.ids} title={gallery.title} chats={chats} onClose={() => setGallery(null)} onOpen={(m) => void openAt(m)} />}
-      {panel === 'settings' && <Settings server={server} accounts={accounts} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} />}
+      {panel === 'settings' && <Settings server={server} accounts={accounts} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} onReload={reload} />}
     </div>
   );
 }
