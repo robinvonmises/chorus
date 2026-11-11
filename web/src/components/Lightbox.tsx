@@ -164,6 +164,10 @@ export function Lightbox() {
       onWheel={(e) => { if (item.video) return; const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
+        <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
+      </div>
+      {/* Aktionen unten, in Daumenreichweite */}
+      <div className="lightbox-actions" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         {(() => {
           const ref = item.ref, att = ref?.m.attachments[ref.i];
           const ts = ref && att ? targetsFor(storage, att) : [];
@@ -176,7 +180,6 @@ export function Lightbox() {
           ? sh.can && <button className="icon-btn" disabled={!sh.ready} title="Teilen / Sichern" aria-label="Teilen / Sichern"
               onClick={async () => { try { if (!(await sh.share())) flashNote('Teilen ist hier nicht möglich'); } catch (e: any) { flashNote(e?.message ?? 'Teilen fehlgeschlagen'); } }}><Icon name="share" /></button>
           : <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>}
-        <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
       {[-1, 0, 1].map((off) => {
         const it = open!.list[open!.idx + off];
