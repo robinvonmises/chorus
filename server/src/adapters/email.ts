@@ -288,6 +288,73 @@ export class EmailAdapter implements Adapter {
     return a.content;
   }
 
+  // ---------- Archivieren / Löschen ----------
+  /** Ordner mit Sonderfunktion finden (\\Archive, \\Trash), sonst übliche Namen; Archiv wird bei Bedarf angelegt */
+  private async folder(kind: 'archive' | 'trash'): Promise<string | null> {
+    const c = this.imap!;
+    const boxes = await c.list();
+    const use = kind === 'archive' ? ['\\Archive', '\\All'] : ['\\Trash'];
+    const re = kind === 'archive' ? /^(archive|archiv|all mail|alle nachrichten)$/i : /^(trash|papierkorb|gelöschte.*|deleted.*|bin)$/i;
+    const f = (boxes.find((b) => b.specialUse === use[0]) ?? boxes.find((b) => use.includes(b.specialUse ?? '')))?.path ?? boxes.find((b) => re.test(b.name))?.path;
+    if (f || kind === 'trash') return f ?? null;
+    await c.mailboxCreate('Archive');
+    return 'Archive';
+  }
+
+  /** UIDs der Mails dieses Chats in einem Ordner (Absender bzw. Empfänger + Betreff) */
+  private async uidsIn(path: string, chatRemote: string): Promise<number[]> {
+    const c = this.imap!;
+    const peer = chatRemote.split('|')[0];
+    const key = chatRemote.split('|')[1];
+    const sent = path === this.sentPath;
+    const found = (await c.search(sent ? { to: peer } : { from: peer }, { uid: true })) || [];
+    if (!found.length) return [];
+    const out: number[] = [];
+    for await (const m of c.fetch(found.join(','), { uid: true, envelope: true }, { uid: true })) {
+      if (h(lc(normSubject(m.envelope?.subject) || '(kein Betreff)'), 10) === key) out.push(m.uid);
+    }
+    return out;
+  }
+
+  private async moveThread(chatRemote: string, from: string[], to: string | null) {
+    const c = this.imap; if (!c) throw new Error('E-Mail ist nicht verbunden');
+    for (const path of from) {
+      if (!path || path === to) continue;
+      const lock = await c.getMailboxLock(path).catch(() => null);
+      if (!lock) continue;
+      try {
+        const uids = await this.uidsIn(path, chatRemote);
+        if (!uids.length) continue;
+        if (to) await c.messageMove(uids.join(','), to, { uid: true });
+        else await c.messageDelete(uids.join(','), { uid: true });
+      } finally { lock.release(); }
+    }
+    const l2 = await c.getMailboxLock('INBOX'); l2.release();
+  }
+
+  archiveChat(chatRemote: string, archived: boolean) {
+    return this.queue(async () => {
+      if (!this.imap) throw new Error('E-Mail ist nicht verbunden');
+      const arch = await this.folder('archive');
+      if (archived) await this.moveThread(chatRemote, ['INBOX'], arch);
+      else if (arch) {
+        await this.moveThread(chatRemote, [arch], 'INBOX');
+      }
+      const t = this.s.threads[chatRemote]; if (t) { t.unseen = []; this.save(); }
+    });
+  }
+
+  deleteChat(chatRemote: string) {
+    return this.queue(async () => {
+      if (!this.imap) throw new Error('E-Mail ist nicht verbunden');
+      const trash = await this.folder('trash');
+      const arch = await this.folder('archive').catch(() => null);
+      await this.moveThread(chatRemote, ['INBOX', arch ?? '', this.sentPath ?? ''], trash);
+      delete this.s.threads[chatRemote];
+      this.save();
+    });
+  }
+
   async react() { throw new Error('Reaktionen gibt es bei E-Mails nicht'); }
   async edit() { throw new Error('Gesendete E-Mails lassen sich nicht bearbeiten'); }
   async delete(_c: string, _r: string, forEveryone: boolean) { if (forEveryone) throw new Error('Gesendete E-Mails lassen sich nicht zurückholen'); }

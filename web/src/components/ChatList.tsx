@@ -83,27 +83,38 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const toggleNet = (n: Network) => setFilter({ ...filter, nets: filter.nets.includes(n) ? filter.nets.filter((x) => x !== n) : [...filter.nets, n] });
 
   // Aktionen für eine oder mehrere Chats
-  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin') => {
+  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin' | 'delete') => {
+    if (what === 'delete') {
+      if (!confirm(ids.length > 1 ? `${ids.length} E-Mail-Unterhaltungen in den Papierkorb verschieben?` : 'Diese E-Mail-Unterhaltung in den Papierkorb verschieben?')) return;
+      let ok = 0; let err = '';
+      for (const id of ids) { try { await api.deleteChat(id); ok++; } catch (e: any) { err = e.message ?? 'Fehler'; } }
+      flash(err ? `Nicht alles gelöscht: ${err}` : ok > 1 ? `${ok} Unterhaltungen gelöscht` : 'Gelöscht');
+      return;
+    }
     const out: Chat[] = [];
+    let err = '';
     await Promise.all(ids.map(async (id) => {
       try {
         if (what === 'read') { await api.markRead(id); const c = chats.find((x) => x.id === id); if (c) out.push({ ...c, unread: 0 }); }
         else if (what === 'unread') out.push(await api.markUnread(id));
         else out.push(await api.patchChat(id, what === 'archive' || what === 'unarchive' ? { archived: what === 'archive' } : what === 'mute' || what === 'unmute' ? { muted: what === 'mute' } : { pinned: what === 'pin' }));
-      } catch { /* einzelne Fehler ignorieren */ }
+      } catch (e: any) { err = e?.message ?? 'Fehler'; }
     }));
     onChats(out);
+    if (err) { flash(err); return; }
     if (what === 'archive') flash(ids.length > 1 ? `${ids.length} Chats archiviert` : 'Archiviert');
     if (what === 'unarchive') flash(ids.length > 1 ? `${ids.length} Chats zurückgeholt` : 'Aus dem Archiv geholt');
   };
 
-  const selIds = sel ? [...sel] : [];
-  const selChats = chats.filter((c) => sel?.has(c.id));
+  // Ausgewählte Absender-Zeilen stehen für alle ihre Betreffe
+  const rowInfo = new Map(shown.map((c) => [c.id, c as Chat & { mailGroup?: string; groupIds?: string[] }]));
+  const selIds = sel ? [...new Set([...sel].flatMap((id) => rowInfo.get(id)?.groupIds ?? [id]))] : [];
+  const selChats = chats.filter((c) => selIds.includes(c.id));
+  const senderIds = sender && !q ? shown.map((c) => c.id) : [];
   const allSel = !!sel && shown.length > 0 && shown.every((c) => sel.has(c.id));
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s ?? []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const done = () => setSel(null);
   // Feste Funktionen für die Zeilen: so wird nur die Zeile neu gezeichnet, in der sich etwas ändert
-  const rowInfo = new Map(shown.map((c) => [c.id, c as Chat & { mailGroup?: string; groupIds?: string[] }]));
   const live = useRef({ act, sel, onOpen, rowInfo });
   live.current = { act, sel, onOpen, rowInfo };
   // Absender-Zeile: Aktionen gelten für alle Betreffe
@@ -153,16 +164,18 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
       ) : (
         <header className="list-head">
           {sender && !q ? (
-            <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1></>
+            <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'archive')} title="Alle archivieren" aria-label="Alle archivieren"><Icon name="archive" /></button>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'delete')} title="Alle löschen" aria-label="Alle löschen"><Icon name="trash" /></button></>
           ) : filter.archived ? (
             <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label="Zurück"><Icon name="back" /></button><h1>Archiv</h1></>
           ) : <h1>Chats</h1>}
-          <div className="row">
+          {!(sender && !q) && <div className="row">
             <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
             <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
             <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
-          </div>
+          </div>}
         </header>
       )}
       <div className="search">
@@ -245,6 +258,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
               <button disabled={dis} onClick={() => run(allArchived ? 'unarchive' : 'archive')}><Icon name="archive" size={20} />{allArchived ? 'Zurückholen' : 'Archivieren'}</button>
               <button disabled={dis} onClick={() => run(allMuted ? 'unmute' : 'mute')}><Icon name={allMuted ? 'bell' : 'belloff'} size={20} />{allMuted ? 'Ton an' : 'Stumm'}</button>
               <button disabled={dis} onClick={() => run(allPinned ? 'unpin' : 'pin')}><Icon name="pin" size={20} />{allPinned ? 'Lösen' : 'Anheften'}</button>
+              {selChats.length > 0 && selChats.every((c) => c.network === 'email') && <button onClick={() => run('delete')}><Icon name="trash" size={20} />Löschen</button>}
             </>;
           })()}
         </div>
