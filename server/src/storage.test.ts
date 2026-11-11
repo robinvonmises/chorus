@@ -61,6 +61,8 @@ test('Immich-Upload und Nextcloud-WebDAV gegen Attrappe', async () => {
       }
       if (req.url === '/api/assets') {
         assert.equal(req.headers['x-api-key'], 'k1');
+        // Attrappe einer älteren Immich-Version: ohne Geräte-Felder 400 wie bei v1/v2
+        if (!/name="deviceAssetId"/.test(body)) { res.writeHead(400, { 'Content-Type': 'application/json' }).end('{"message":["deviceAssetId must be a string"],"error":"Bad Request"}'); return; }
         assert.match(body, /name="deviceAssetId"[\s\S]*chorus-m1:0/);
         assert.match(body, /name="assetData"; filename="bild.jpg"/);
         res.writeHead(201, { 'Content-Type': 'application/json' }).end('{"id":"a","status":"created"}');

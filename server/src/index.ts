@@ -892,8 +892,13 @@ app.get('/api/storage/nextcloud/file', async (req, reply) => {
   return reply.header('Content-Type', 'application/octet-stream').header('X-File-Mime', f.mime)
     .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`).header('Cache-Control', 'no-store').send(f.data);
 });
+// Nachrichten-ID im Body statt im Pfad: lange Signal-/WhatsApp-IDs und Sonderzeichen machen im Pfad Ärger
+app.post('/api/storage/save', async (req) => saveToStorage(req, String((req.body as any)?.message ?? ''), String((req.body as any)?.index ?? '0')));
 app.post('/api/messages/:id/attachments/:idx/save', async (req) => {
   const { id, idx } = req.params as { id: string; idx: string };
+  return saveToStorage(req, id, idx);
+});
+async function saveToStorage(req: FastifyRequest, id: string, idx: string) {
   const h = H(req);
   const msg = h.store.getMessage(id);
   const i = Number(idx);
@@ -908,9 +913,9 @@ app.post('/api/messages/:id/attachments/:idx/save', async (req) => {
   const b = (req.body ?? {}) as { folder?: unknown; name?: unknown };
   const name = typeof b.name === 'string' && b.name.trim() ? b.name.trim().slice(0, 200) : att.name || `chorus-${i}`;
   const folder = typeof b.folder === 'string' ? b.folder : undefined;
-  const message = await s.save(t, { data, name, mime: att.mime, ts: msg.ts, id: `${id}:${i}`, durationSec: att.durationSec, folder });
-  return { message };
-});
+  try { return { message: await s.save(t, { data, name, mime: att.mime, ts: msg.ts, id: `${id}:${i}`, durationSec: att.durationSec, folder }) }; }
+  catch (e: any) { req.log.warn({ target: t, err: e?.message }, 'Speichern fehlgeschlagen'); throw e; }
+}
 app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
 app.put('/api/media', async (req) => { H(req).autoSaveMedia = !!(req.body as any)?.autoSave; return { autoSave: H(req).autoSaveMedia }; });
 
