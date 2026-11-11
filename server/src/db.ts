@@ -56,7 +56,7 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
-    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT']] as const)
+    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
   }
 
@@ -104,6 +104,7 @@ export class Store {
         ${newer ? ', last_ts=?, last_text=?' : ''} ${c.unread !== undefined ? ', unread=' + Number(c.unread) : ''} WHERE id=?`)
         .run(...([c.title, c.kind, c.avatarFileId ?? null, ...(newer ? [c.lastTs, c.lastText] : []), id] as unknown[]));
     }
+    if (c.peer) this.db.prepare('UPDATE chats SET peer=? WHERE id=?').run(JSON.stringify(c.peer), id);
     return this.getChat(id)!;
   }
   private rowToChat(r: any): Chat {
@@ -111,7 +112,7 @@ export class Store {
       id: r.id, accountId: r.account_id, network: r.network, remoteId: r.remote_id, title: r.title, kind: r.kind,
       lastTs: r.last_ts, lastText: r.last_text, unread: r.unread, pinned: !!r.pinned, muted: !!r.muted,
       avatarFileId: r.avatar_file_id, aiEnabled: !!r.ai_enabled, autopilot: r.autopilot ? JSON.parse(r.autopilot) : null,
-      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null,
+      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null, peer: r.peer ? JSON.parse(r.peer) : null,
       avatar: (r.custom_avatar || r.avatar_file_id) ? `/api/chats/${encodeURIComponent(r.id)}/avatar?v=${String(r.custom_avatar || r.avatar_file_id).slice(0, 8)}` : null,
     };
     if (r.alias) c.title = r.alias;

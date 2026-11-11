@@ -24,21 +24,40 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     for (const c of chats) if (c.link) g.set(c.link, [...(g.get(c.link) ?? []), c]);
     return g;
   }, [chats]);
+  // E-Mail: ein Kontakt pro Absender, darin die einzelnen Betreffe
+  const [sender, setSender] = useState<string | null>(null);
+  const mailKey = (c: Chat) => (c.peer ? `${c.accountId}|${c.peer.id}` : null);
   const shown = useMemo(() => {
     const s = q.trim().toLowerCase();
     const seen = new Set<string>();
-    return chats.filter((c) =>
+    if (sender && !s) return chats.filter((c) => mailKey(c) === sender && (c.lastTs > 0 || c.id === active));
+    const list = chats.filter((c) =>
       (c.lastTs > 0 || c.id === active || !!s) &&
       (s ? true : filter.archived ? !!c.archived : !c.archived) &&
       (!filter.unread || c.unread > 0) &&
       (!filter.nets.length || filter.nets.includes(c.network)) &&
-      (!s || c.title.toLowerCase().includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)))
+      (!s || c.title.toLowerCase().includes(s) || (c.peer?.name ?? '').toLowerCase().includes(s) || (c.peer?.id ?? '').includes(s) || (c.netTitle ?? '').toLowerCase().includes(s) || c.lastText.toLowerCase().includes(s)))
       .filter((c) => { if (!c.link || (groups.get(c.link)?.length ?? 0) < 2) return true; if (seen.has(c.link)) return false; seen.add(c.link); return true; })
       .map((c) => {
         const g = c.link ? groups.get(c.link) : undefined;
         return g && g.length > 1 ? { ...c, unread: g.reduce((n, x) => n + x.unread, 0), linkedNets: [...new Set(g.map((x) => x.network))] } : c;
       });
-  }, [chats, filter, q, active, groups]);
+    if (s) return list;
+    // Mehrere Betreffe eines Absenders: eine Zeile mit dem Namen, Vorschau = neuester Betreff
+    const mail = new Map<string, Chat[]>();
+    for (const c of list) { const k = mailKey(c); if (k) mail.set(k, [...(mail.get(k) ?? []), c]); }
+    const done = new Set<string>();
+    return list.flatMap((c): (Chat & { mailGroup?: string; groupIds?: string[] })[] => {
+      const k = mailKey(c);
+      if (!k) return [c];
+      if (done.has(k)) return [];
+      done.add(k);
+      const g = mail.get(k)!;
+      return [{ ...c, title: c.peer!.name, lastText: `${c.title}: ${c.lastText}`, unread: g.reduce((n, x) => n + x.unread, 0), mailGroup: g.length > 1 ? k : undefined, groupIds: g.map((x) => x.id) }];
+    });
+  }, [chats, filter, q, active, groups, sender]); // eslint-disable-line react-hooks/exhaustive-deps
+  const senderName = sender ? chats.find((c) => mailKey(c) === sender)?.peer?.name ?? '' : '';
+  useEffect(() => { if (sender && !shown.length && !q) setSender(null); }, [sender, shown.length, q]);
 
   // Nachrichten durchsuchen (ab 2 Zeichen) und KI-Suche
   const [hits, setHits] = useState<Message[]>([]);
@@ -84,10 +103,15 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const toggleSel = (id: string) => setSel((s) => { const n = new Set(s ?? []); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const done = () => setSel(null);
   // Feste Funktionen für die Zeilen: so wird nur die Zeile neu gezeichnet, in der sich etwas ändert
-  const live = useRef({ act, sel, onOpen });
-  live.current = { act, sel, onOpen };
-  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => { void live.current.act([id], what); }, []);
-  const rowClick = useCallback((id: string) => { if (live.current.sel) toggleSel(id); else live.current.onOpen(id); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const rowInfo = new Map(shown.map((c) => [c.id, c as Chat & { mailGroup?: string; groupIds?: string[] }]));
+  const live = useRef({ act, sel, onOpen, rowInfo });
+  live.current = { act, sel, onOpen, rowInfo };
+  // Absender-Zeile: Aktionen gelten für alle Betreffe
+  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => { void live.current.act(live.current.rowInfo.get(id)?.groupIds ?? [id], what); }, []);
+  const rowClick = useCallback((id: string) => {
+    const g = live.current.rowInfo.get(id)?.mailGroup;
+    if (live.current.sel) toggleSel(id); else if (g) setSender(g); else live.current.onOpen(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rowLong = useCallback((id: string) => { if (!live.current.sel) setSel(new Set([id])); }, []);
 
   // Ziehen zum Aktualisieren
@@ -128,7 +152,9 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
         </header>
       ) : (
         <header className="list-head">
-          {filter.archived ? (
+          {sender && !q ? (
+            <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1></>
+          ) : filter.archived ? (
             <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label="Zurück"><Icon name="back" /></button><h1>Archiv</h1></>
           ) : <h1>Chats</h1>}
           <div className="row">
@@ -165,7 +191,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
       </div>
       <ul className="chats" ref={listRef} onScroll={(e) => { if (showArchive && e.currentTarget.scrollTop > 90) setShowArchive(false); }} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{ transition: pull ? 'none' : undefined }}>
-        {!filter.archived && !q && archivedCount > 0 && showArchive && (
+        {!filter.archived && !q && !sender && archivedCount > 0 && showArchive && (
           <li>
             <button className="chat-item archive-row reveal" onClick={() => setFilter({ ...filter, archived: true })}>
               <span className="avatar archive-icon" style={{ width: 48, height: 48 }}><Icon name="archive" /></span>
@@ -175,7 +201,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             </button>
           </li>
         )}
-        {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
+        {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active || (!!active && !!(c as { groupIds?: string[] }).groupIds?.includes(active))} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
         {q.trim().length >= 2 && (
           <li className="search-results">
             {q.trim().length >= 3 && (
@@ -275,7 +301,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       onClick={() => { if (longFired.current) { longFired.current = false; return; } onClick(); }}
       onTouchStart={start} onTouchEnd={cancel} onTouchMove={cancel} onContextMenu={(e) => { e.preventDefault(); onLong(); }}>
       {selecting && <span className={`sel-check ${selected ? 'on' : ''}`}>{selected && <Icon name="check" size={14} />}</span>}
-      <Avatar name={c.title} src={c.avatar} />
+      <Avatar name={c.peer?.name ?? c.title} src={c.avatar} />
       <span className="chat-main">
         <span className="chat-top">
           <span className="chat-title">{c.title}</span>

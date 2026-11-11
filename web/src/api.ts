@@ -1,5 +1,5 @@
 import { trustStore } from './keys';
-export type Network = 'telegram' | 'signal' | 'whatsapp' | 'demo';
+export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
 
 export interface AccountStatus {
   state: 'disconnected' | 'connecting' | 'need_input' | 'qr' | 'connected' | 'error';
@@ -17,9 +17,15 @@ export interface Chat {
   autopilot?: Autopilot | null;
   translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean; fixed?: boolean } | null;
   link?: string | null;
+  /** E-Mail: Gegenüber. Alle Betreffe eines Absenders erscheinen als ein Kontakt */
+  peer?: { id: string; name: string } | null;
   sendVia?: string | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
   info?: { phone?: string; username?: string; about?: string; description?: string; members?: number; fetchedAt?: number } | null;
+}
+export interface EmailConfig {
+  address: string; name?: string; user?: string; imapHost: string; imapPort?: number; smtpHost: string; smtpPort?: number;
+  signature?: string; hideSignatures?: string[]; hideBulk?: boolean; days?: number;
 }
 export interface Autopilot {
   on: boolean; max: number; used: number; note: string; mark: boolean;
@@ -109,6 +115,8 @@ export const api = {
   accounts: () => req<Account[]>('GET', '/api/accounts'),
   addAccount: (network: Network, label: string, config: Record<string, unknown>) => req<Account>('POST', '/api/accounts', { network, label, config }),
   removeAccount: (id: string) => req('DELETE', `/api/accounts/${id}`),
+  emailConfig: (id: string) => req<EmailConfig>('GET', `/api/accounts/${id}/config`),
+  setEmailConfig: (id: string, cfg: Partial<EmailConfig> & { password?: string }) => req('PATCH', `/api/accounts/${id}/config`, cfg),
   restartAccount: (id: string) => req('POST', `/api/accounts/${id}/restart`),
   input: (id: string, field: string, value: string) => req('POST', `/api/accounts/${id}/input`, { field, value }),
 

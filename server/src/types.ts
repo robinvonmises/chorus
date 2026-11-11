@@ -1,4 +1,4 @@
-export type Network = 'telegram' | 'signal' | 'whatsapp' | 'demo';
+export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
 
 export type AccountState =
   | 'disconnected'
@@ -42,6 +42,8 @@ export interface Chat {
   pinned: boolean;
   muted: boolean;
   avatarFileId?: string | null;
+  /** E-Mail: Gegenüber (Adresse und Name). Die Oberfläche fasst alle Betreffe eines Absenders zu einem Kontakt zusammen */
+  peer?: { id: string; name: string } | null;
   /** Bild-URL (eigenes Bild hat Vorrang vor dem vom Messenger) */
   avatar?: string | null;
   /** Name beim Messenger (title ist der angezeigte, ggf. eigener Name) */
