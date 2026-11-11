@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { duration } from '../util';
 
 type Item = { src: string; name: string; download: string; video?: boolean };
 type Z = { s: number; x: number; y: number };
@@ -35,11 +36,18 @@ export function Lightbox() {
   const reset = () => { setDy(0); setDx(0); setZ(Z0); setLive(false); g.current = null; };
   useEffect(() => { const f = (o: Open) => { setOpen(o); setClosing(false); reset(); }; subs.add(f); return () => { subs.delete(f); }; }, []);
   const close = () => { setClosing(true); setTimeout(() => { setOpen(null); setClosing(false); reset(); }, 220); };
-  /** Blättern: d = +1 nächstes, -1 voriges Bild */
+  /** Abstand zwischen zwei Bildern beim Blättern */
+  const W = () => innerWidth + 16;
+  const settling = useRef(false);
+  /** Blättern: d = +1 nächstes, -1 voriges Bild. Erst gleitet der Streifen zum Nachbarn, dann wird er zum aktuellen Bild
+   *  (gleiche Elemente, gleiche Position: kein Sprung) */
   const go = (d: number) => {
     const idx = (open?.idx ?? 0) + d;
-    if (!open || idx < 0 || idx >= open.list.length) { setDx(0); return; }
-    reset(); setOpen({ ...open, idx });
+    if (!open || settling.current) return;
+    if (idx < 0 || idx >= open.list.length) { setDx(0); return; }
+    settling.current = true;
+    setLive(false); setZ(Z0); setDy(0); setDx(-d * W());
+    setTimeout(() => { settling.current = false; setDx(0); setOpen((o) => o && { ...o, idx }); }, 280);
   };
   const goRef = useRef(go); goRef.current = go;
   const isOpen = !!open;
@@ -70,11 +78,12 @@ export function Lightbox() {
     const k = s / from.s;
     return { s, x: to.x - k * (f.x - from.x), y: to.y - k * (f.y - from.y) };
   };
-  const toggleZoom = (p: Pt) => { setLive(false); setZ(zr.current.s > 1 ? Z0 : clamp(zoomAt(zr.current, 2.5, p))); };
+  const toggleZoom = (p: Pt) => { if (item?.video) return; setLive(false); setZ(zr.current.s > 1 ? Z0 : clamp(zoomAt(zr.current, 2.5, p))); };
 
   const begin = (ts: React.TouchList) => {
     const t = Date.now();
-    if (ts.length >= 2) {
+    if (settling.current) { g.current = null; return; }
+    if (ts.length >= 2 && !item?.video) {
       const a = rel(ts[0].clientX, ts[0].clientY), b = rel(ts[1].clientX, ts[1].clientY);
       g.current = { mode: 'pinch', t, p0: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, z0: zr.current, d0: dist(a, b) || 1, moved: true };
       setDy(0);
@@ -107,7 +116,11 @@ export function Lightbox() {
         else if (c.mode === 'swipe') {
           // Seitlich wischen blättert (nur bei mehreren Bildern), nach oben/unten schließt
           if (!c.axis && c.moved) c.axis = many && Math.abs(p.x - c.p0.x) > Math.abs(p.y - c.p0.y) ? 'x' : 'y';
-          if (c.axis === 'x') setDx(p.x - c.p0.x);
+          if (c.axis === 'x') {
+            // Am Anfang/Ende des Albums nur etwas nachgeben
+            const d = p.x - c.p0.x, edge = (d > 0 && open!.idx === 0) || (d < 0 && open!.idx === open!.list.length - 1);
+            setDx(edge ? d * 0.3 : d);
+          }
           else if (c.axis === 'y') setDy(p.y - c.p0.y);
         }
       }}
@@ -122,7 +135,7 @@ export function Lightbox() {
         if (c.mode === 'pan') setZ(clamp(zr.current));
         if (c.mode === 'swipe' && c.axis === 'x') {
           const fast = Math.abs(dx) > 30 && Date.now() - c.t < 250;
-          if (Math.abs(dx) > 70 || fast) go(dx < 0 ? 1 : -1); else setDx(0);
+          if (Math.abs(dx) > innerWidth / 4 || fast) go(dx < 0 ? 1 : -1); else setDx(0);
           return;
         }
         if (c.mode === 'swipe') {
@@ -136,25 +149,73 @@ export function Lightbox() {
           else lastTap.current = { t: now, p: c.p0 };
         }
       }}
-      onWheel={(e) => { const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
+      onWheel={(e) => { if (item.video) return; const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
         <a className="icon-btn" href={item.download} download={item.name} title="Speichern"><Icon name="download" /></a>
         <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
-      {item.video
-        ? <video key={item.src} src={item.src} controls autoPlay playsInline onClick={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} />
-        : <img ref={img} key={item.src} src={item.src} alt={item.name} draggable={false} onClick={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => toggleZoom(rel(e.clientX, e.clientY))}
-        style={{
-          transform: z.s !== 1 || z.x || z.y
-            ? `translate(${z.x}px, ${z.y}px) scale(${z.s})`
-            : `translate(${dx}px, ${dy}px) scale(${1 - Math.min(Math.abs(dy), 300) / 1500})`,
-          transition: anim ? 'none' : undefined,
-        }} />}
+      {[-1, 0, 1].map((off) => {
+        const it = open!.list[open!.idx + off];
+        if (!it) return null;
+        const cur = off === 0;
+        return (
+          <div key={it.src} className="lightbox-slide" style={{ transform: `translate3d(${off * W() + dx}px, 0, 0)`, transition: live ? 'none' : undefined }}>
+            {it.video
+              ? <SlideVideo src={it.src} cur={cur} />
+              : <img ref={cur ? img : undefined} src={it.src} alt={it.name} draggable={false} onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={cur ? (e) => toggleZoom(rel(e.clientX, e.clientY)) : undefined}
+                  style={cur ? {
+                    transform: z.s !== 1 || z.x || z.y
+                      ? `translate(${z.x}px, ${z.y}px) scale(${z.s})`
+                      : `translateY(${dy}px) scale(${1 - Math.min(Math.abs(dy), 300) / 1500})`,
+                    transition: anim ? 'none' : undefined,
+                  } : undefined} />}
+          </div>
+        );
+      })}
       {many && open!.idx > 0 && <button className="icon-btn lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Voriges Bild"><Icon name="back" /></button>}
       {many && open!.idx < open!.list.length - 1 && <button className="icon-btn lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Nächstes Bild"><Icon name="back" className="rot-180" /></button>}
     </div>
   );
+}
+
+/** Video im Vollbild. Eigene schlichte Steuerung statt der eingebauten: die schluckt sonst das seitliche Wischen.
+ *  Tippen = Abspielen/Pause, unten Zeitleiste zum Spulen. Läuft nur, solange es das aktuelle Bild ist. */
+function SlideVideo({ src, cur }: { src: string; cur: boolean }) {
+  const v = useRef<HTMLVideoElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [t, setT] = useState(0);
+  const [d, setD] = useState(0);
+  useEffect(() => {
+    const el = v.current; if (!el) return;
+    if (cur) void el.play().catch(() => {}); else el.pause();
+  }, [cur]);
+  const seek = (e: React.TouchEvent | React.MouseEvent) => {
+    e.stopPropagation();
+    const el = v.current, bar = e.currentTarget as HTMLElement;
+    if (!el || !d) return;
+    const x = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    if (x == null) return;
+    const r = bar.getBoundingClientRect();
+    el.currentTime = Math.min(1, Math.max(0, (x - r.left) / r.width)) * d;
+    setT(el.currentTime);
+  };
+  const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  return <>
+    <video ref={v} src={src} playsInline preload="metadata"
+      onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
+      onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} onLoadedMetadata={(e) => setD(e.currentTarget.duration || 0)}
+      onClick={(e) => { e.stopPropagation(); const el = v.current; if (el) { if (el.paused) void el.play().catch(() => {}); else el.pause(); } }} />
+    {!playing && <span className="lightbox-play"><Icon name="play" size={30} /></span>}
+    {cur && d > 0 && (
+      <div className="lightbox-vbar" onClick={stop} onTouchEnd={stop}>
+        <span>{duration(t)}</span>
+        <div className="lightbox-vtrack" onTouchStart={seek} onTouchMove={seek} onMouseDown={seek}>
+          <div style={{ width: `${(t / d) * 100}%` }} />
+        </div>
+        <span>{duration(d)}</span>
+      </div>
+    )}
+  </>;
 }
