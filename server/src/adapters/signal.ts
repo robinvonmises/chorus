@@ -16,6 +16,9 @@ import { packDir, unpackDir, secureTmpDir } from '../tarball.js';
  * Nachrichten-ID: `${timestamp}:${autorUuid}` – so lassen sich Reaktionen, Antworten und Löschungen zuordnen.
  * Chat-ID: Kontakt-UUID (bzw. Nummer) oder `g:${groupId}` für Gruppen.
  */
+const WATCH_EVERY = 60_000;
+const SILENCE = Number(process.env.SIGNAL_SILENCE_MIN ?? 30) * 60_000;
+
 export class SignalAdapter implements Adapter {
   readonly network = 'signal' as const;
   private proc: ChildProcessWithoutNullStreams | null = null;
@@ -29,6 +32,14 @@ export class SignalAdapter implements Adapter {
   private names = new Map<string, string>();
   private pruneTimer: NodeJS.Timeout | null = null;
   private lastRescue = 0;
+  // Wächter: merkt, wenn signal-cli hängt oder nichts mehr empfängt, und verbindet neu
+  private watchTimer: NodeJS.Timeout | null = null;
+  private restartTimer: NodeJS.Timeout | null = null;
+  private lastSeen = Date.now(); // letzte Zeile von signal-cli (Nachricht, Quittung, Antwort)
+  private lastEnvelope = Date.now(); // letztes Ereignis vom Signal-Server
+  private pingFails = 0;
+  private failures = 0; // Fehlstarts in Folge (für die Wartezeit)
+  private quiet = false; // Neustart durch den Wächter: kein Fehler anzeigen
 
   constructor(private accountId: string, private session: string | null, private ev: AdapterEvents, private bin: string) {
     this.dir = join(secureTmpDir(), `signal-${accountId}`);
@@ -40,7 +51,7 @@ export class SignalAdapter implements Adapter {
   private call<T = any>(method: string, params: Record<string, unknown> = {}, timeoutMs = 60_000): Promise<T> {
     if (!this.proc) return Promise.reject(new Error('Signal ist nicht verbunden'));
     const id = this.nextId++;
-    const p = this.account && !['startLink', 'finishLink', 'listAccounts'].includes(method) ? { account: this.account, ...params } : params;
+    const p = this.account && !['startLink', 'finishLink', 'listAccounts', 'version'].includes(method) ? { account: this.account, ...params } : params;
     this.proc.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params: p }) + '\n');
     return new Promise<T>((res, rej) => {
       const t = setTimeout(() => { this.pending.delete(id); rej(new Error(`Zeitüberschreitung bei ${method}`)); }, timeoutMs);
@@ -49,6 +60,7 @@ export class SignalAdapter implements Adapter {
   }
 
   private onLine(line: string) {
+    this.lastSeen = Date.now();
     let msg: any;
     try { msg = JSON.parse(line); } catch { return; }
     if (msg.id !== undefined && this.pending.has(msg.id)) {
@@ -58,6 +70,7 @@ export class SignalAdapter implements Adapter {
       else p.res(msg.result);
     } else if (msg.method === 'receive') {
       const env = msg.params?.envelope ?? msg.params?.result?.envelope;
+      if (env) this.lastEnvelope = Date.now();
       if (env) this.onEnvelope(env).catch((e) => this.ev.log('envelope: ' + e));
     }
   }
@@ -65,7 +78,8 @@ export class SignalAdapter implements Adapter {
   // ---------- Start / Kopplung ----------
   async start() {
     this.stopped = false;
-    this.ev.status({ state: 'connecting' });
+    if (this.restartTimer) { clearTimeout(this.restartTimer); this.restartTimer = null; }
+    if (!this.quiet) this.ev.status({ state: 'connecting' });
     // Nach einem Absturz von signal-cli den laufenden Stand behalten (er ist neuer als die letzte Sicherung).
     // Nur beim ersten Start (leeres tmpfs) aus dem Tresor auspacken.
     if (!existsSync(join(this.dir, 'data'))) {
@@ -75,38 +89,121 @@ export class SignalAdapter implements Adapter {
     }
     this.prune();
 
-    this.proc = spawn(this.bin, ['--config', this.dir, '--trust-new-identities', 'always', 'jsonRpc'], { stdio: ['pipe', 'pipe', 'pipe'] });
-    this.proc.on('error', (e) => this.ev.status({ state: 'error', message: 'signal-cli fehlt oder startet nicht: ' + e.message }));
+    const proc = spawn(this.bin, ['--config', this.dir, '--trust-new-identities', 'always', 'jsonRpc'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    this.proc = proc;
+    this.lastSeen = this.lastEnvelope = Date.now();
+    this.pingFails = 0;
+    proc.on('error', (e) => {
+      this.quiet = false;
+      this.ev.status({ state: 'error', message: 'signal-cli fehlt oder startet nicht: ' + e.message });
+      if (this.proc === proc) this.proc = null;
+      this.scheduleRestart();
+    });
     createInterface({ input: this.proc.stdout }).on('line', (l) => this.onLine(l));
     createInterface({ input: this.proc.stderr }).on('line', (l) => {
       if (!/INFO|DEBUG/.test(l)) this.ev.log(l);
       // Speicher voll oder Empfang abgestürzt: signal-cli läuft dann weiter, empfängt aber nichts mehr
       if (/SQLITE_FULL|No space left on device|Exception in thread "receive/.test(l)) this.rescue(l);
     });
-    this.proc.on('exit', (code) => {
+    proc.on('exit', (code) => {
+      if (this.proc !== proc) return;
       for (const p of this.pending.values()) p.rej(new Error('signal-cli beendet'));
       this.pending.clear();
       this.proc = null;
-      if (!this.stopped) {
-        this.ev.status({ state: 'error', message: `signal-cli wurde beendet (Code ${code}). Neustart in 10 s …` });
-        setTimeout(() => { if (!this.stopped) this.start().catch(() => {}); }, 10_000);
-      }
+      if (this.stopped) return;
+      if (this.quiet) this.ev.log(`signal-cli neu gestartet (Wächter)`);
+      else this.ev.status({ state: 'error', message: `signal-cli wurde beendet (Code ${code}). Neustart …` });
+      this.scheduleRestart(this.quiet ? 2000 : undefined);
     });
 
-    const accounts = await this.call<{ number: string | null; aci?: string }[]>('listAccounts').catch(() => []);
+    // Kann signal-cli die Konten nicht lesen (hängt, Absturz), NICHT neu koppeln, sondern neu starten.
+    // Früher landete Chorus dann im Kopplungsmodus und empfing nichts mehr.
+    let accounts: { number: string | null; aci?: string }[];
+    try {
+      accounts = await this.call('listAccounts');
+    } catch (e: any) {
+      if (this.stopped || this.proc !== proc) return;
+      this.ev.log('Konten nicht lesbar (' + e.message + '), starte signal-cli neu');
+      this.kill(proc);
+      return;
+    }
+    if (this.stopped || this.proc !== proc) return;
     if (accounts.length) {
       this.account = accounts[0].number ?? accounts[0].aci ?? null;
       this.me = accounts[0].aci ?? null;
     } else {
       await this.link();
     }
-    if (this.stopped) return;
+    if (this.stopped || this.proc !== proc) return;
+    const wasQuiet = this.quiet;
+    this.quiet = false;
+    this.failures = 0;
     this.ev.status({ state: 'connected', self: this.account && this.account.startsWith('+') ? this.account : undefined });
+    if (!this.watchTimer) this.watchTimer = setInterval(() => this.watch(), WATCH_EVERY);
     await this.persist().catch((e) => this.ev.log('Sichern fehlgeschlagen: ' + e.message));
     if (this.saveTimer) clearInterval(this.saveTimer);
     this.saveTimer = setInterval(() => this.persist().catch(() => {}), 5 * 60_000);
     if (!this.pruneTimer) this.pruneTimer = setInterval(() => this.prune(), 30 * 60_000);
-    await this.loadDirectory();
+    if (!wasQuiet) await this.loadDirectory();
+  }
+
+  /** Neustart mit wachsender Wartezeit (10 s, 20 s, 40 s … höchstens 5 min), nie mehr als einer gleichzeitig */
+  private scheduleRestart(delay?: number) {
+    if (this.stopped || this.restartTimer) return;
+    const ms = delay ?? Math.min(10_000 * 2 ** this.failures, 5 * 60_000);
+    this.failures++;
+    this.restartTimer = setTimeout(() => {
+      this.restartTimer = null;
+      if (this.stopped || this.proc) return;
+      this.start().catch((e) => {
+        this.ev.log('Start fehlgeschlagen: ' + (e?.message ?? e));
+        this.quiet = false;
+        this.ev.status({ state: 'error', message: 'Signal startet nicht: ' + (e?.message ?? e) });
+        if (!this.proc) this.scheduleRestart();
+      });
+    }, ms);
+  }
+
+  private kill(p: ChildProcessWithoutNullStreams) {
+    if (p.exitCode !== null) return;
+    p.stdin.end();
+    p.kill('SIGTERM');
+    // Reagiert signal-cli nicht, hart beenden (exit-Handler startet neu)
+    setTimeout(() => { if (p.exitCode === null) p.kill('SIGKILL'); }, 15_000).unref();
+  }
+
+  /**
+   * Wächter, läuft jede Minute:
+   * 1. signal-cli antwortet nicht mehr (zweimal kein „version“) → neu starten.
+   * 2. Seit SILENCE kein Ereignis vom Signal-Server → still neu verbinden. Die Verbindung zum Signal-Server
+   *    kann abreißen, ohne dass signal-cli das merkt; Signal hebt die Nachrichten für gekoppelte Geräte auf,
+   *    nach dem Neuverbinden kommen sie nach. Tagsüber kommen ständig Quittungen und Syncs vom Handy,
+   *    das greift praktisch nur, wenn es wirklich still ist.
+   */
+  private async watch() {
+    const p = this.proc;
+    if (this.stopped || !p || !this.account || this.quiet) return;
+    try {
+      await this.call('version', {}, 20_000);
+      this.pingFails = 0;
+    } catch (e: any) {
+      if (this.proc !== p) return;
+      // Nur Schweigen zählt: eine Fehlerantwort heißt, signal-cli lebt
+      if (!/Zeitüberschreitung/.test(String(e?.message))) { this.pingFails = 0; }
+      else if (++this.pingFails < 2) return; // einmal Geduld
+      else {
+        this.ev.log('signal-cli antwortet nicht mehr, starte neu');
+        this.quiet = true;
+        this.kill(p);
+        return;
+      }
+    }
+    if (Date.now() - this.lastEnvelope >= SILENCE && this.pending.size === 0) {
+      this.ev.log(`Seit ${Math.round((Date.now() - this.lastEnvelope) / 60_000)} min nichts von Signal, verbinde neu`);
+      this.quiet = true;
+      await this.persist().catch(() => {});
+      if (this.proc === p) this.kill(p);
+    }
   }
 
   private async link() {
@@ -185,7 +282,7 @@ export class SignalAdapter implements Adapter {
     this.ev.log('Signal hängt (' + line.slice(0, 120) + '), räume auf und starte neu');
     this.prune(true);
     const p = this.proc;
-    if (p && p.exitCode === null) { p.stdin.end(); p.kill('SIGTERM'); } // exit-Handler startet nach 10 s neu
+    if (p) this.kill(p); // exit-Handler startet neu
   }
 
   // ---------- Empfang ----------
@@ -393,7 +490,9 @@ export class SignalAdapter implements Adapter {
     this.stopped = true;
     if (this.saveTimer) clearInterval(this.saveTimer);
     if (this.pruneTimer) clearInterval(this.pruneTimer);
-    this.saveTimer = this.pruneTimer = null;
+    if (this.watchTimer) clearInterval(this.watchTimer);
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    this.saveTimer = this.pruneTimer = this.watchTimer = this.restartTimer = null;
     // Erst signal-cli sauber beenden, dann den ruhenden Stand sichern
     const p = this.proc;
     this.proc = null;
