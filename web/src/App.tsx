@@ -374,7 +374,8 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         )}
       </main>
       {panel === 'add' && <AccountWizard server={server} accounts={accounts} onClose={() => setPanel(null)} />}
-      {panel === 'new' && <NewChat chats={sortedChats} accounts={accounts} onOpen={openChat} onClose={() => setPanel(null)} />}
+      {panel === 'new' && <NewChat chats={sortedChats} accounts={accounts} onOpen={openChat} onClose={() => setPanel(null)}
+        onFound={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) if (!n.has(c.id)) n.set(c.id, c); return n; })} />}
       <Lightbox />
       {banner && (
         <button key={banner.n} className="in-app-banner" onClick={() => { setBanner(null); const mm = banner.msgId ? [...messages.values()].flat().find((x) => x.id === banner.msgId) : null; if (mm) void openAt(mm); else openChat(banner.chat.id); }}>

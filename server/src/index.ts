@@ -426,6 +426,7 @@ app.post('/api/accounts/:id/input', async (req) => {
 });
 
 app.get('/api/chats', async (req) => H(req).store.listChats());
+app.get('/api/chats/search', async (req) => { const q = String((req.query as any)?.q ?? '').trim(); return q ? H(req).store.searchChats(q.slice(0, 100)) : []; });
 app.patch('/api/chats/:id', async (req) => {
   const id = (req.params as any).id;
   const body = (req.body ?? {}) as any;

@@ -1,14 +1,23 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { api, type Account, type Chat } from '../api';
 import { NETWORKS } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 
 /** „Neue Nachricht“: Kontakt oder Gruppe suchen oder an eine Nummer schreiben */
-export function NewChat({ chats, accounts, onOpen, onClose }: {
-  chats: Chat[]; accounts: Account[]; onOpen: (id: string) => void; onClose: () => void;
+export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
+  chats: Chat[]; accounts: Account[]; onOpen: (id: string) => void; onClose: () => void; onFound: (cs: Chat[]) => void;
 }) {
   const [q, setQ] = useState('');
+  // Kontakte ohne Nachrichten lädt die Chatliste nicht immer mit (Limit), daher zusätzlich auf dem Server suchen
+  const [found, setFound] = useState<Chat[]>([]);
+  useEffect(() => {
+    const s = q.trim();
+    if (s.length < 2) { setFound([]); return; }
+    let off = false;
+    const t = setTimeout(() => { api.searchChats(s).then((cs) => { if (!off) setFound(cs); }).catch(() => {}); }, 200);
+    return () => { off = true; clearTimeout(t); };
+  }, [q]);
   const phoneAccounts = accounts.filter((a) => (a.network === 'signal' || a.network === 'whatsapp') && a.status.state === 'connected');
   const [acc, setAcc] = useState(phoneAccounts[0]?.id ?? '');
   const [busy, setBusy] = useState(false);
@@ -16,11 +25,12 @@ export function NewChat({ chats, accounts, onOpen, onClose }: {
 
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return [...chats]
+    const known = new Set(chats.map((c) => c.id));
+    return [...chats, ...found.filter((c) => !known.has(c.id))]
       .filter((c) => !s || c.title.toLowerCase().includes(s) || c.remoteId.toLowerCase().includes(s))
       .sort((a, b) => Number(a.kind !== 'direct') - Number(b.kind !== 'direct') || a.title.localeCompare(b.title, 'de'))
       .slice(0, 300);
-  }, [chats, q]);
+  }, [chats, found, q]);
   const looksLikePhone = /^[+0][\d\s\-/()]{6,}$/.test(q.trim());
 
   const byPhone = async () => {
@@ -61,7 +71,7 @@ export function NewChat({ chats, accounts, onOpen, onClose }: {
           <ul className="chats">
             {list.map((c) => (
               <li key={c.id}>
-                <button className="chat-item" onClick={() => { onOpen(c.id); onClose(); }}>
+                <button className="chat-item" onClick={() => { onFound([c]); onOpen(c.id); onClose(); }}>
                   <Avatar name={c.title} src={c.avatar} />
                   <span className="chat-main">
                     <span className="chat-top"><span className="chat-title">{c.title}</span></span>
