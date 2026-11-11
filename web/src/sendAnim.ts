@@ -25,7 +25,7 @@ export function rise(msg: Element | null | undefined) {
   const field = document.querySelector('.composer textarea') ?? document.querySelector('.composer');
   const wrap = field?.closest('.composer-wrap') ?? field;
   if (!(bubble instanceof HTMLElement) || !field || !wrap) return;
-  const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect(), wt = wrap.getBoundingClientRect().top;
+  const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect();
   if (!b.width || !f.width || b.height > 400) return;
   const host = msg.closest('.chat-view') ?? document.body;
   const list = msg.parentElement;
@@ -43,17 +43,19 @@ export function rise(msg: Element | null | undefined) {
     mo?.disconnect();
     hidden.forEach((el) => { el.style.opacity = ''; });
     stage?.remove(); stage = null; layer = null;
+    host.classList.remove('sending');
   };
   try {
     const cs = getComputedStyle(bubble);
-    // Bühne: feste Ebene über dem Chat, sichtbar nur oberhalb der Eingabeleiste und im Eingabefeld selbst.
-    // So taucht die Blase hinter der Leiste auf, statt sie zu überdecken (wie bei iMessage).
+    // Bühne: feste Ebene über dem Chat, aber UNTER der Eingabeleiste (.chat-dock hat z-index 6).
+    // Die Leiste wird währenddessen gleichmäßig milchig-durchsichtig (.chat-view.sending, styles.css),
+    // so sieht man die Blase unscharf durch die ganze Leiste und sie taucht oben dahinter auf (wie bei iMessage).
     stage = document.createElement('div');
-    Object.assign(stage.style, { position: 'fixed', left: '0px', top: '0px', right: '0px', bottom: '0px', zIndex: '60', pointerEvents: 'none' });
+    Object.assign(stage.style, { position: 'fixed', left: '0px', top: '0px', right: '0px', bottom: '0px', zIndex: '5', pointerEvents: 'none' });
     host.appendChild(stage);
+    host.classList.add('sending');
     const o = stage.getBoundingClientRect(); // falls die Ebene nicht am Bildschirmrand beginnt (umgebende Transformation)
     const X = (v: number) => `${Math.round(v - o.left)}px`, Y = (v: number) => `${Math.round(v - o.top)}px`;
-    stage.style.clipPath = `polygon(0px 0px, 100% 0px, 100% ${Y(wt)}, ${X(f.right)} ${Y(wt)}, ${X(f.right)} ${Y(f.bottom)}, ${X(f.left)} ${Y(f.bottom)}, ${X(f.left)} ${Y(wt)}, 0px ${Y(wt)})`;
 
     layer = document.createElement('div');
     layer.className = msg.className;
