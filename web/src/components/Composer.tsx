@@ -8,6 +8,8 @@ import { VideoEditor, type VideoEdit } from './VideoEditor';
 import { outbox } from '../outbox';
 import { armRise } from '../sendAnim';
 import { previewOf } from './Message';
+import { useStorage } from '../storageState';
+import { NextcloudBrowser } from './NextcloudBrowser';
 import { useAi } from '../aiState';
 import { WhenPicker, whenLabel } from './WhenPicker';
 
@@ -34,6 +36,8 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const [rec, setRec] = useState<{ start: number; secs: number } | null>(null);
   const ta = useRef<HTMLTextAreaElement>(null);
   const fileIn = useRef<HTMLInputElement>(null);
+  const storage = useStorage();
+  const [ncPick, setNcPick] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const cancelRec = useRef(false);
@@ -247,6 +251,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           onDone={(nf) => { setFiles((fs) => fs.map((x, j) => (j === editIdx ? nf : x))); setEditIdx(null); }} />
       )}
       {emoji && <div className="composer-emoji"><EmojiPicker onPick={insertEmoji} /></div>}
+      {ncPick && <NextcloudBrowser mode="pick" onClose={() => setNcPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
       {rec ? (
         <div className="composer recording">
           <button className="icon-btn" onClick={() => stopRec(true)} aria-label="Verwerfen"><Icon name="trash" /></button>
@@ -259,6 +264,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
           {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
+          {!editing && storage?.nextcloud.enabled && <button className="icon-btn tool" onClick={() => setNcPick(true)} aria-label="Aus Nextcloud anhängen" title="Aus Nextcloud anhängen"><Icon name="folder" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
           <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : placeholder ?? 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { Storage, baseUrl, folderParts, numbered } from './storage.js';
+import { Storage, baseUrl, folderParts, numbered, parsePropfind } from './storage.js';
 
 const fakeStore = () => {
   const m = new Map<string, unknown>();
@@ -15,6 +15,18 @@ test('Hilfen', () => {
   assert.deepEqual(folderParts('/Chorus/../Bilder//2026/'), ['Chorus', 'Bilder', '2026']);
   assert.equal(numbered('foto.jpg', 2), 'foto (2).jpg');
   assert.equal(numbered('README', 3), 'README (3)');
+});
+
+test('PROPFIND lesen', () => {
+  const xml = `<?xml version="1.0"?><d:multistatus xmlns:d="DAV:"><d:response><d:href>/remote.php/dav/files/w/Fotos/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+<d:response><d:href>/remote.php/dav/files/w/Fotos/Urlaub%202026/</d:href><d:propstat><d:prop><d:resourcetype><d:collection/></d:resourcetype></d:prop></d:propstat></d:response>
+<d:response><d:href>/remote.php/dav/files/w/Fotos/a&amp;b.pdf</d:href><d:propstat><d:prop><d:resourcetype/><d:getcontentlength>1234</d:getcontentlength><d:getcontenttype>application/pdf</d:getcontenttype><d:getlastmodified>Wed, 11 Nov 2026 10:00:00 GMT</d:getlastmodified></d:prop></d:propstat></d:response></d:multistatus>`;
+  const e = parsePropfind(xml);
+  assert.equal(e.length, 3);
+  assert.deepEqual(e[1], { name: 'Urlaub 2026', dir: true, size: 0, mime: '', modified: 0 });
+  assert.equal(e[2].name, 'a&b.pdf');
+  assert.equal(e[2].size, 1234);
+  assert.equal(e[2].dir, false);
 });
 
 test('Schlüssel bleiben auf dem Server, leere Eingabe ändert nichts', () => {
@@ -63,5 +75,6 @@ test('Immich-Upload und Nextcloud-WebDAV gegen Attrappe', async () => {
     assert.equal(await s.save('nextcloud', { ...file, name: 'brief.pdf' }), 'In Nextcloud gespeichert (Chorus/Dateien/brief.pdf)');
     assert.equal(await s.save('nextcloud', { ...file, name: 'brief.pdf' }), 'In Nextcloud gespeichert (Chorus/Dateien/brief (2).pdf)');
     assert.ok(seen.includes('MKCOL /remote.php/dav/files/wayne/Chorus'));
+    assert.equal(await s.save('nextcloud', { ...file, name: 'x.pdf', folder: '' }), 'In Nextcloud gespeichert (x.pdf)');
   } finally { srv.close(); }
 });
