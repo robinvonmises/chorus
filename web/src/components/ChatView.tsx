@@ -16,7 +16,7 @@ import { outbox, useOutbox, type Outgoing } from '../outbox';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
-export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
+export function ChatView({ chat, account, messages: allMessages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
   linked?: Chat[]; accounts?: Account[]; focus?: { id: string; remoteId: string; n: number } | null; planned?: Planned[];
   onGallery?: () => void; onOpenMessage?: (m: Message) => void;
@@ -56,6 +56,11 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
 
   const pending = useOutbox(chat.id);
   useLayoutEffect(() => { const el = scroller.current; if (el && pending.length) el.scrollTop = el.scrollHeight; }, [pending.length]);
+  // Erst nur die letzten Nachrichten zeichnen, damit der Chat sofort da ist und flüssig hereingleitet;
+  // den Rest kurz danach (wenn der Übergang vorbei ist). Beim Springen zu einer Nachricht gleich alles.
+  const [full, setFull] = useState(!!focus);
+  useEffect(() => { const t = setTimeout(() => setFull(true), 650); return () => clearTimeout(t); }, []);
+  const messages = useMemo(() => !full && allMessages && allMessages.length > 20 ? allMessages.slice(-20) : allMessages, [full, allMessages]);
   const byRemote = useMemo(() => new Map((messages ?? []).map((m) => [m.remoteId, m])), [messages]);
   const group = chat.kind !== 'direct';
   // Zusammengeführter Kontakt: Senden über den im Kontaktprofil gewählten Messenger, sonst über den, über den zuletzt etwas kam

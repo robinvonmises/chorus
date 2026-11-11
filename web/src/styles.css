@@ -314,8 +314,16 @@ input, textarea { font: inherit; color: inherit; }
   .mobile-only { display: inline-grid; }
   .pane-list, .pane-chat { grid-area: 1 / 1; border: 0; }
   .pane-chat { display: none; }
-  .app.has-chat .pane-list { display: none; }
-  .app.has-chat .pane-chat { display: block; }
+  /* Liste bleibt unsichtbar aufgebaut: Zurück geht so ohne Neuaufbau, und die Scrollposition bleibt */
+  .app.has-chat .pane-list { visibility: hidden; }
+  .app.has-chat .pane-chat { display: block; z-index: 2; }
+  .app.nav-enter .pane-list { visibility: visible; }
+  /* Übergang (useNavSlide in App.tsx): nur währenddessen liegen beide Seiten übereinander */
+  .app.nav-enter .pane-list, .app.nav-leave .pane-list { pointer-events: none; }
+  .app.nav-enter .pane-chat, .app.nav-leave .pane-chat { display: block; z-index: 2; box-shadow: -6px 0 24px rgba(0,0,0,.10); }
+  .app.nav-enter .pane-chat { transform: translateX(100%); }
+  .app.nav-leave .pane-chat { pointer-events: none; }
+  .app.nav-leave .pane-list { transform: translateX(-30%); }
   .chat-head .back { display: inline-grid; margin-left: -6px; }
   .messages { padding: 14px 14px 12px; }
   .msg { max-width: 80%; }
@@ -458,6 +466,7 @@ input, textarea { font: inherit; color: inherit; }
 :root {
   --ease-out: cubic-bezier(.22, 1, .36, 1);      /* sanftes Abbremsen */
   --ease-in: cubic-bezier(.4, 0, 1, 1);
+  --ios: cubic-bezier(.32, .72, 0, 1);            /* iOS-Navigation: schnell los, lang auslaufen */
   --spring: cubic-bezier(.34, 1.3, .64, 1);      /* minimal federnd */
 }
 @keyframes fade-in { from { opacity: 0; } }
@@ -503,7 +512,8 @@ input, textarea { font: inherit; color: inherit; }
 
 /* Chatwechsel */
 .chat-view { animation: fade-in .2s var(--ease-out) both; }
-@media (max-width: 860px) { .app.has-chat .pane-chat .chat-view { animation: slide-in .3s var(--ease-out) both; } }
+@media (max-width: 860px) { .app.has-chat .pane-chat .chat-view { animation: none; } }
+
 
 /* Kleine Rückmeldungen */
 .icon-btn, .btn, .send-btn, .seg-mini button, .ai-tabs button { transition: background-color .18s ease, color .18s ease, transform .18s var(--ease-out), opacity .18s ease; }
