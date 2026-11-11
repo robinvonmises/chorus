@@ -975,3 +975,22 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .nc-list b { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nc-list small { color: var(--ink-3); flex: none; }
 .nc-list .nc-empty { padding: 10px 12px; }
+
+/* Immich-Auswahl beim Anhängen */
+.im-sheet .modal-body { display: grid; gap: 10px; min-height: 0; }
+.im-sheet .seg { display: flex; gap: 4px; padding: 3px; background: var(--line); border-radius: 10px; }
+.im-sheet .seg button { flex: 1; border: 0; background: none; padding: 7px; border-radius: 8px; font: inherit; color: inherit; cursor: pointer; }
+.im-sheet .seg button.on { background: var(--bg); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+.im-scroll { max-height: 55dvh; overflow-y: auto; border-radius: 12px; }
+.im-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 3px; }
+.im-tile { position: relative; aspect-ratio: 1; padding: 0; border: 0; background: var(--line); cursor: pointer; overflow: hidden; }
+.im-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.im-tile.on img { opacity: .7; }
+.im-tile.on { outline: 3px solid var(--accent); outline-offset: -3px; }
+.im-vid { position: absolute; left: 4px; bottom: 4px; display: flex; align-items: center; gap: 2px; color: #fff; font-size: 11px; text-shadow: 0 1px 2px rgba(0,0,0,.6); }
+.im-num { position: absolute; top: 5px; right: 5px; min-width: 22px; height: 22px; border-radius: 11px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 600; display: grid; place-items: center; border: 2px solid #fff; }
+.im-albums { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 12px; }
+.im-albums button { display: grid; gap: 3px; text-align: left; border: 0; background: none; padding: 0; font: inherit; color: inherit; cursor: pointer; min-width: 0; }
+.im-albums img, .im-nocover { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--line); display: grid; place-items: center; }
+.im-albums b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.im-albums small { color: var(--ink-3); }

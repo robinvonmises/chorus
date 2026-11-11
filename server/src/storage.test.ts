@@ -47,6 +47,18 @@ test('Immich-Upload und Nextcloud-WebDAV gegen Attrappe', async () => {
     req.on('end', () => {
       const body = Buffer.concat(chunks).toString('latin1');
       seen.push(`${req.method} ${req.url}`);
+      if (req.url === '/api/search/metadata') {
+        assert.equal(JSON.parse(body).order, 'desc');
+        res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({ assets: { items: [
+          { id: '11111111-2222-3333-4444-555555555555', type: 'IMAGE', originalFileName: 'IMG_1.HEIC', fileCreatedAt: '2026-11-01T10:00:00.000Z', duration: '0:00:00.00000' },
+          { id: '11111111-2222-3333-4444-666666666666', type: 'VIDEO', originalFileName: 'v.mov', fileCreatedAt: '2026-11-02T10:00:00.000Z', duration: '0:00:12.34500' },
+        ], nextPage: '2' } }));
+        return;
+      }
+      if (req.url === '/api/assets/11111111-2222-3333-4444-555555555555/original') {
+        res.writeHead(200, { 'Content-Type': 'image/heic', 'Content-Disposition': 'attachment; filename="IMG_1.HEIC"' }).end('heic');
+        return;
+      }
       if (req.url === '/api/assets') {
         assert.equal(req.headers['x-api-key'], 'k1');
         assert.match(body, /name="deviceAssetId"[\s\S]*chorus-m1:0/);
@@ -74,6 +86,12 @@ test('Immich-Upload und Nextcloud-WebDAV gegen Attrappe', async () => {
     assert.equal(await s.save('immich', file), 'In Immich gespeichert');
     assert.equal(await s.save('nextcloud', { ...file, name: 'brief.pdf' }), 'In Nextcloud gespeichert (Chorus/Dateien/brief.pdf)');
     assert.equal(await s.save('nextcloud', { ...file, name: 'brief.pdf' }), 'In Nextcloud gespeichert (Chorus/Dateien/brief (2).pdf)');
+    const list = await s.immichAssets({});
+    assert.equal(list.next, 2);
+    assert.deepEqual(list.items.map((x) => [x.video, x.duration]), [[false, ''], [true, '00:12']]);
+    const orig = await s.immichFile(list.items[0].id, 'original');
+    assert.deepEqual([orig.name, orig.mime, orig.data.toString()], ['IMG_1.HEIC', 'image/heic', 'heic']);
+    await assert.rejects(s.immichFile('../x', 'thumb'));
     assert.ok(seen.includes('MKCOL /remote.php/dav/files/wayne/Chorus'));
     assert.equal(await s.save('nextcloud', { ...file, name: 'x.pdf', folder: '' }), 'In Nextcloud gespeichert (x.pdf)');
   } finally { srv.close(); }

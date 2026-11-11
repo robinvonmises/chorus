@@ -109,6 +109,16 @@ export const api = {
   setStorage: (patch: { immich?: Record<string, unknown>; nextcloud?: Record<string, unknown> }) => req<StorageSettings>('PUT', '/api/storage', patch),
   testStorage: (target: StorageTarget) => req<{ message: string }>('POST', '/api/storage/test', { target }),
   saveTo: (m: Message, i: number, target: StorageTarget, opt: { folder?: string; name?: string } = {}) => req<{ message: string }>('POST', `/api/messages/${enc(m.id)}/attachments/${i}/save`, { target, ...opt }),
+  immichAssets: (o: { page?: number; album?: string; q?: string }) => req<{ items: ImmichAsset[]; next: number | null }>('GET', `/api/storage/immich/assets?page=${o.page ?? 1}${o.album ? `&album=${enc(o.album)}` : ''}${o.q ? `&q=${enc(o.q)}` : ''}`),
+  immichAlbums: () => req<ImmichAlbum[]>('GET', '/api/storage/immich/albums'),
+  immichThumb: (id: string) => `/api/storage/immich/assets/${enc(id)}/thumb`,
+  async immichFile(a: ImmichAsset): Promise<File> {
+    const r = await fetch(`/api/storage/immich/assets/${enc(a.id)}/send`, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? `Fehler ${r.status}`);
+    const cd = r.headers.get('Content-Disposition') ?? '';
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    return new File([await r.blob()], m ? decodeURIComponent(m[1]) : a.name || 'Foto', { type: r.headers.get('X-File-Mime') || 'application/octet-stream' });
+  },
   ncList: (path: string) => req<NcListing>('GET', `/api/storage/nextcloud/list?path=${enc(path)}`),
   ncMkdir: (path: string) => req<{ path: string }>('POST', '/api/storage/nextcloud/mkdir', { path }),
   async ncFile(path: string): Promise<File> {
@@ -242,6 +252,8 @@ export interface StorageSettings {
   immich: { enabled: boolean; url: string; hasKey: boolean };
   nextcloud: { enabled: boolean; url: string; user: string; hasPass: boolean; folder: string };
 }
+export interface ImmichAsset { id: string; video: boolean; name: string; taken: number; duration: string }
+export interface ImmichAlbum { id: string; name: string; count: number; cover: string | null; updated: number }
 export interface NcListing { path: string; folders: string[]; files: { name: string; size: number; mime: string; modified: number }[] }
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
 /** Kleine Vorschau (max. 720 px) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */

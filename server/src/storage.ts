@@ -37,6 +37,7 @@ export function numbered(name: string, n: number) {
 }
 
 const TIMEOUT = 120_000;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export class Storage {
   constructor(private store: Store) {}
@@ -159,6 +160,67 @@ export class Storage {
     if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
     const j = await r.json().catch(() => ({})) as { status?: string };
     return j.status === 'duplicate' ? 'Schon in Immich' : 'In Immich gespeichert';
+  }
+
+  /** Fotos/Videos aus Immich zum Anhängen: neueste zuerst, optional Album oder Suche (Smart-Suche braucht Immichs ML) */
+  async immichAssets(o: { page?: number; album?: string; q?: string; size?: number }) {
+    const { url, key } = this.immichReady();
+    const page = Math.max(1, Math.floor(o.page ?? 1)), size = Math.min(200, o.size ?? 120);
+    const base: Record<string, unknown> = { page, size, withExif: false };
+    if (o.album) { if (!UUID.test(o.album)) throw new StorageError(400, 'Ungültiges Album'); base.albumIds = [o.album]; }
+    const q = o.q?.trim();
+    const r = await this.immichJson(url, key, q ? '/api/search/smart' : '/api/search/metadata', { method: 'POST', body: JSON.stringify(q ? { ...base, query: q } : { ...base, order: 'desc' }) });
+    const a = (r as any)?.assets ?? {};
+    const items = ((a.items ?? []) as any[]).filter((x) => x.type === 'IMAGE' || x.type === 'VIDEO').map((x) => ({
+      id: String(x.id), video: x.type === 'VIDEO', name: String(x.originalFileName ?? ''), taken: Date.parse(x.localDateTime ?? x.fileCreatedAt ?? '') || 0,
+      duration: typeof x.duration === 'string' && x.duration !== '0:00:00.00000' ? x.duration.replace(/\.\d+$/, '').replace(/^0:/, '') : '',
+    }));
+    return { items, next: a.nextPage ? page + 1 : null };
+  }
+  async immichAlbums() {
+    const { url, key } = this.immichReady();
+    const own = await this.immichJson(url, key, '/api/albums') as any[];
+    const shared = await this.immichJson(url, key, '/api/albums?shared=true').catch(() => []) as any[];
+    const seen = new Set<string>();
+    return [...own, ...shared].filter((x) => x?.id && !seen.has(x.id) && seen.add(x.id)).map((x) => ({
+      id: String(x.id), name: String(x.albumName ?? 'Album'), count: Number(x.assetCount ?? 0), cover: x.albumThumbnailAssetId ? String(x.albumThumbnailAssetId) : null,
+      updated: Date.parse(x.lastModifiedAssetTimestamp ?? x.updatedAt ?? '') || 0,
+    })).sort((a, b) => b.updated - a.updated);
+  }
+  /** Vorschaubild (klein) oder Original eines Immich-Fotos */
+  async immichFile(id: string, kind: 'thumb' | 'preview' | 'fullsize' | 'original' | 'send', max = 200 * 1024 * 1024): Promise<{ data: Buffer; mime: string; name: string }> {
+    if (kind === 'send') {
+      // HEIC/HEIF verstehen viele Empfänger nicht: dann Immichs JPEG in voller Größe (ältere Immich: große Vorschau)
+      const o = await this.immichFile(id, 'original', max);
+      if (!/^image\/hei[cf]/i.test(o.mime)) return o;
+      const jpg = await this.immichFile(id, 'fullsize', max).catch(() => this.immichFile(id, 'preview', max)).catch(() => null);
+      return jpg ? { ...jpg, name: o.name.replace(/\.hei[cf]$/i, '') + '.jpg', mime: 'image/jpeg' } : o;
+    }
+    const { url, key } = this.immichReady();
+    if (!UUID.test(id)) throw new StorageError(400, 'Ungültige Kennung');
+    const path = kind === 'original' ? `/api/assets/${id}/original` : `/api/assets/${id}/thumbnail?size=${kind === 'thumb' ? 'thumbnail' : kind}`;
+    const r = await this.call(url + path, { headers: { 'x-api-key': key } }, 'Immich');
+    if (r.status === 401 || r.status === 403) throw new StorageError(400, 'Immich verweigert den Zugriff (Schlüssel braucht „asset.read“, „asset.view“ und „asset.download“)');
+    if (r.status === 404 || r.status === 400) throw new StorageError(404, 'Foto nicht gefunden');
+    if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
+    if (kind !== 'original' && !/^image\//i.test(r.headers.get('content-type') ?? '')) throw new StorageError(502, 'Immich liefert kein Bild');
+    if (Number(r.headers.get('content-length') ?? 0) > max) throw new StorageError(413, 'Datei ist zu groß');
+    const data = Buffer.from(await r.arrayBuffer());
+    const cd = r.headers.get('content-disposition') ?? '';
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/i) ?? cd.match(/filename="?([^";]+)"?/i);
+    let name = m ? m[1] : `${id}`;
+    try { name = decodeURIComponent(name); } catch { /* so lassen */ }
+    return { data, mime: (r.headers.get('content-type') ?? 'application/octet-stream').split(';')[0], name };
+  }
+  private immichReady() {
+    if (!this.publicSettings().immich.enabled) throw new StorageError(400, 'Immich ist nicht eingerichtet');
+    return this.settings.immich;
+  }
+  private async immichJson(url: string, key: string, path: string, init: RequestInit = {}) {
+    const r = await this.call(url + path, { ...init, headers: { 'x-api-key': key, Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}) } }, 'Immich');
+    if (r.status === 401 || r.status === 403) throw new StorageError(400, 'Immich verweigert den Zugriff. Der API-Schlüssel braucht zum Durchsuchen zusätzlich „asset.read“, „asset.view“, „asset.download“ und „album.read“');
+    if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
+    return r.json();
   }
 
   // ---------- Nextcloud (WebDAV) ----------
