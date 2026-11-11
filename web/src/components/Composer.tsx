@@ -40,6 +40,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const storage = useStorage();
   const [ncPick, setNcPick] = useState(false);
   const [imPick, setImPick] = useState(false);
+  const [attMenu, setAttMenu] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
   const cancelRec = useRef(false);
@@ -253,6 +254,14 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           onDone={(nf) => { setFiles((fs) => fs.map((x, j) => (j === editIdx ? nf : x))); setEditIdx(null); }} />
       )}
       {emoji && <div className="composer-emoji"><EmojiPicker onPick={insertEmoji} /></div>}
+      {attMenu && <>
+        <div className="att-menu-bg" onClick={() => setAttMenu(false)} />
+        <div className="att-menu menu-list" role="menu">
+          <button onClick={() => { setAttMenu(false); fileIn.current?.click(); }}><Icon name="attach" size={18} />Fotos und Dateien vom Gerät</button>
+          {storage?.immich.enabled && <button onClick={() => { setAttMenu(false); setImPick(true); }}><Icon name="photos" size={18} />Aus Immich</button>}
+          {storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />Aus Nextcloud</button>}
+        </div>
+      </>}
       {imPick && <ImmichPicker onClose={() => setImPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
       {ncPick && <NextcloudBrowser mode="pick" onClose={() => setNcPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
       {rec ? (
@@ -266,9 +275,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         <div className={`composer ${text.trim() && !tools ? 'compact' : ''}`}>
           <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
-          {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
-          {!editing && storage?.immich.enabled && <button className="icon-btn tool" onClick={() => setImPick(true)} aria-label="Aus Immich anhängen" title="Aus Immich anhängen"><Icon name="photos" /></button>}
-          {!editing && storage?.nextcloud.enabled && <button className="icon-btn tool" onClick={() => setNcPick(true)} aria-label="Aus Nextcloud anhängen" title="Aus Nextcloud anhängen"><Icon name="folder" /></button>}
+          {!editing && <button className={`icon-btn tool ${attMenu ? 'on' : ''}`} onClick={() => { if (storage?.immich.enabled || storage?.nextcloud.enabled) setAttMenu((v) => !v); else fileIn.current?.click(); }} aria-label="Anhängen"><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
           <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : placeholder ?? 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
