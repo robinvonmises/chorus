@@ -21,8 +21,8 @@ export const takeRise = () => { const ok = Date.now() - armedAt < 15000; armedAt
 /**
  * Ablauf nach iMessage (Bild für Bild aus Waynes Bildschirmaufnahme, 30 fps):
  * 1. Das Eingabefeld wird zur Blase: Hintergrund so breit wie das Feld, Text an seiner Stelle im Feld.
- * 2. ~120 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
- * 3. ~260 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
+ * 2. ~170 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
+ * 3. ~390 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
  * Die echte Blase bleibt dabei an ihrem Platz und ist nur unsichtbar; eine Kopie fliegt in einer
  * fixierten Ebene darüber (nur transform), damit sie über dem Eingabefeld sichtbar ist und nichts am Scrollen ändert.
  */
@@ -56,13 +56,13 @@ export function rise(msg: Element | null | undefined) {
     const dx = Math.round(Math.min(0, f.right - b.right));                   // rechte Kante wie das Feld
     const bw0 = Math.max(b.width, f.width);                                   // Hintergrund anfangs feldbreit (Breite statt scaleX, damit die Rundung rund bleibt)
     const tx = Math.round(Math.min(0, f.left - (b.left + dx)));               // Text anfangs links im Feld
-    const T = 400, A = 0.3;
-    const slide = 'cubic-bezier(.3, .6, .3, 1)', up = 'cubic-bezier(.25, .9, .35, 1)';
+    const T = 560, A = 0.3; // Wayne: „einen Ticken langsamer und smoother“
+    const slide = 'cubic-bezier(.45, .05, .25, 1)', up = 'cubic-bezier(.3, .75, .3, 1)';
     const anims = [
       layer.animate([
         { transform: `translate(${dx}px, ${dy}px)`, easing: slide },
         { offset: A, transform: `translate(0px, ${dy}px)`, easing: up },
-        { offset: 0.82, transform: 'translate(0px, -3px)', easing: 'ease-in-out' },
+        { offset: 0.8, transform: 'translate(0px, -2px)', easing: 'cubic-bezier(.4, 0, .4, 1)' },
         { transform: 'translate(0px, 0px)' },
       ], { duration: T }),
       bg.animate([
