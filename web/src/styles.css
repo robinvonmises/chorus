@@ -952,3 +952,9 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .lightbox-nav.next { right: 10px; }
 .rot-180 { transform: rotate(180deg); }
 @media (hover: none) { .lightbox-nav { display: none; } }
+.lightbox-slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: transform .28s cubic-bezier(.2, .8, .2, 1); will-change: transform; }
+.lightbox-slide img, .lightbox-slide video { max-width: 100vw; max-height: 100%; object-fit: contain; }
+.lightbox-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; pointer-events: none; }
+.lightbox-vbar { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.lightbox-vtrack { flex: 1; height: 28px; display: flex; align-items: center; cursor: pointer; background: linear-gradient(rgba(255,255,255,.3), rgba(255,255,255,.3)) center / 100% 4px no-repeat; border-radius: 2px; }
+.lightbox-vtrack > div { height: 4px; background: #fff; border-radius: 2px; }
