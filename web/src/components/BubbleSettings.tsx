@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import type { Network } from '../api';
 import { NETWORKS } from '../util';
+import { sendAnimEnabled, setSendAnim } from '../sendAnim';
 import { BUBBLE_DEFAULTS, BUBBLE_PALETTE, loadBubbles, saveBubbles, type BubbleSettings } from '../bubbles';
 
 /** Einstellungen → Darstellung: Farbe der eigenen Sprechblasen */
 export function BubbleSection({ nets }: { nets: Network[] }) {
   const [b, setB] = useState<BubbleSettings>(loadBubbles);
   const set = (n: BubbleSettings) => { setB(n); saveBubbles(n); };
+  const [anim, setAnim] = useState(sendAnimEnabled);
   const list: Network[] = nets.length ? nets : ['signal', 'whatsapp', 'telegram'];
   return (
     <section className="set-section">
@@ -32,6 +34,10 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
           <button className="link" style={{ justifySelf: 'start' }} onClick={() => set({ ...b, colors: BUBBLE_DEFAULTS.colors })}>Standardfarben</button>
         </div>
       )}
+      <label className="toggle">
+        <input type="checkbox" checked={anim} onChange={(e) => { setAnim(e.target.checked); setSendAnim(e.target.checked); }} />
+        <span><b>Sende-Animation</b><small>Gesendete Nachrichten steigen aus dem Eingabefeld in den Chat.</small></span>
+      </label>
     </section>
   );
 }

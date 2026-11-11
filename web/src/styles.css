@@ -923,3 +923,9 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .fwd-list label small { color: var(--ink-3); flex: none; }
 .fwd-list li.muted { padding: 10px 12px; }
 .fwd-sheet .btn.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* Sende-Animation: neue eigene Blase steigt aus dem Eingabefeld (web/src/sendAnim.ts) */
+.messages-inner.rising { overflow: clip; }
+.msg.rise { animation: send-rise .38s cubic-bezier(.2, .9, .25, 1) both; transform-origin: 100% 100%; will-change: transform; }
+@keyframes send-rise { from { transform: translateY(var(--rise-y, 60px)) scale(.92); opacity: .35; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .msg.rise { animation: none; } }

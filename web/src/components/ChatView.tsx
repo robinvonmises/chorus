@@ -14,6 +14,7 @@ import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
 import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
+import { rise, takeRise } from '../sendAnim';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
@@ -56,7 +57,14 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const prevHeight = useRef(0);
 
   const pending = useOutbox(chat.id);
-  useLayoutEffect(() => { const el = scroller.current; if (el && pending.length) el.scrollTop = el.scrollHeight; }, [pending.length]);
+  const prevPending = useRef(0);
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && pending.length) el.scrollTop = el.scrollHeight;
+    // Neue Datei-/Sprachblasen (kommen nur vom eigenen Senden): aus dem Eingabefeld aufsteigen lassen
+    if (el && pending.length > prevPending.current) [...el.querySelectorAll('.msg.pending')].slice(prevPending.current - pending.length).forEach(rise);
+    prevPending.current = pending.length;
+  }, [pending.length]);
   const byRemote = useMemo(() => new Map((messages ?? []).map((m) => [m.remoteId, m])), [messages]);
   const group = chat.kind !== 'direct';
   // Zusammengeführter Kontakt: Senden über den im Kontaktprofil gewählten Messenger, sonst über den, über den zuletzt etwas kam
@@ -90,7 +98,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       // (Lesebestätigung, Reaktion …), sonst reißt es einen beim Hochscrollen immer wieder nach unten
       el.scrollTop = el.scrollHeight;
     }
-    prevLast.current = messages.at(-1)?.id ?? null;
+    const last = messages.at(-1);
+    if (prevLen.current && last?.fromMe && last.id !== prevLast.current && takeRise()) rise(el.querySelector(`[data-remote="${CSS.escape(last.remoteId)}"]`));
+    prevLast.current = last?.id ?? null;
     prevLen.current = messages.length;
     prevFirst.current = first;
     prevHeight.current = el.scrollHeight;

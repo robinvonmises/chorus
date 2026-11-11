@@ -6,6 +6,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { ImageEditor } from './ImageEditor';
 import { VideoEditor, type VideoEdit } from './VideoEditor';
 import { outbox } from '../outbox';
+import { armRise } from '../sendAnim';
 import { previewOf } from './Message';
 import { useAi } from '../aiState';
 import { WhenPicker, whenLabel } from './WhenPicker';
@@ -103,7 +104,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
     if (!t) return;
     const r = replyTo?.remoteId;
     const translate = canTr && !noTr;
-    setText(''); setNoTr(false); onSent();
+    setText(''); setNoTr(false); onSent(); armRise();
     try { await api.send(chat.id, t, r, translate); } catch (e: any) { onError(e.message); }
   };
 
