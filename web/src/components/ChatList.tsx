@@ -5,11 +5,11 @@ import { NETWORKS, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 
-export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onReload, onChats, onOpenMessage, onGallery }: {
+export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
   chats: Chat[]; accounts: Account[]; filter: Filter; setFilter: (f: Filter) => void; active: string | null;
   onOpen: (id: string) => void; onAdd: () => void; onSettings: () => void; onNew: () => void; online: boolean; problems: Account[];
-  onFixAccount: () => void; previewOf: (m: Message) => string; onReload: () => Promise<void>; onChats: (cs: Chat[]) => void;
+  onFixAccount: () => void; previewOf: (m: Message) => string; onChats: (cs: Chat[]) => void;
 }) {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Set<string> | null>(null);
@@ -124,30 +124,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const rowLong = useCallback((id: string) => { if (!live.current.sel) setSel(new Set([id])); }, []);
 
-  // Ziehen zum Aktualisieren
   const listRef = useRef<HTMLUListElement>(null);
-  const [pull, setPull] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const pullStart = useRef<number | null>(null);
-  const onTouchStart = (e: React.TouchEvent) => { if ((listRef.current?.scrollTop ?? 1) <= 0 && !refreshing) pullStart.current = e.touches[0].clientY; };
-  const onTouchMove = (e: React.TouchEvent) => {
-    if (pullStart.current === null) return;
-    const d = e.touches[0].clientY - pullStart.current;
-    // Finger geht nach oben oder Liste ist schon gescrollt: Geste gehört dem normalen Scrollen
-    if (d < 0 || (listRef.current?.scrollTop ?? 0) > 0) { pullStart.current = null; setPull(0); return; }
-    if (d < 12) return;
-    setPull(Math.min(110, (d - 12) * 0.5));
-  };
-  const onTouchEnd = async () => {
-    if (pullStart.current === null) return;
-    pullStart.current = null;
-    if (pull >= 64) {
-      setRefreshing(true); setPull(56);
-      await onReload().catch(() => {});
-      setRefreshing(false);
-    }
-    setPull(0);
-  };
 
   return (
     <section className="pane-list">
@@ -196,11 +173,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           <span><b>{NETWORKS[a.network].name}</b>: {a.status.state === 'qr' || a.status.state === 'need_input' ? 'Anmeldung nicht abgeschlossen' : a.status.message || 'nicht verbunden'}. Tippen zum Beheben.</span>
         </button>
       ))}
-      <div className="pull" style={{ height: pull, opacity: Math.min(1, pull / 56) }} aria-hidden={!pull}>
-        <span className={`pull-spin ${refreshing ? 'on' : ''}`} style={{ transform: refreshing ? undefined : `rotate(${pull * 4}deg)` }}><Icon name="refresh" size={20} /></span>
-      </div>
-      <ul className="chats" ref={listRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{ transition: pull ? 'none' : undefined }}>
+      <ul className="chats" ref={listRef}>
         {shown.map((c) => <ChatListItem key={c.id} c={c} active={c.id === active || (!!active && !!(c as { groupIds?: string[] }).groupIds?.includes(active))} selecting={!!sel} selected={!!sel?.has(c.id)} onAct={rowAct} onClick={rowClick} onLong={rowLong} />)}
         {q.trim().length >= 2 && (
           <li className="search-results">
