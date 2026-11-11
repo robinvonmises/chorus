@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useExit } from './useExit';
 import { syncPush } from './push';
 import { setPlanned, usePlanned } from './plannedState';
 import { Gallery } from './components/Gallery';
-import { api, connectEvents, type Account, type Chat, type HubEvent, type Message, type Network, type ServerState } from './api';
+import { api, connectEvents, warmImages, type Account, type Chat, type HubEvent, type Message, type Network, type ServerState } from './api';
 import { keyStore, lastProfile } from './keys';
 import { Lock } from './components/Lock';
 import { ChatList } from './components/ChatList';
@@ -129,7 +130,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const prefetch = useCallback(async (id: string) => {
     if (loaded.current.has(id)) return;
     loaded.current.add(id);
-    try { const ms = await api.messages(id); setMessages((m) => (m.has(id) ? m : new Map(m).set(id, ms))); }
+    try { const ms = await api.messages(id); setMessages((m) => (m.has(id) ? m : new Map(m).set(id, ms))); warmImages(ms); }
     catch { loaded.current.delete(id); }
   }, []);
 
@@ -310,8 +311,20 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
 
   const playing = !!usePlayer().track;
   const planned = usePlanned();
+  // Handy: Chat beim Zurückgehen noch kurz zeigen, damit er wie bei iOS nach rechts hinausgleitet
+  const chatView: ReactNode = chat ? (
+    <ChatView key={chat.id} chat={chat} account={account} messages={merged} onBack={() => openChat(null)} loadOlder={loadOlder}
+      linked={linkedIds.map((id) => chats.get(id)!).filter(Boolean)} accounts={accounts} focus={focus} planned={planned}
+      onGallery={() => setGallery({ ids: linkedIds, title: chat.title })} onOpenMessage={openAt}
+      onPatchChat={async (p) => { const c = await api.patchChat(chat.id, p); setChats((cs) => new Map(cs).set(c.id, c)); }}
+      onChat={(c) => setChats((cs) => new Map(cs).set(c.id, c))} />
+  ) : null;
+  const lastChatView = useRef<ReactNode>(null);
+  if (chatView) lastChatView.current = chatView;
+  const exit = useExit(!!chat, 400);
+  const leaving = exit.closing && window.matchMedia('(max-width: 860px)').matches ? lastChatView.current : null;
   return (
-    <div className={`app ${chat ? 'has-chat' : ''} ${playing ? 'with-player' : ''}`}>
+    <div className={`app ${chat ? 'has-chat' : ''} ${leaving ? 'chat-leaving' : ''} ${playing ? 'with-player' : ''}`}>
       <PlayerBar chatTitle={(id) => chats.get(id)?.title ?? ''} onOpen={openChat} />
       <Rail filter={filter} setFilter={setFilter} accounts={accounts} chats={sortedChats} onSettings={() => setPanel('settings')} />
       <ChatList
@@ -322,13 +335,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         onOpenMessage={openAt} onGallery={() => setGallery({ title: 'Medien, Dateien & Links' })}
       />
       <main className="pane-chat">
-        {chat ? (
-          <ChatView key={chat.id} chat={chat} account={account} messages={merged} onBack={() => openChat(null)} loadOlder={loadOlder}
-            linked={linkedIds.map((id) => chats.get(id)!).filter(Boolean)} accounts={accounts} focus={focus} planned={planned}
-            onGallery={() => setGallery({ ids: linkedIds, title: chat.title })} onOpenMessage={openAt}
-            onPatchChat={async (p) => { const c = await api.patchChat(chat.id, p); setChats((cs) => new Map(cs).set(c.id, c)); }}
-            onChat={(c) => setChats((cs) => new Map(cs).set(c.id, c))} />
-        ) : (
+        {chatView ?? leaving ?? (
           <div className="empty-chat">
             <img src="/icon.svg" width={72} alt="" />
             <h2>Chorus</h2>
