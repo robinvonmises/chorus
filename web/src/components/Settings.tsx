@@ -1,4 +1,5 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { EmailConfig } from '../api';
 import { api, type Account, type ServerState } from '../api';
 import { deriveKey, keyStore, newSalt } from '../keys';
 import { NETWORKS } from '../util';
@@ -227,11 +228,59 @@ function AccountPage({ acc, onBack }: { acc: Account; onBack: () => void }) {
         {acc.status.state !== 'connected' && !fix && <Row tile={<Tile color="#ff9500" icon="key" />} title="Anmeldung beheben" onClick={() => setFix(true)} />}
         <Row tile={<Tile color="#007aff" icon="refresh" />} title="Neu verbinden" chevron={false} onClick={() => api.restartAccount(acc.id)} />
       </div>
+      {acc.network === 'email' && <div className="ios-card pad"><EmailSettings id={acc.id} /></div>}
       <div className="ios-card">
         <Row title="Messenger trennen" danger chevron={false}
           onClick={async () => { if (confirm(`${acc.label} wirklich trennen? Die Chats werden aus Chorus gelöscht (nicht auf dem Handy).`)) { await api.removeAccount(acc.id); onBack(); } }} />
       </div>
       <p className="ios-foot">Beim Trennen werden nur die Daten in Chorus gelöscht. Auf deinem Handy bleibt alles, wie es ist.</p>
     </>
+  );
+}
+
+/** E-Mail: Signaturen, Newsletter, Zugangsdaten */
+function EmailSettings({ id }: { id: string }) {
+  const [c, setC] = useState<(EmailConfig & { password?: string }) | null>(null);
+  const [others, setOthers] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { api.emailConfig(id).then((x) => { setC(x); setOthers((x.hideSignatures ?? []).join('\n\n---\n\n')); }).catch((e) => setMsg(e.message)); }, [id]);
+  if (!c) return <small className="muted">{msg || 'Lade …'}</small>;
+  const set = (k: keyof EmailConfig | 'password') => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setC({ ...c, [k]: e.target.value });
+  const save = async () => {
+    setBusy(true); setMsg('');
+    try {
+      await api.setEmailConfig(id, { ...c, imapPort: Number(c.imapPort) || 993, smtpPort: Number(c.smtpPort) || 465, hideSignatures: others.split(/\n\s*---\s*\n/).map((x) => x.trim()).filter(Boolean) });
+      setC({ ...c, password: '' }); setMsg('Gespeichert. Das Postfach wird neu verbunden.');
+    } catch (e: any) { setMsg(e.message); } finally { setBusy(false); }
+  };
+  return (
+    <div className="stack">
+      <label className="field"><span>Meine Signatur</span>
+        <textarea className="input" rows={4} value={c.signature ?? ''} onChange={set('signature')} placeholder={'Viele Grüße\nWayne'} />
+      </label>
+      <small className="muted">Wird an jede gesendete Mail angehängt und in den Blasen nicht angezeigt.</small>
+      <label className="field"><span>Signaturen anderer ausblenden</span>
+        <textarea className="input" rows={5} value={others} onChange={(e) => setOthers(e.target.value)} placeholder={'Anna Berger\nMusterfirma GmbH\nTel. 0170 …\n---\nnächste Signatur'} />
+      </label>
+      <small className="muted">Signaturen einfach hineinkopieren, mehrere durch eine Zeile mit „---“ trennen. Ab der ersten Zeile einer Signatur wird der Rest der Mail ausgeblendet. Signaturen nach „-- “, „Von meinem iPhone gesendet“ und zitierte Verläufe blendet Chorus ohnehin aus.</small>
+      <label className="toggle">
+        <input type="checkbox" checked={c.hideBulk !== false} onChange={(e) => setC({ ...c, hideBulk: e.target.checked })} />
+        <span><b>Newsletter ausblenden</b><small>Mails mit Abmelde-Link und automatische Mails erscheinen nicht als Chat (gilt für neue Mails).</small></span>
+      </label>
+      <label className="field"><span>Absendername</span><input className="input" value={c.name ?? ''} onChange={set('name')} /></label>
+      <label className="field"><span>Neues (App-)Passwort</span><input className="input" type="password" autoComplete="off" value={c.password ?? ''} onChange={set('password')} placeholder="leer lassen = unverändert" /></label>
+      <label className="field"><span>Benutzername</span><input className="input" value={c.user ?? ''} onChange={set('user')} placeholder={c.address} /></label>
+      <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+        <label className="field grow"><span>IMAP-Server</span><input className="input" value={c.imapHost} onChange={set('imapHost')} /></label>
+        <label className="field" style={{ width: 90 }}><span>Port</span><input className="input" inputMode="numeric" value={c.imapPort ?? 993} onChange={set('imapPort')} /></label>
+      </div>
+      <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
+        <label className="field grow"><span>SMTP-Server</span><input className="input" value={c.smtpHost} onChange={set('smtpHost')} /></label>
+        <label className="field" style={{ width: 90 }}><span>Port</span><input className="input" inputMode="numeric" value={c.smtpPort ?? 465} onChange={set('smtpPort')} /></label>
+      </div>
+      {msg && <small className="muted">{msg}</small>}
+      <button className="btn primary wide" disabled={busy} onClick={save}>{busy ? 'Speichere …' : 'Speichern'}</button>
+    </div>
   );
 }

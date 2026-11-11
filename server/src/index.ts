@@ -22,6 +22,7 @@ import { telegramFactory } from './adapters/telegram.js';
 import { demoFactory } from './adapters/demo.js';
 import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
+import { emailFactory } from './adapters/email.js';
 import { Ai, AiError } from './ai.js';
 import { AutopilotRunner } from './autopilot.js';
 import { Translator, guessLang } from './translate.js';
@@ -40,7 +41,7 @@ const WEB_DIR = resolve(process.env.WEB_DIR ?? join(dirname(fileURLToPath(import
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 100);
 mkdirSync(DATA_DIR, { recursive: true });
 
-const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory };
+const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory, email: emailFactory };
 if (process.env.DEMO === '1') factories.demo = demoFactory;
 
 const registry = new ProfileRegistry(DATA_DIR);
@@ -396,6 +397,25 @@ app.post('/api/accounts', async (req) => {
   return H(req).addAccount(network, label || network, config ?? {});
 });
 app.delete('/api/accounts/:id', async (req) => { await H(req).removeAccount((req.params as any).id); return { ok: true }; });
+// E-Mail: Einstellungen (Server, Signaturen) lesen und ändern. Das Passwort wird nie zurückgegeben.
+app.get('/api/accounts/:id/config', async (req) => {
+  const row = H(req).store.getAccountRow((req.params as any).id);
+  if (!row || row.network !== 'email') throw new Error('Nur für E-Mail-Konten');
+  const { password: _p, ...cfg } = JSON.parse(row.config);
+  return cfg;
+});
+app.patch('/api/accounts/:id/config', async (req) => {
+  const id = (req.params as any).id;
+  const row = H(req).store.getAccountRow(id);
+  if (!row || row.network !== 'email') throw new Error('Nur für E-Mail-Konten');
+  const allowed = ['name', 'user', 'password', 'imapHost', 'imapPort', 'smtpHost', 'smtpPort', 'signature', 'hideSignatures', 'hideBulk', 'days'];
+  const body = (req.body ?? {}) as Record<string, unknown>;
+  const cfg = JSON.parse(row.config);
+  for (const k of allowed) if (k in body && !(k === 'password' && !body[k])) cfg[k] = body[k];
+  H(req).store.setAccountConfig(id, cfg);
+  await H(req).startAccount(id);
+  return { ok: true };
+});
 app.post('/api/accounts/:id/restart', async (req) => { await H(req).startAccount((req.params as any).id); return { ok: true }; });
 app.post('/api/accounts/:id/input', async (req) => {
   const { field, value } = req.body as { field: string; value: string };

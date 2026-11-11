@@ -20,13 +20,18 @@
     "better-sqlite3-multiple-ciphers": "^13.0.3",
     "big-integer": "^1.6.52",
     "fastify": "^5.12.8",
+    "imapflow": "^2.11.0",
+    "mailparser": "^3.14.3",
+    "nodemailer": "^10.5.0",
     "pino": "^9.14.0",
     "telegram": "^2.26.22",
     "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
     "@types/web-push": "^3.6.4",
     "@types/ws": "^8.18.2",
     "tsx": "^4.23.15",

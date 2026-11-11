@@ -4,7 +4,7 @@ import type { Network } from './api';
 export type BubbleSettings = { mode: 'network' | 'single'; colors: Record<Network, string> };
 export const BUBBLE_DEFAULTS: BubbleSettings = {
   mode: 'network',
-  colors: { signal: '#3a76f0', whatsapp: '#1f9e5a', telegram: '#3390ec', demo: '#4f46e5' },
+  colors: { signal: '#3a76f0', whatsapp: '#1f9e5a', telegram: '#3390ec', email: '#ea580c', demo: '#4f46e5' },
 };
 export const BUBBLE_PALETTE = ['#3a76f0', '#3390ec', '#0891b2', '#1f9e5a', '#0f766e', '#4f46e5', '#7c3aed', '#db2777', '#e11d48', '#ea580c', '#a16207', '#374151'];
 
