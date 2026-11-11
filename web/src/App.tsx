@@ -303,7 +303,19 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     if (activeRef.current) { const id = activeRef.current; api.messages(id).then((ms) => setMessages((m) => new Map(m).set(id, keepSame(m.get(id), ms)))).catch(() => {}); }
   }, []);
 
-  const sortedChats = useMemo(() => [...chats.values()].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs), [chats]);
+  // Gelöschte Chats verschwinden sofort, das Löschen beim Messenger läuft im Hintergrund
+  const [gone, setGone] = useState<Set<string>>(() => new Set());
+  const removeChats = useCallback(async (ids: string[]) => {
+    setGone((g) => new Set([...g, ...ids]));
+    setActive((a) => (a && ids.includes(a) ? null : a));
+    const failed: string[] = []; let err = '';
+    await Promise.all(ids.map((id) => api.deleteChat(id).catch((e: any) => { failed.push(id); err = e?.message ?? 'Fehler'; })));
+    setGone((g) => { const n = new Set(g); for (const id of ids) n.delete(id); return n; });
+    if (failed.length) return `Löschen fehlgeschlagen${err ? `: ${err}` : ''}`;
+    setChats((cs) => { const n = new Map(cs); for (const id of ids) n.delete(id); return n; });
+    return '';
+  }, []);
+  const sortedChats = useMemo(() => [...chats.values()].filter((c) => !gone.has(c.id)).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs), [chats, gone]);
   const unreadTotal = useMemo(() => sortedChats.reduce((n, c) => n + (c.muted || c.archived ? 0 : c.unread), 0), [sortedChats]);
   useEffect(() => { document.title = unreadTotal ? `(${unreadTotal}) Chorus` : 'Chorus'; (navigator as any).setAppBadge?.(unreadTotal || undefined)?.catch?.(() => {}); }, [unreadTotal]);
 
@@ -321,7 +333,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         chats={sortedChats} accounts={accounts} filter={filter} setFilter={setFilter} active={active} onOpen={openChat}
         onAdd={() => setPanel('add')} onSettings={() => setPanel('settings')} onNew={() => setPanel('new')} online={online} problems={problems}
         onFixAccount={() => setPanel('settings')} previewOf={previewOf}
-        onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })}
+        onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })} onRemove={removeChats}
         onOpenMessage={openAt} onGallery={() => setGallery({ title: 'Medien, Dateien & Links' })}
       />
       <main className="pane-chat">
@@ -329,6 +341,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
           <ChatView key={chat.id} chat={chat} account={account} messages={merged} onBack={() => openChat(null)} loadOlder={loadOlder}
             linked={linkedIds.map((id) => chats.get(id)!).filter(Boolean)} accounts={accounts} focus={focus} planned={planned}
             onGallery={() => setGallery({ ids: linkedIds, title: chat.title })} onOpenMessage={openAt}
+            onRemove={() => { const id = chat.id; openChat(null); void removeChats([id]).then((err) => { if (err) alert(err); }); }}
             onPatchChat={async (p) => { const c = await api.patchChat(chat.id, p); setChats((cs) => new Map(cs).set(c.id, c)); }}
             onChat={(c) => setChats((cs) => new Map(cs).set(c.id, c))} />
         ) : (

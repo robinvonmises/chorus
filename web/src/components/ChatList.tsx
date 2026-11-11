@@ -5,11 +5,11 @@ import { NETWORKS, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 
-export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onOpenMessage, onGallery }: {
+export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
   chats: Chat[]; accounts: Account[]; filter: Filter; setFilter: (f: Filter) => void; active: string | null;
   onOpen: (id: string) => void; onAdd: () => void; onSettings: () => void; onNew: () => void; online: boolean; problems: Account[];
-  onFixAccount: () => void; previewOf: (m: Message) => string; onChats: (cs: Chat[]) => void;
+  onFixAccount: () => void; previewOf: (m: Message) => string; onChats: (cs: Chat[]) => void; onRemove: (ids: string[]) => Promise<string>;
 }) {
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Set<string> | null>(null);
@@ -82,13 +82,16 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const toggleNet = (n: Network) => setFilter({ ...filter, nets: filter.nets.includes(n) ? filter.nets.filter((x) => x !== n) : [...filter.nets, n] });
 
   // Aktionen für eine oder mehrere Chats
-  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin' | 'delete') => {
+  const act = async (ids: string[], what: 'read' | 'unread' | 'archive' | 'unarchive' | 'mute' | 'unmute' | 'pin' | 'unpin' | 'delete'): Promise<boolean | void> => {
     if (what === 'delete') {
-      if (!confirm(ids.length > 1 ? `${ids.length} E-Mail-Unterhaltungen in den Papierkorb verschieben?` : 'Diese E-Mail-Unterhaltung in den Papierkorb verschieben?')) return;
-      let ok = 0; let err = '';
-      for (const id of ids) { try { await api.deleteChat(id); ok++; } catch (e: any) { err = e.message ?? 'Fehler'; } }
-      flash(err ? `Nicht alles gelöscht: ${err}` : ok > 1 ? `${ok} Unterhaltungen gelöscht` : 'Gelöscht');
-      return;
+      const mail = ids.every((id) => chats.find((c) => c.id === id)?.network === 'email');
+      const n = ids.length;
+      if (!confirm(mail ? (n > 1 ? `${n} E-Mail-Unterhaltungen in den Papierkorb verschieben?` : 'Diese E-Mail-Unterhaltung in den Papierkorb verschieben?')
+        : (n > 1 ? `${n} Chats löschen?` : 'Chat löschen?') + ' Er verschwindet aus Chorus, auf dem Handy bleibt er erhalten.')) return false;
+      setSel(null);
+      // Sofort weg, der Rest läuft im Hintergrund; bei Fehler kommt der Chat zurück
+      void onRemove(ids).then((err) => flash(err || (n > 1 ? `${n} gelöscht` : 'Gelöscht')));
+      return true;
     }
     const out: Chat[] = [];
     let err = '';
@@ -117,7 +120,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const live = useRef({ act, sel, onOpen, rowInfo });
   live.current = { act, sel, onOpen, rowInfo };
   // Absender-Zeile: Aktionen gelten für alle Betreffe
-  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => { void live.current.act(live.current.rowInfo.get(id)?.groupIds ?? [id], what); }, []);
+  const rowAct = useCallback((id: string, what: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete') => live.current.act(live.current.rowInfo.get(id)?.groupIds ?? [id], what), []);
   const rowClick = useCallback((id: string) => {
     const g = live.current.rowInfo.get(id)?.mailGroup;
     if (live.current.sel) toggleSel(id); else if (g) setSender(g); else live.current.onOpen(id);
@@ -212,13 +215,13 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             const allArchived = selChats.length > 0 && selChats.every((c) => c.archived);
             const allMuted = selChats.length > 0 && selChats.every((c) => c.muted);
             const allPinned = selChats.length > 0 && selChats.every((c) => c.pinned);
-            const run = async (w: Parameters<typeof act>[1]) => { await act(selIds, w); done(); };
+            const run = async (w: Parameters<typeof act>[1]) => { if ((await act(selIds, w)) !== false) done(); };
             return <>
               <button disabled={dis} onClick={() => run(anyUnread ? 'read' : 'unread')}><Icon name={anyUnread ? 'checks' : 'dot'} size={20} />{anyUnread ? 'Gelesen' : 'Ungelesen'}</button>
               <button disabled={dis} onClick={() => run(allArchived ? 'unarchive' : 'archive')}><Icon name="archive" size={20} />{allArchived ? 'Zurückholen' : 'Archivieren'}</button>
               <button disabled={dis} onClick={() => run(allMuted ? 'unmute' : 'mute')}><Icon name={allMuted ? 'bell' : 'belloff'} size={20} />{allMuted ? 'Ton an' : 'Stumm'}</button>
               <button disabled={dis} onClick={() => run(allPinned ? 'unpin' : 'pin')}><Icon name="pin" size={20} />{allPinned ? 'Lösen' : 'Anheften'}</button>
-              {selChats.length > 0 && selChats.every((c) => c.network === 'email') && <button onClick={() => run('delete')}><Icon name="trash" size={20} />Löschen</button>}
+              {selChats.length > 0 && <button onClick={() => run('delete')}><Icon name="trash" size={20} />Löschen</button>}
             </>;
           })()}
         </div>
@@ -249,13 +252,14 @@ function HitRow({ m, chat, q, onOpen }: { m: Message; chat?: Chat; q?: string; o
 
 const ChatListItem = memo(function ChatListItem({ c, active, selecting, selected, onAct, onClick, onLong }: {
   c: Chat & { linkedNets?: Network[] }; active: boolean; selecting: boolean; selected: boolean;
-  onAct: (id: string, what: 'read' | 'unread' | 'archive' | 'unarchive') => void; onClick: (id: string) => void; onLong: (id: string) => void;
+  onAct: (id: string, what: 'read' | 'unread' | 'archive' | 'unarchive' | 'delete') => Promise<boolean | void>; onClick: (id: string) => void; onLong: (id: string) => void;
 }) {
   return (
     <li>
       <SwipeRow disabled={selecting}
-        left={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}
-        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}>
+        left={{ icon: 'trash', label: 'Löschen', color: 'var(--danger)', run: () => onAct(c.id, 'delete') }}
+        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}
+        far={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}>
         <ChatRow c={c} active={active} selecting={selecting} selected={selected} onClick={() => onClick(c.id)} onLong={() => onLong(c.id)} />
       </SwipeRow>
     </li>
@@ -293,30 +297,37 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
   );
 }
 
-type SwipeAction = { icon: string; label: string; color: string; run: () => void };
+type SwipeAction = { icon: string; label: string; color: string; run: () => unknown };
 
-/** Zeile zum Wischen: nach links archivieren, nach rechts gelesen/ungelesen */
-function SwipeRow({ children, left, right, disabled }: { children: React.ReactNode; left: SwipeAction; right: SwipeAction; disabled?: boolean }) {
+/** Zeile zum Wischen: nach links löschen, nach rechts archivieren, weit nach rechts gelesen/ungelesen */
+function SwipeRow({ children, left, right, far, disabled }: { children: React.ReactNode; left: SwipeAction; right: SwipeAction; far: SwipeAction; disabled?: boolean }) {
   const [dx, setDx] = useState(0);
   const [anim, setAnim] = useState(false);
   const s = useRef<{ x: number; y: number; dir: 0 | 1 | 2 } | null>(null); // dir: 0 offen, 1 waagrecht, 2 senkrecht
   const W = 84;
+  const FAR = Math.max(170, Math.round(window.innerWidth * 0.5));
   const onStart = (e: React.TouchEvent) => { if (disabled) return; const t = e.touches[0]; s.current = { x: t.clientX, y: t.clientY, dir: 0 }; setAnim(false); };
   const onMove = (e: React.TouchEvent) => {
     const st = s.current; if (!st) return;
     const t = e.touches[0]; const ddx = t.clientX - st.x, ddy = t.clientY - st.y;
     if (st.dir === 0) { if (Math.abs(ddx) > 10 && Math.abs(ddx) > Math.abs(ddy) * 1.3) st.dir = 1; else if (Math.abs(ddy) > 10) st.dir = 2; }
     if (st.dir !== 1) return;
-    setDx(Math.max(-220, Math.min(220, ddx)));
+    setDx(Math.max(-220, Math.min(FAR + 60, ddx)));
+  };
+  // Zeile hinausschieben, dann Aktion; bei Abbruch (z.B. Rückfrage verneint) zurück
+  const out = (to: number, run: () => unknown) => {
+    setDx(to);
+    setTimeout(async () => { const r = await run(); setAnim(r === false); setDx(0); }, 220);
   };
   const onEnd = () => {
     const st = s.current; s.current = null; setAnim(true);
     if (!st || st.dir !== 1) { setDx(0); return; }
-    if (dx < -W) { setDx(-window.innerWidth); setTimeout(() => { right.run(); setAnim(false); setDx(0); }, 220); }
-    else if (dx > W) { left.run(); setDx(0); }
+    if (dx < -W) out(-window.innerWidth, left.run);
+    else if (dx > FAR) { far.run(); setDx(0); }
+    else if (dx > W) out(window.innerWidth, right.run);
     else setDx(0);
   };
-  const act = dx < 0 ? right : left;
+  const act = dx < 0 ? left : dx > FAR ? far : right;
   const armed = Math.abs(dx) > W;
   return (
     <div className="swipe">

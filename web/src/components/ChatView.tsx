@@ -17,10 +17,10 @@ import { outbox, useOutbox, type Outgoing } from '../outbox';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
-export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage }: {
+export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage, onRemove }: {
   chat: Chat; account?: Account; messages?: Message[]; onBack: () => void; loadOlder: () => Promise<boolean>;
   linked?: Chat[]; accounts?: Account[]; focus?: { id: string; remoteId: string; n: number } | null; planned?: Planned[];
-  onGallery?: () => void; onOpenMessage?: (m: Message) => void;
+  onGallery?: () => void; onOpenMessage?: (m: Message) => void; onRemove: () => void;
   onPatchChat: (p: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived'>>) => Promise<void>; onChat: (c: Chat) => void;
 }) {
   const [contact, setContact] = useState(false);
@@ -208,7 +208,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               {chat.network === 'email' && <button onClick={async () => {
                 setHeadMenu(false);
                 if (!confirm(`Alle E-Mails zu „${chat.title}“ in den Papierkorb verschieben?`)) return;
-                try { await api.deleteChat(chat.id); onBack(); } catch (e: any) { flash(e.message ?? 'Löschen fehlgeschlagen'); }
+                onRemove();
               }}><Icon name="trash" size={18} />E-Mails löschen</button>}
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
             </div>

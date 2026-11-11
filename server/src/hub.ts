@@ -448,12 +448,12 @@ export class Hub {
     const a = this.adapters.get(chat.accountId);
     if (a?.archiveChat) await a.archiveChat(chat.remoteId, archived);
   }
-  /** E-Mail: Mails in den Papierkorb, Chat aus Chorus entfernen */
+  /** E-Mail: Mails in den Papierkorb; andere Messenger: Chat nur aus Chorus entfernen (kommt bei neuer Nachricht wieder) */
   async deleteChat(chatId: string) {
     const chat = this.chatOrThrow(chatId);
-    const a = this.adapterFor(chat);
-    if (!a.deleteChat) throw new Error('Bei diesem Messenger nicht möglich');
-    await a.deleteChat(chat.remoteId);
+    const a = this.adapters.get(chat.accountId);
+    if (a?.deleteChat) await a.deleteChat(chat.remoteId);
+    else if (chat.network === 'email') throw new Error('E-Mail ist nicht verbunden');
     this.store.deleteChat(chatId);
     this.emit({ type: 'chat_removed', id: chatId });
   }
