@@ -86,7 +86,7 @@ export class Storage {
       if (r.status === 401) throw new StorageError(400, 'Immich lehnt den API-Schlüssel ab');
       // Schlüssel nur mit „asset.upload“-Recht: /users/me ist verboten, Hochladen geht trotzdem
       if (r.status === 403) return 'Verbunden (Schlüssel mit eingeschränkten Rechten)';
-      if (!r.ok) throw new StorageError(502, `Immich antwortet mit ${r.status}`);
+      if (!r.ok) throw new StorageError(422, `Immich antwortet mit ${r.status}`);
       const me = await r.json().catch(() => ({})) as { name?: string; email?: string };
       return `Verbunden als ${me.name || me.email || 'Immich-Nutzer'}`;
     }
@@ -94,7 +94,7 @@ export class Storage {
     if (!n.url || !n.user || !n.pass) throw new StorageError(400, 'Adresse, Nutzer und App-Passwort fehlen');
     const r = await this.call(this.davUrl([]), { method: 'PROPFIND', headers: { ...this.davAuth(), Depth: '0' } }, 'Nextcloud');
     if (r.status === 401) throw new StorageError(400, 'Nextcloud lehnt Nutzer oder App-Passwort ab');
-    if (r.status !== 207 && !r.ok) throw new StorageError(502, `Nextcloud antwortet mit ${r.status}`);
+    if (r.status !== 207 && !r.ok) throw new StorageError(422, `Nextcloud antwortet mit ${r.status}`);
     return `Verbunden als ${n.user}`;
   }
 
@@ -108,7 +108,7 @@ export class Storage {
     }, 'Nextcloud');
     if (r.status === 401) throw new StorageError(400, 'Nextcloud lehnt Nutzer oder App-Passwort ab');
     if (r.status === 404) throw new StorageError(404, 'Ordner nicht gefunden');
-    if (r.status !== 207) throw new StorageError(502, `Nextcloud: ${await errText(r)}`);
+    if (r.status !== 207) throw new StorageError(422, `Nextcloud: ${await errText(r)}`);
     const entries = parsePropfind(await r.text());
     entries.shift(); // erster Eintrag = der Ordner selbst
     const folders = entries.filter((e) => e.dir).map((e) => e.name).sort((a, b) => a.localeCompare(b, 'de'));
@@ -121,7 +121,7 @@ export class Storage {
     if (!parts.length) throw new StorageError(400, 'Kein Ordnername');
     const r = await this.call(this.davUrl(parts), { method: 'MKCOL', headers: this.davAuth() }, 'Nextcloud');
     if (r.status === 405) throw new StorageError(409, 'Den Ordner gibt es schon');
-    if (!r.ok) throw new StorageError(502, `Nextcloud: Ordner ließ sich nicht anlegen (${r.status})`);
+    if (!r.ok) throw new StorageError(422, `Nextcloud: Ordner ließ sich nicht anlegen (${r.status})`);
     return { path: parts.join('/') };
   }
   /** Datei aus Nextcloud holen (zum Verschicken als Anhang) */
@@ -131,7 +131,7 @@ export class Storage {
     if (!parts.length) throw new StorageError(400, 'Keine Datei');
     const r = await this.call(this.davUrl(parts), { headers: this.davAuth() }, 'Nextcloud');
     if (r.status === 404) throw new StorageError(404, 'Datei nicht gefunden');
-    if (!r.ok) throw new StorageError(502, `Nextcloud: ${await errText(r)}`);
+    if (!r.ok) throw new StorageError(422, `Nextcloud: ${await errText(r)}`);
     if (Number(r.headers.get('content-length') ?? 0) > max) throw new StorageError(413, 'Datei ist zu groß (max. 100 MB)');
     const data = Buffer.from(await r.arrayBuffer());
     if (data.length > max) throw new StorageError(413, 'Datei ist zu groß (max. 100 MB)');
@@ -147,17 +147,21 @@ export class Storage {
     const { url, key } = this.settings.immich;
     if (!url || !key) throw new StorageError(400, 'Immich ist nicht eingerichtet');
     const when = new Date(f.ts || Date.now()).toISOString();
-    const form = new FormData();
-    form.append('deviceAssetId', `chorus-${f.id}`.slice(0, 200));
-    form.append('deviceId', 'Chorus');
-    form.append('fileCreatedAt', when);
-    form.append('fileModifiedAt', when);
-    form.append('filename', f.name);
-    if (f.durationSec) form.append('duration', durationStr(f.durationSec));
-    form.append('assetData', new Blob([new Uint8Array(f.data)], { type: f.mime || 'application/octet-stream' }), f.name);
-    const r = await this.call(`${url}/api/assets`, { method: 'POST', headers: { 'x-api-key': key, Accept: 'application/json' }, body: form }, 'Immich');
+    // Immich v3 hat deviceId/deviceAssetId entfernt und will duration als Zahl (ms); ältere Versionen verlangen die Geräte-Felder.
+    // Erst v3-Form, bei 400 die alte Form.
+    const send = (legacy: boolean) => {
+      const form = new FormData();
+      if (legacy) { form.append('deviceAssetId', `chorus-${f.id}`.slice(0, 200)); form.append('deviceId', 'Chorus'); }
+      form.append('fileCreatedAt', when);
+      form.append('fileModifiedAt', when);
+      if (f.durationSec) form.append('duration', legacy ? durationStr(f.durationSec) : String(Math.round(f.durationSec * 1000)));
+      form.append('assetData', new Blob([new Uint8Array(f.data)], { type: f.mime || 'application/octet-stream' }), f.name);
+      return this.call(`${url}/api/assets`, { method: 'POST', headers: { 'x-api-key': key, Accept: 'application/json' }, body: form }, 'Immich');
+    };
+    let r = await send(false);
+    if (r.status === 400) { const first = await errText(r); r = await send(true); if (r.status === 400) throw new StorageError(422, `Immich: ${first}`); }
     if (r.status === 401 || r.status === 403) throw new StorageError(400, 'Immich lehnt den API-Schlüssel ab (Recht „asset.upload“ nötig)');
-    if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
+    if (!r.ok) throw new StorageError(422, `Immich: ${await errText(r)}`);
     const j = await r.json().catch(() => ({})) as { status?: string };
     return j.status === 'duplicate' ? 'Schon in Immich' : 'In Immich gespeichert';
   }
@@ -180,7 +184,7 @@ export class Storage {
   async immichAlbums() {
     const { url, key } = this.immichReady();
     const own = await this.immichJson(url, key, '/api/albums') as any[];
-    const shared = await this.immichJson(url, key, '/api/albums?shared=true').catch(() => []) as any[];
+    const shared = await this.immichJson(url, key, '/api/albums?isShared=true').catch(() => this.immichJson(url, key, '/api/albums?shared=true')).catch(() => []) as any[];
     const seen = new Set<string>();
     return [...own, ...shared].filter((x) => x?.id && !seen.has(x.id) && seen.add(x.id)).map((x) => ({
       id: String(x.id), name: String(x.albumName ?? 'Album'), count: Number(x.assetCount ?? 0), cover: x.albumThumbnailAssetId ? String(x.albumThumbnailAssetId) : null,
@@ -202,8 +206,8 @@ export class Storage {
     const r = await this.call(url + path, { headers: { 'x-api-key': key } }, 'Immich');
     if (r.status === 401 || r.status === 403) throw new StorageError(400, 'Immich verweigert den Zugriff (Schlüssel braucht „asset.read“, „asset.view“ und „asset.download“)');
     if (r.status === 404 || r.status === 400) throw new StorageError(404, 'Foto nicht gefunden');
-    if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
-    if (kind !== 'original' && !/^image\//i.test(r.headers.get('content-type') ?? '')) throw new StorageError(502, 'Immich liefert kein Bild');
+    if (!r.ok) throw new StorageError(422, `Immich: ${await errText(r)}`);
+    if (kind !== 'original' && !/^image\//i.test(r.headers.get('content-type') ?? '')) throw new StorageError(422, 'Immich liefert kein Bild');
     if (Number(r.headers.get('content-length') ?? 0) > max) throw new StorageError(413, 'Datei ist zu groß');
     const data = Buffer.from(await r.arrayBuffer());
     const cd = r.headers.get('content-disposition') ?? '';
@@ -219,7 +223,7 @@ export class Storage {
   private async immichJson(url: string, key: string, path: string, init: RequestInit = {}) {
     const r = await this.call(url + path, { ...init, headers: { 'x-api-key': key, Accept: 'application/json', ...(init.body ? { 'Content-Type': 'application/json' } : {}) } }, 'Immich');
     if (r.status === 401 || r.status === 403) throw new StorageError(400, 'Immich verweigert den Zugriff. Der API-Schlüssel braucht zum Durchsuchen zusätzlich „asset.read“, „asset.view“, „asset.download“ und „album.read“');
-    if (!r.ok) throw new StorageError(502, `Immich: ${await errText(r)}`);
+    if (!r.ok) throw new StorageError(422, `Immich: ${await errText(r)}`);
     return r.json();
   }
 
@@ -242,7 +246,7 @@ export class Storage {
     for (let k = 1; k <= dir.length; k++) {
       const r = await this.call(this.davUrl(dir.slice(0, k)), { method: 'MKCOL', headers: this.davAuth() }, 'Nextcloud');
       if (r.status === 401) throw new StorageError(400, 'Nextcloud lehnt Nutzer oder App-Passwort ab');
-      if (!r.ok && r.status !== 405) throw new StorageError(502, `Nextcloud: Ordner ließ sich nicht anlegen (${r.status})`);
+      if (!r.ok && r.status !== 405) throw new StorageError(422, `Nextcloud: Ordner ließ sich nicht anlegen (${r.status})`);
     }
     const safe = f.name.replace(/[\\/]/g, '_').trim() || 'Datei';
     // Nichts überschreiben: If-None-Match: * → 412, wenn der Name schon belegt ist
@@ -253,7 +257,7 @@ export class Storage {
       }, 'Nextcloud');
       if (r.status === 412) continue;
       if (r.status === 401) throw new StorageError(400, 'Nextcloud lehnt Nutzer oder App-Passwort ab');
-      if (!r.ok) throw new StorageError(502, `Nextcloud: ${await errText(r)}`);
+      if (!r.ok) throw new StorageError(422, `Nextcloud: ${await errText(r)}`);
       return `In Nextcloud gespeichert (${[...dir, name].join('/')})`;
     }
     throw new StorageError(409, 'Nextcloud: zu viele Dateien mit diesem Namen');
@@ -261,7 +265,7 @@ export class Storage {
 
   private async call(url: string, init: RequestInit, who: string) {
     try { return await fetch(url, { ...init, signal: AbortSignal.timeout(TIMEOUT) }); }
-    catch (e: any) { throw new StorageError(502, `${who} nicht erreichbar: ${e?.cause?.code ?? e?.message ?? e}`); }
+    catch (e: any) { throw new StorageError(422, `${who} nicht erreichbar: ${e?.cause?.code ?? e?.message ?? e}`); }
   }
 }
 
@@ -271,7 +275,11 @@ function durationStr(sec: number) {
 }
 async function errText(r: Response) {
   const t = await r.text().catch(() => '');
-  try { const j = JSON.parse(t); return String(j.message ?? j.error ?? r.status); } catch { return `${r.status} ${t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)}`; }
+  try {
+    const j = JSON.parse(t);
+    const details = Array.isArray(j.errors) ? j.errors.map((e: any) => (typeof e === 'string' ? e : [e?.path ?? e?.property, e?.message].filter(Boolean).join(': '))).join('; ') : '';
+    return [Array.isArray(j.message) ? j.message.join('; ') : String(j.message ?? j.error ?? r.status), details].filter(Boolean).join(' – ');
+  } catch { return `${r.status} ${t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)}`; }
 }
 
 const unxml = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');

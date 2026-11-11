@@ -90,7 +90,9 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const data = r.headers.get('content-type')?.includes('json') ? await r.json() : null;
   if (!r.ok) {
     if (r.status === 401 && !url.startsWith('/api/vault')) window.dispatchEvent(new Event('inbox:unauthorized'));
-    throw new ApiError(r.status, data?.error ?? r.statusText, data);
+    // Fastify-Rahmenfehler liefern error: "Bad Request" und den eigentlichen Grund in message
+    const generic = !data?.error || /^(Bad Request|Not Found|Internal Server Error|Payload Too Large)$/i.test(data.error);
+    throw new ApiError(r.status, (generic && data?.message) || data?.error || `${r.status} ${r.statusText}`.trim(), data);
   }
   return data as T;
 }
@@ -108,7 +110,7 @@ export const api = {
   storage: () => req<StorageSettings>('GET', '/api/storage'),
   setStorage: (patch: { immich?: Record<string, unknown>; nextcloud?: Record<string, unknown> }) => req<StorageSettings>('PUT', '/api/storage', patch),
   testStorage: (target: StorageTarget) => req<{ message: string }>('POST', '/api/storage/test', { target }),
-  saveTo: (m: Message, i: number, target: StorageTarget, opt: { folder?: string; name?: string } = {}) => req<{ message: string }>('POST', `/api/messages/${enc(m.id)}/attachments/${i}/save`, { target, ...opt }),
+  saveTo: (m: Message, i: number, target: StorageTarget, opt: { folder?: string; name?: string } = {}) => req<{ message: string }>('POST', '/api/storage/save', { message: m.id, index: i, target, ...opt }),
   immichAssets: (o: { page?: number; album?: string; q?: string }) => req<{ items: ImmichAsset[]; next: number | null }>('GET', `/api/storage/immich/assets?page=${o.page ?? 1}${o.album ? `&album=${enc(o.album)}` : ''}${o.q ? `&q=${enc(o.q)}` : ''}`),
   immichAlbums: () => req<ImmichAlbum[]>('GET', '/api/storage/immich/albums'),
   immichThumb: (id: string) => `/api/storage/immich/assets/${enc(id)}/thumb`,
