@@ -12,6 +12,7 @@ import { AiPanel } from './AiPanel';
 import { useExit } from '../useExit';
 import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
+import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
@@ -72,6 +73,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const reminders = useMemo(() => new Map(mine.filter((p) => p.kind === 'remind' && p.messageId).map((p) => [p.messageId!, p.at])), [mine]);
   const [showPlanned, setShowPlanned] = useState(false);
   const [remindFor, setRemindFor] = useState<Message | null>(null);
+  const [forward, setForward] = useState<Message | null>(null);
   const tr = chat.translate;
   const [trSheet, setTrSheet] = useState(false);
 
@@ -277,6 +279,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               </div>
               <div className="menu-list">
                 <button onClick={() => { setReplyTo(menu.m); setEditing(null); setMenu(null); }}><Icon name="reply" size={18} />Antworten</button>
+                {!menu.m.deleted && (menu.m.text || menu.m.attachments.length > 0) && <button onClick={() => { setForward(menu.m); setMenu(null); }}><Icon name="forward" size={18} />Weiterleiten</button>}
                 {reminders.has(menu.m.id)
                   ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash('Erinnerung gelöscht'); }); }}><Icon name="alarm" size={18} />Erinnerung löschen</button>
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
@@ -296,6 +299,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       {remindFor && <WhenPicker title="Erinnern" confirm="Erinnern" hint="Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist."
         onClose={() => setRemindFor(null)}
         onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(`Erinnerung ${whenLabel(at)}`); }); }} />}
+      {forward && <ForwardSheet message={forward} onClose={() => setForward(null)} onDone={(t) => { setForward(null); flash(t); }} />}
       {toast && <div className="toast">{toast}</div>}
       {trSheet && <TranslateSheet chat={chat} onChat={onChat} onClose={() => setTrSheet(false)} onError={flash} />}
       {contact && <ContactSheet chat={chat} account={account} onClose={() => setContact(false)} onChat={onChat} />}

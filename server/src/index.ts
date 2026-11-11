@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Chat, Message } from './types.js';
+import type { Chat, Message, OutgoingFile } from './types.js';
 import { createRequire } from 'node:module';
 import { Push } from './push.js';
 import Fastify, { type FastifyRequest, type FastifyReply } from 'fastify';
@@ -550,6 +550,39 @@ app.post('/api/chats/:id/upload', async (req) => {
   return { ok: true };
 });
 
+// Weiterleiten: an beliebige Chats, auch über Messenger hinweg. Gesendet wird immer als neue Nachricht mit Text und Anhängen
+// (native Weiterleitung gibt es nur innerhalb desselben Messengers und Kontos; so verhält es sich überall gleich).
+app.post('/api/messages/:id/forward', async (req) => {
+  const h = H(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg || msg.deleted) throw Object.assign(new Error('Nachricht nicht gefunden'), { statusCode: 404 });
+  const ids = [...new Set(((req.body as any)?.chatIds ?? []) as string[])].filter((c) => typeof c === 'string' && h.store.getChat(c)).slice(0, 20);
+  if (!ids.length) throw Object.assign(new Error('Kein Zielchat gewählt'), { statusCode: 400 });
+  const text = (msg.text || '').trim();
+  const files: OutgoingFile[] = [];
+  for (let i = 0; i < msg.attachments.length; i++) {
+    const a = msg.attachments[i];
+    let data: Buffer;
+    try { data = await h.attachmentData(msg, i); }
+    catch (e: any) { throw Object.assign(new Error(`Anhang „${a.name}“ konnte nicht geladen werden: ${e?.message ?? e}`), { statusCode: 502 }); }
+    files.push({ data, name: a.name || 'datei', mime: a.mime || 'application/octet-stream', voice: a.kind === 'voice', durationSec: a.durationSec,
+      ...(a.width && a.height ? { width: a.width, height: a.height } : {}) });
+  }
+  if (!text && !files.length) throw Object.assign(new Error('Nichts zum Weiterleiten'), { statusCode: 400 });
+  // Pro Ziel der Reihe nach (Reihenfolge der Anhänge bleibt), Ziele parallel. Fehler zeigt die Nachricht selbst als „fehlgeschlagen“.
+  for (const id of ids) {
+    void (async () => {
+      try {
+        if (!files.length) { await h.sendText(id, text); return; }
+        // Text als Bildunterschrift des ersten Anhangs; Sprachnachrichten haben keine Unterschrift, dann Text extra
+        const capFirst = !!text && !files[0].voice;
+        for (let i = 0; i < files.length; i++) await (await h.sendFile(id, files[i], i === 0 && capFirst ? text : undefined)).done;
+        if (text && !capFirst) await h.sendText(id, text);
+      } catch (e: any) { req.log.warn({ id, err: e?.message }, 'Weiterleiten fehlgeschlagen'); }
+    })();
+  }
+  return { ok: true, count: ids.length };
+});
 app.post('/api/messages/:id/react', async (req) => {
   const { emoji } = req.body as { emoji: string | null };
   await H(req).react((req.params as any).id, emoji);
