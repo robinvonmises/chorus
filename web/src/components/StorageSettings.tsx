@@ -51,11 +51,11 @@ export function StorageSection() {
 
     <div className="stack">
       <b>Nextcloud (Dateien) {s.nextcloud.enabled && <small className="state connected">· verknüpft</small>}</b>
-      <small className="muted">In Nextcloud unter Einstellungen → Sicherheit ein App-Passwort erzeugen. Dateien landen im Zielordner, gleiche Namen werden nicht überschrieben.</small>
+      <small className="muted">In Nextcloud unter Einstellungen → Sicherheit ein App-Passwort erzeugen. Beim Speichern wählst du den Ordner selbst (der Startordner ist vorausgewählt, danach der zuletzt benutzte), über die Ordner-Taste neben der Büroklammer hängst du Dateien aus Nextcloud an. Gleiche Namen werden nicht überschrieben.</small>
       <input className="input" type="url" inputMode="url" autoComplete="off" placeholder="https://cloud.example.de" value={nc.url ?? s.nextcloud.url} onChange={(e) => setNc({ ...nc, url: e.target.value })} />
       <input className="input" autoComplete="off" autoCapitalize="none" placeholder="Benutzername" value={nc.user ?? s.nextcloud.user} onChange={(e) => setNc({ ...nc, user: e.target.value })} />
       <input className="input" type="password" autoComplete="off" placeholder={s.nextcloud.hasPass ? '•••••••• gespeichert' : 'App-Passwort'} value={nc.pass} onChange={(e) => setNc({ ...nc, pass: e.target.value })} />
-      <label className="row"><span>Zielordner</span><input className="input" autoComplete="off" autoCapitalize="none" placeholder="Chorus" value={nc.folder ?? s.nextcloud.folder} onChange={(e) => setNc({ ...nc, folder: e.target.value })} /></label>
+      <label className="row"><span>Startordner</span><input className="input" autoComplete="off" autoCapitalize="none" placeholder="leer = oberster Ordner" value={nc.folder ?? s.nextcloud.folder} onChange={(e) => setNc({ ...nc, folder: e.target.value })} /></label>
       <div className="row">
         <button className="btn" disabled={busy || !ncReady} onClick={() => saveNc(true)}><Icon name="check" size={18} /> {s.nextcloud.enabled ? 'Speichern und prüfen' : 'Verknüpfen'}</button>
         {s.nextcloud.enabled && <button className="btn ghost" disabled={busy} onClick={() => saveNc(false)}>Ausschalten</button>}

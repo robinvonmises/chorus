@@ -108,7 +108,14 @@ export const api = {
   storage: () => req<StorageSettings>('GET', '/api/storage'),
   setStorage: (patch: { immich?: Record<string, unknown>; nextcloud?: Record<string, unknown> }) => req<StorageSettings>('PUT', '/api/storage', patch),
   testStorage: (target: StorageTarget) => req<{ message: string }>('POST', '/api/storage/test', { target }),
-  saveTo: (m: Message, i: number, target: StorageTarget) => req<{ message: string }>('POST', `/api/messages/${enc(m.id)}/attachments/${i}/save`, { target }),
+  saveTo: (m: Message, i: number, target: StorageTarget, opt: { folder?: string; name?: string } = {}) => req<{ message: string }>('POST', `/api/messages/${enc(m.id)}/attachments/${i}/save`, { target, ...opt }),
+  ncList: (path: string) => req<NcListing>('GET', `/api/storage/nextcloud/list?path=${enc(path)}`),
+  ncMkdir: (path: string) => req<{ path: string }>('POST', '/api/storage/nextcloud/mkdir', { path }),
+  async ncFile(path: string): Promise<File> {
+    const r = await fetch(`/api/storage/nextcloud/file?path=${enc(path)}`, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? `Fehler ${r.status}`);
+    return new File([await r.blob()], path.split('/').pop() || 'Datei', { type: r.headers.get('X-File-Mime') || 'application/octet-stream' });
+  },
   media: () => req<{ autoSave: boolean }>('GET', '/api/media'),
   setMedia: (autoSave: boolean) => req<{ autoSave: boolean }>('PUT', '/api/media', { autoSave }),
   removeAvatar: (id: string) => req<PublicProfile>('DELETE', `/api/profiles/${id}/avatar`),
@@ -235,6 +242,7 @@ export interface StorageSettings {
   immich: { enabled: boolean; url: string; hasKey: boolean };
   nextcloud: { enabled: boolean; url: string; user: string; hasPass: boolean; folder: string };
 }
+export interface NcListing { path: string; folders: string[]; files: { name: string; size: number; mime: string; modified: number }[] }
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
 /** Kleine Vorschau (max. 720 px) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */
 export const thumbUrl = (m: Message, i: number) => {

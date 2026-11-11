@@ -70,7 +70,7 @@ export class Storage {
       if ('url' in p) n.url = baseUrl(str(p.url));
       if ('user' in p) n.user = str(p.user);
       if ('pass' in p && p.pass !== '') n.pass = str(p.pass);
-      if ('folder' in p) n.folder = folderParts(str(p.folder)).join('/') || DEFAULTS.nextcloud.folder;
+      if ('folder' in p) n.folder = folderParts(str(p.folder)).join('/'); // leer = oberster Ordner
     }
     this.store.setSetting('storage', cur);
     return this.publicSettings();
@@ -97,7 +97,47 @@ export class Storage {
     return `Verbunden als ${n.user}`;
   }
 
-  async save(target: Target, file: { data: Buffer; name: string; mime: string; ts: number; id: string; durationSec?: number }): Promise<string> {
+  /** Inhalt eines Nextcloud-Ordners (Pfad relativ zum Benutzerordner), Ordner zuerst */
+  async list(path: string): Promise<{ path: string; folders: string[]; files: { name: string; size: number; mime: string; modified: number }[] }> {
+    this.ncReady();
+    const parts = folderParts(path);
+    const r = await this.call(this.davUrl(parts), {
+      method: 'PROPFIND', headers: { ...this.davAuth(), Depth: '1', 'Content-Type': 'application/xml' },
+      body: '<?xml version="1.0"?><d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/><d:getcontentlength/><d:getcontenttype/><d:getlastmodified/></d:prop></d:propfind>',
+    }, 'Nextcloud');
+    if (r.status === 401) throw new StorageError(400, 'Nextcloud lehnt Nutzer oder App-Passwort ab');
+    if (r.status === 404) throw new StorageError(404, 'Ordner nicht gefunden');
+    if (r.status !== 207) throw new StorageError(502, `Nextcloud: ${await errText(r)}`);
+    const entries = parsePropfind(await r.text());
+    entries.shift(); // erster Eintrag = der Ordner selbst
+    const folders = entries.filter((e) => e.dir).map((e) => e.name).sort((a, b) => a.localeCompare(b, 'de'));
+    const files = entries.filter((e) => !e.dir).map(({ name, size, mime, modified }) => ({ name, size, mime, modified })).sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    return { path: parts.join('/'), folders, files };
+  }
+  async mkdir(path: string) {
+    this.ncReady();
+    const parts = folderParts(path);
+    if (!parts.length) throw new StorageError(400, 'Kein Ordnername');
+    const r = await this.call(this.davUrl(parts), { method: 'MKCOL', headers: this.davAuth() }, 'Nextcloud');
+    if (r.status === 405) throw new StorageError(409, 'Den Ordner gibt es schon');
+    if (!r.ok) throw new StorageError(502, `Nextcloud: Ordner ließ sich nicht anlegen (${r.status})`);
+    return { path: parts.join('/') };
+  }
+  /** Datei aus Nextcloud holen (zum Verschicken als Anhang) */
+  async read(path: string, max = 100 * 1024 * 1024): Promise<{ data: Buffer; name: string; mime: string }> {
+    this.ncReady();
+    const parts = folderParts(path);
+    if (!parts.length) throw new StorageError(400, 'Keine Datei');
+    const r = await this.call(this.davUrl(parts), { headers: this.davAuth() }, 'Nextcloud');
+    if (r.status === 404) throw new StorageError(404, 'Datei nicht gefunden');
+    if (!r.ok) throw new StorageError(502, `Nextcloud: ${await errText(r)}`);
+    if (Number(r.headers.get('content-length') ?? 0) > max) throw new StorageError(413, 'Datei ist zu groß (max. 100 MB)');
+    const data = Buffer.from(await r.arrayBuffer());
+    if (data.length > max) throw new StorageError(413, 'Datei ist zu groß (max. 100 MB)');
+    return { data, name: parts[parts.length - 1], mime: (r.headers.get('content-type') ?? 'application/octet-stream').split(';')[0] };
+  }
+
+  async save(target: Target, file: { data: Buffer; name: string; mime: string; ts: number; id: string; durationSec?: number; folder?: string }): Promise<string> {
     return target === 'immich' ? this.toImmich(file) : this.toNextcloud(file);
   }
 
@@ -130,10 +170,12 @@ export class Storage {
     const { url, user } = this.settings.nextcloud;
     return `${url}/remote.php/dav/files/${encodeURIComponent(user)}/${parts.map(encodeURIComponent).join('/')}`;
   }
-  private async toNextcloud(f: { data: Buffer; name: string; mime: string }) {
-    const n = this.settings.nextcloud;
-    if (!n.url || !n.user || !n.pass) throw new StorageError(400, 'Nextcloud ist nicht eingerichtet');
-    const dir = folderParts(n.folder);
+  private ncReady() {
+    if (!this.publicSettings().nextcloud.enabled) throw new StorageError(400, 'Nextcloud ist nicht eingerichtet');
+  }
+  private async toNextcloud(f: { data: Buffer; name: string; mime: string; folder?: string }) {
+    this.ncReady();
+    const dir = folderParts(f.folder ?? this.settings.nextcloud.folder);
     // Ordner Stück für Stück anlegen (405 = gibt es schon)
     for (let k = 1; k <= dir.length; k++) {
       const r = await this.call(this.davUrl(dir.slice(0, k)), { method: 'MKCOL', headers: this.davAuth() }, 'Nextcloud');
@@ -168,4 +210,21 @@ function durationStr(sec: number) {
 async function errText(r: Response) {
   const t = await r.text().catch(() => '');
   try { const j = JSON.parse(t); return String(j.message ?? j.error ?? r.status); } catch { return `${r.status} ${t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140)}`; }
+}
+
+const unxml = (s: string) => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+/** Schlanker PROPFIND-Leser: Namensraum-Präfixe (d:, D:, ohne) egal */
+export function parsePropfind(xml: string) {
+  const out: { name: string; dir: boolean; size: number; mime: string; modified: number }[] = [];
+  for (const m of xml.matchAll(/<(?:[\w-]+:)?response\b[^>]*>([\s\S]*?)<\/(?:[\w-]+:)?response>/gi)) {
+    const body = m[1];
+    const tag = (t: string) => body.match(new RegExp(`<(?:[\\w-]+:)?${t}\\b[^>]*>([\\s\\S]*?)<\\/(?:[\\w-]+:)?${t}>`, 'i'))?.[1]?.trim() ?? '';
+    const href = unxml(tag('href')).replace(/\/+$/, '');
+    let name = href.slice(href.lastIndexOf('/') + 1);
+    try { name = decodeURIComponent(name); } catch { /* so lassen */ }
+    const dir = /<(?:[\w-]+:)?collection\b/i.test(body);
+    const t = Date.parse(tag('getlastmodified'));
+    out.push({ name, dir, size: Number(tag('getcontentlength')) || 0, mime: tag('getcontenttype') || '', modified: Number.isFinite(t) ? t : 0 });
+  }
+  return out;
 }

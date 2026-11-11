@@ -3,6 +3,7 @@ import { Icon } from './Icon';
 import { duration } from '../util';
 import type { Message } from '../api';
 import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
+import { openSaveAs } from './NextcloudBrowser';
 
 /** ref: Herkunft im Chat, damit „In Immich/Nextcloud speichern“ das Original serverseitig hochladen kann */
 type Item = { src: string; name: string; download: string; video?: boolean; ref?: { m: Message; i: number } };
@@ -161,10 +162,11 @@ export function Lightbox() {
         {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
         {(() => {
           const ref = item.ref, att = ref?.m.attachments[ref.i];
-          const t = ref && att ? targetsFor(storage, att)[0] : undefined;
-          if (!ref || !t) return null;
-          return <button className="icon-btn" disabled={saving} title={TARGET_LABEL[t]} aria-label={TARGET_LABEL[t]}
-            onClick={async () => { setSaving(true); flashNote('Wird gespeichert …'); try { flashNote(await saveAttachment(ref.m, ref.i, t)); } catch (e: any) { flashNote(e.message ?? 'Fehler'); } finally { setSaving(false); } }}><Icon name="cloud" /></button>;
+          const ts = ref && att ? targetsFor(storage, att) : [];
+          if (!ref || !ts.length) return null;
+          return <>{ts.includes('immich') && <button className="icon-btn" disabled={saving} title={TARGET_LABEL.immich} aria-label={TARGET_LABEL.immich}
+            onClick={async () => { setSaving(true); flashNote('Wird gespeichert …'); try { flashNote(await saveAttachment(ref.m, ref.i, 'immich')); } catch (e: any) { flashNote(e.message ?? 'Fehler'); } finally { setSaving(false); } }}><Icon name="cloud" /></button>}
+            {ts.includes('nextcloud') && <button className="icon-btn" title="In Nextcloud speichern …" aria-label="In Nextcloud speichern" onClick={() => openSaveAs(ref.m, ref.i)}><Icon name="folder" /></button>}</>;
         })()}
         <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>
         <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>

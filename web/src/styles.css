@@ -958,3 +958,20 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .lightbox-vbar { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 .lightbox-vtrack { flex: 1; height: 28px; display: flex; align-items: center; cursor: pointer; background: linear-gradient(rgba(255,255,255,.3), rgba(255,255,255,.3)) center / 100% 4px no-repeat; border-radius: 2px; }
 .lightbox-vtrack > div { height: 4px; background: #fff; border-radius: 2px; }
+
+/* Nextcloud-Browser (Speichern unter / Anhängen) – liegt auch über dem Vollbild */
+.modal-bg.nc-top { z-index: 300; }
+.nc-toast { position: fixed; z-index: 310; }
+.nc-sheet .modal-body { display: grid; gap: 10px; }
+.nc-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; font-size: 14px; }
+.nc-crumbs button { background: none; border: 0; padding: 4px 6px; color: var(--accent); font: inherit; cursor: pointer; border-radius: 6px; }
+.nc-crumbs span:last-child button { color: var(--ink); font-weight: 600; }
+.nc-list { list-style: none; margin: 0; padding: 0; max-height: 45dvh; overflow-y: auto; border: 1px solid var(--line); border-radius: 12px; }
+.nc-list li { border-bottom: 1px solid var(--line); }
+.nc-list li:last-child { border-bottom: 0; }
+.nc-list button, .nc-list .nc-file { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; background: none; border: 0; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+.nc-list button.on { background: var(--accent-soft); }
+.nc-list .nc-file { color: var(--ink-3); }
+.nc-list b { flex: 1; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nc-list small { color: var(--ink-3); flex: none; }
+.nc-list .nc-empty { padding: 10px 12px; }

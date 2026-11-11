@@ -869,6 +869,13 @@ const target = (v: unknown): Target => { if (v === 'immich' || v === 'nextcloud'
 app.get('/api/storage', async (req) => S(req).publicSettings());
 app.put('/api/storage', async (req) => S(req).update((req.body ?? {}) as any));
 app.post('/api/storage/test', async (req) => ({ message: await S(req).test(target((req.body as any)?.target)) }));
+app.get('/api/storage/nextcloud/list', async (req) => S(req).list(String((req.query as any)?.path ?? '')));
+app.post('/api/storage/nextcloud/mkdir', async (req) => S(req).mkdir(String((req.body as any)?.path ?? '')));
+app.get('/api/storage/nextcloud/file', async (req, reply) => {
+  const f = await S(req).read(String((req.query as any)?.path ?? ''));
+  return reply.header('Content-Type', 'application/octet-stream').header('X-File-Mime', f.mime)
+    .header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`).header('Cache-Control', 'no-store').send(f.data);
+});
 app.post('/api/messages/:id/attachments/:idx/save', async (req) => {
   const { id, idx } = req.params as { id: string; idx: string };
   const h = H(req);
@@ -882,7 +889,10 @@ app.post('/api/messages/:id/attachments/:idx/save', async (req) => {
   let data: Buffer;
   try { data = await h.attachmentData(msg, i); }
   catch (e: any) { throw new StorageError(502, 'Anhang konnte nicht vom Messenger geladen werden: ' + (e?.message ?? e)); }
-  const message = await s.save(t, { data, name: att.name || `chorus-${i}`, mime: att.mime, ts: msg.ts, id: `${id}:${i}`, durationSec: att.durationSec });
+  const b = (req.body ?? {}) as { folder?: unknown; name?: unknown };
+  const name = typeof b.name === 'string' && b.name.trim() ? b.name.trim().slice(0, 200) : att.name || `chorus-${i}`;
+  const folder = typeof b.folder === 'string' ? b.folder : undefined;
+  const message = await s.save(t, { data, name, mime: att.mime, ts: msg.ts, id: `${id}:${i}`, durationSec: att.durationSec, folder });
   return { message };
 });
 app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
