@@ -869,6 +869,22 @@ const target = (v: unknown): Target => { if (v === 'immich' || v === 'nextcloud'
 app.get('/api/storage', async (req) => S(req).publicSettings());
 app.put('/api/storage', async (req) => S(req).update((req.body ?? {}) as any));
 app.post('/api/storage/test', async (req) => ({ message: await S(req).test(target((req.body as any)?.target)) }));
+app.get('/api/storage/immich/assets', async (req) => {
+  const q = req.query as { page?: string; album?: string; q?: string };
+  return S(req).immichAssets({ page: Number(q.page ?? 1), album: q.album || undefined, q: q.q || undefined });
+});
+app.get('/api/storage/immich/albums', async (req) => S(req).immichAlbums());
+app.get('/api/storage/immich/assets/:id/:kind', async (req, reply) => {
+  const { id, kind } = req.params as { id: string; kind: string };
+  if (kind !== 'thumb' && kind !== 'send') throw new StorageError(404, 'Nicht gefunden');
+  const f = await S(req).immichFile(id, kind);
+  // nur Bilder direkt anzeigen, alles andere als Download (Inhalte kommen von außen)
+  const inline = kind === 'thumb' && /^image\/(jpeg|webp|png)$/i.test(f.mime);
+  reply.header('Content-Type', inline ? f.mime : 'application/octet-stream').header('X-File-Mime', f.mime).header('X-Content-Type-Options', 'nosniff')
+    .header('Cache-Control', kind === 'thumb' ? 'private, max-age=86400' : 'no-store');
+  if (!inline) reply.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(f.name)}`);
+  return reply.send(f.data);
+});
 app.get('/api/storage/nextcloud/list', async (req) => S(req).list(String((req.query as any)?.path ?? '')));
 app.post('/api/storage/nextcloud/mkdir', async (req) => S(req).mkdir(String((req.body as any)?.path ?? '')));
 app.get('/api/storage/nextcloud/file', async (req, reply) => {

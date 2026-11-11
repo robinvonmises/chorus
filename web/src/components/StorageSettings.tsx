@@ -39,7 +39,7 @@ export function StorageSection() {
 
     <div className="stack">
       <b>Immich (Fotos und Videos) {s.immich.enabled && <small className="state connected">· verknüpft</small>}</b>
-      <small className="muted">In Immich unter Kontoeinstellungen → API-Schlüssel einen Schlüssel anlegen. Es reicht das Recht „asset.upload“.</small>
+      <small className="muted">In Immich unter Kontoeinstellungen → API-Schlüssel einen Schlüssel anlegen. Zum Speichern reicht das Recht „asset.upload“. Damit du beim Anhängen auch deine Immich-Fotos durchsuchen kannst, braucht der Schlüssel zusätzlich „asset.read“, „asset.view“, „asset.download“ und „album.read“.</small>
       <input className="input" type="url" inputMode="url" autoComplete="off" placeholder="https://fotos.example.de" value={im.url ?? s.immich.url} onChange={(e) => setIm({ ...im, url: e.target.value })} />
       <input className="input" type="password" autoComplete="off" placeholder={s.immich.hasKey ? '•••••••• gespeichert' : 'API-Schlüssel'} value={im.key} onChange={(e) => setIm({ ...im, key: e.target.value })} />
       <div className="row">
