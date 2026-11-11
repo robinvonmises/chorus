@@ -14,6 +14,7 @@ const P: Record<string, string> = {
   more: 'M12 6h.01M12 12h.01M12 18h.01',
   close: 'M18 6L6 18M6 6l12 12',
   download: 'M12 4v12M7 11l5 5 5-5M5 20h14',
+  share: 'M12 3v12M8 7l4-4 4 4M6 11H5v10h14V11h-1',
   photos: 'M4 5h16v14H4zM4 15l4-4 4 4 3-3 5 5M15 9.5h.01',
   folder: 'M3 6a1 1 0 0 1 1-1h5l2 2h9a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z',
   file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5',
