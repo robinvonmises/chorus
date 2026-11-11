@@ -135,6 +135,9 @@ Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.`
   }
 
   /** Drei kurze Antworten zum Antippen über dem Eingabefeld, nur wenn die letzte Nachricht vom Gegenüber kommt */
+  /** Freigabe zurückgenommen: zwischengespeicherte Vorschläge für den Chat verwerfen */
+  forgetChat(chatId: string) { this.quickCache.delete(chatId); }
+
   async quick(chatId: string): Promise<{ key: string | null; suggestions: string[] }> {
     const last = this.store.listMessages(chatId, undefined, 5).filter((m) => !m.deleted).at(-1);
     if (!last || last.fromMe) return { key: null, suggestions: [] };
