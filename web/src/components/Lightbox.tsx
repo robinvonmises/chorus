@@ -44,6 +44,8 @@ export function Lightbox() {
   // Geste: swipe (schließen), pan (im Zoom), pinch (zwei Finger)
   const g = useRef<null | { mode: 'swipe' | 'pan' | 'pinch'; t: number; p0: Pt; z0: Z; d0?: number; moved: boolean; axis?: 'x' | 'y' }>(null);
   const lastTap = useRef<{ t: number; p: Pt } | null>(null);
+  /** Zeit der letzten Berührung: Safari schickt nach einem Doppeltipp zusätzlich dblclick, das den Zoom sonst sofort wieder zurücksetzt */
+  const lastTouch = useRef(0);
 
   const reset = () => { setDy(0); setDx(0); setZ(Z0); setLive(false); g.current = null; };
   useEffect(() => { const f = (o: Open) => { setOpen(o); setClosing(false); reset(); }; subs.add(f); return () => { subs.delete(f); }; }, []);
@@ -111,7 +113,7 @@ export function Lightbox() {
   const anim = live || (dy !== 0 && !closing);
   return (
     <div className={`lightbox${closing ? ' out' : ''}`} style={{ background: `rgba(0,0,0,${0.92 * fade})` }} onClick={() => { if (zr.current.s === 1) closeNav(); }}
-      onTouchStart={(e) => begin(e.touches)}
+      onTouchStart={(e) => { lastTouch.current = Date.now(); begin(e.touches); }}
       onTouchMove={(e) => {
         const c = g.current; if (!c) return;
         if (e.touches.length >= 2 && c.mode !== 'pinch') { begin(e.touches); return; }
@@ -157,7 +159,7 @@ export function Lightbox() {
         }
         if (!c.moved) { // Doppeltipp erkennen
           const now = Date.now(), l = lastTap.current;
-          if (l && now - l.t < 300 && dist(l.p, c.p0) < 40) { lastTap.current = null; e.preventDefault(); toggleZoom(c.p0); }
+          if (l && now - l.t < 350 && dist(l.p, c.p0) < 50) { lastTap.current = null; e.preventDefault(); toggleZoom(c.p0); }
           else lastTap.current = { t: now, p: c.p0 };
         }
       }}
@@ -190,7 +192,7 @@ export function Lightbox() {
             {it.video
               ? <SlideVideo src={it.src} cur={cur} />
               : <img ref={cur ? img : undefined} src={it.src} alt={it.name} draggable={false} onClick={(e) => e.stopPropagation()}
-                  onDoubleClick={cur ? (e) => toggleZoom(rel(e.clientX, e.clientY)) : undefined}
+                  onDoubleClick={cur ? (e) => { if (Date.now() - lastTouch.current > 1000) toggleZoom(rel(e.clientX, e.clientY)); } : undefined}
                   style={cur ? {
                     transform: z.s !== 1 || z.x || z.y
                       ? `translate(${z.x}px, ${z.y}px) scale(${z.s})`
