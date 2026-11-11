@@ -32,6 +32,7 @@ const P: Record<string, string> = {
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z',
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
   dot: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+  filter: 'M3 5h18l-7 8v6l-4 2v-8z',
   select: 'M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
   phone: 'M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2',

@@ -14,6 +14,10 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
   const [q, setQ] = useState('');
   const [sel, setSel] = useState<Set<string> | null>(null);
   const [toast, setToast] = useState('');
+  // Filterleiste ein-/ausblenden (Standard: aus), Zustand bleibt gespeichert
+  const [showFilters, setShowFilters] = useState(() => localStorage.getItem('inbox:showFilters') === '1');
+  const toggleFilters = () => setShowFilters((v) => { localStorage.setItem('inbox:showFilters', v ? '0' : '1'); return !v; });
+  const filterActive = filter.unread || filter.nets.length > 0;
   const nets = [...new Set(accounts.map((a) => a.network))];
   const archivedCount = useMemo(() => chats.filter((c) => c.archived && c.lastTs > 0).length, [chats]);
 
@@ -148,6 +152,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           ) : <h1>Chats</h1>}
           {!(sender && !q) && <div className="row">
             <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
+            <button className={`icon-btn ${filterActive ? 'on' : ''} ${filterActive && !showFilters ? 'badge' : ''}`} onClick={toggleFilters} title={showFilters ? 'Filter ausblenden' : 'Filter einblenden'} aria-label="Filter" aria-pressed={showFilters}><Icon name="filter" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
             {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={`Archiv (${archivedCount})`} aria-label="Archiv"><Icon name="archive" /></button>}
             <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
@@ -160,7 +165,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
         <input placeholder="Suchen" value={q} onChange={(e) => setQ(e.target.value)} />
         {q && <button className="icon-btn small" onClick={() => setQ('')}><Icon name="close" size={16} /></button>}
       </div>
-      <div className="filters" role="toolbar" aria-label="Filter">
+      {showFilters && <div className="filters" role="toolbar" aria-label="Filter">
         <button className={`pill ${!filter.unread && !filter.nets.length ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: false, nets: [] })}>Alle</button>
         <button className={`pill ${filter.unread ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: !filter.unread })}>Ungelesen</button>
         {nets.map((n) => (
@@ -168,7 +173,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             <span className="dot" style={{ background: NETWORKS[n].color }} />{NETWORKS[n].name}
           </button>
         ))}
-      </div>
+      </div>}
       {!online && <div className="banner warn">Keine Verbindung zum Server. Chorus versucht es weiter …</div>}
       {problems.map((a) => (
         <button key={a.id} className="banner warn clickable" onClick={onFixAccount}>
