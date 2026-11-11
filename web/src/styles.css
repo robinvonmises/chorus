@@ -933,3 +933,22 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 /* Sende-Animation (web/src/sendAnim.ts): Eingabeleiste kurz milchig-durchsichtig, die Blase fliegt dahinter */
 .chat-view.sending .composer-wrap { background: color-mix(in srgb, var(--bg) 62%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
 .chat-view.sending .composer textarea, .chat-view.sending .send-btn.mic { background: color-mix(in srgb, var(--bg-3) 55%, transparent); }
+
+/* Mehrere Fotos/Videos in einer Blase als Mosaik (2 nebeneinander, 3 = groß + 2 klein, ab 4 als 2×2 mit „+N“) */
+.mosaic { display: grid; gap: 2px; width: 300px; max-width: 72vw; border-radius: 14px; overflow: hidden; margin-bottom: 4px; grid-template-columns: 1fr 1fr; }
+.bubble.has-media .mosaic { border-radius: 16px; }
+.mosaic.n2 { aspect-ratio: 5 / 3; }
+.mosaic.n3 { grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; aspect-ratio: 3 / 2; }
+.mosaic.n3 > :first-child { grid-row: span 2; }
+.mosaic.n4 { grid-template-rows: 1fr 1fr; aspect-ratio: 1; }
+.mosaic-tile { position: relative; display: block; min-width: 0; min-height: 0; overflow: hidden; background: var(--bg-3); }
+.mosaic-tile > img, .mosaic-tile > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.mosaic-more { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.45); color: #fff; font-size: 26px; font-weight: 600; }
+.mosaic-tile.flash { outline: 3px solid var(--accent, #fff); outline-offset: -3px; }
+.lightbox video { max-width: 100vw; max-height: 100%; }
+.lightbox-count { align-self: center; color: #fff; font-size: 14px; padding: 0 6px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+.lightbox-nav { position: absolute; top: 50%; margin-top: -20px; z-index: 1; background: rgba(255,255,255,.14); color: #fff; }
+.lightbox-nav.prev { left: 10px; }
+.lightbox-nav.next { right: 10px; }
+.rot-180 { transform: rotate(180deg); }
+@media (hover: none) { .lightbox-nav { display: none; } }

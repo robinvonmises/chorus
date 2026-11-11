@@ -5,7 +5,7 @@ import { NETWORKS, QUICK_REACTIONS, adjLang, dayLabel } from '../util';
 import { TranslateSheet } from './TranslateSheet';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
-import { MessageBubble, previewOf } from './Message';
+import { MessageBubble, albumable, previewOf } from './Message';
 import { Composer } from './Composer';
 import { EmojiPicker } from './EmojiPicker';
 import { AiPanel } from './AiPanel';
@@ -170,11 +170,19 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   }, [chat.id, group, sendersKey]);
 
   const items = useMemo(() => {
-    const out: { m: Message; day?: string; showName: boolean }[] = [];
+    const out: { m: Message; day?: string; showName: boolean; album?: Message[] }[] = [];
     let lastDay = '', lastSender = '';
     for (const m of messages ?? []) {
       const d = new Date(m.ts).toDateString();
       const day = d !== lastDay ? dayLabel(m.ts) : undefined;
+      // Mehrere Fotos kurz hintereinander (z. B. WhatsApp schickt jedes einzeln): an die vorige Blase anhängen
+      const prev = out[out.length - 1];
+      const tail = prev?.album?.[prev.album.length - 1] ?? prev?.m;
+      if (prev && tail && !day && m.senderId === tail.senderId && m.fromMe === tail.fromMe && m.ts - tail.ts < 3 * 60_000
+        && albumable(m) && (prev.album ? true : albumable(prev.m, true))) {
+        prev.album = [...(prev.album ?? [prev.m]), m];
+        continue;
+      }
       out.push({ m, day, showName: !!day || m.senderId !== lastSender });
       lastDay = d; lastSender = m.senderId;
     }
@@ -231,10 +239,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         <div className="messages-inner" ref={inner}>
         {!messages && <div className="loading-old">Lade …</div>}
         {messages && !messages.length && <div className="loading-old">Noch keine Nachrichten.</div>}
-        {items.map(({ m, day, showName }) => (
+        {items.map(({ m, day, showName, album }) => (
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
-            <MessageBubble m={m} group={group} showName={showName} senderAvatar={group && !m.fromMe ? senderAv[m.senderId] ?? null : undefined} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
+            <MessageBubble m={m} album={album} group={group} showName={showName} senderAvatar={group && !m.fromMe ? senderAv[m.senderId] ?? null : undefined} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
               reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
               onAction={openMenu} onReact={react} onJump={jump}
               onTranscribe={canTranscribe ? transcribe : undefined} />
