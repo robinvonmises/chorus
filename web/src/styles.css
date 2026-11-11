@@ -923,3 +923,7 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .fwd-list label small { color: var(--ink-3); flex: none; }
 .fwd-list li.muted { padding: 10px 12px; }
 .fwd-sheet .btn.primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+
+/* Sende-Animation (web/src/sendAnim.ts): Eingabeleiste kurz milchig-durchsichtig, die Blase fliegt dahinter */
+.chat-view.sending .composer-wrap { background: color-mix(in srgb, var(--bg) 62%, transparent); -webkit-backdrop-filter: blur(14px) saturate(1.3); backdrop-filter: blur(14px) saturate(1.3); }
+.chat-view.sending .composer textarea, .chat-view.sending .send-btn.mic { background: color-mix(in srgb, var(--bg-3) 55%, transparent); }
