@@ -1,6 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
-import { attachmentUrl, type Attachment, type Message } from '../api';
+import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
 import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
 import { whenLabel } from './WhenPicker';
@@ -142,7 +142,7 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true) }); }}>
-        {!pending && <img src={url} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
+        {!pending && <img src={thumbUrl(m, i)} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
       </a>
     );
   }

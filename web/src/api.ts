@@ -209,6 +209,12 @@ export const api = {
 
 export const enc = encodeURIComponent;
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
+/** Kleine Vorschau (max. 720 px) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */
+export const thumbUrl = (m: Message, i: number) => {
+  const a = m.attachments[i];
+  if (!a || a.kind === 'sticker' || /gif/i.test(a.mime)) return attachmentUrl(m, i);
+  return `${attachmentUrl(m, i)}&thumb=1`;
+};
 
 /** WebSocket mit automatischem Wiederverbinden */
 export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online: boolean) => void, onUnauthorized: () => void, onReconnect?: () => void) {
