@@ -594,6 +594,14 @@ app.patch('/api/messages/:id', async (req) => {
   await H(req).edit((req.params as any).id, text);
   return { ok: true };
 });
+app.post('/api/messages/:id/retry', async (req) => {
+  await H(req).retry((req.params as any).id);
+  return { ok: true };
+});
+app.delete('/api/messages/:id/discard', async (req) => {
+  H(req).discard((req.params as any).id);
+  return { ok: true };
+});
 app.delete('/api/messages/:id', async (req) => {
   const everyone = (req.query as any).everyone === '1';
   await H(req).delete((req.params as any).id, everyone);

@@ -17,6 +17,7 @@ export type HubEvent =
   | { type: 'chat'; chat: Chat }
   | { type: 'chat_removed'; id: string }
   | { type: 'message'; message: Message; replacedId?: string }
+  | { type: 'message_removed'; id: string; chatId: string }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: import('./planner.js').Planned[] }
   | { type: 'reminder'; item: import('./planner.js').Planned; chat: Chat | null };
@@ -224,11 +225,43 @@ export class Hub {
         return m2;
       }
       return null;
-    } catch (e) {
+    } catch (e: any) {
+      const error = String(e?.message ?? e).slice(0, 300);
+      console.error(`[${chat.network}] Senden fehlgeschlagen: ${error}`);
       const msg = this.store.patchMessage(tmp.id, { status: 'failed' });
-      if (msg) this.emit({ type: 'message', message: msg });
+      // Grund nur live mitschicken (nicht gespeichert): das Menü der Nachricht zeigt ihn an
+      if (msg) this.emit({ type: 'message', message: { ...msg, error } });
       throw e;
     }
+  }
+
+  /** Fehlgeschlagene eigene Nachricht erneut senden (gleiche Blase, wieder „wird gesendet“) */
+  async retry(messageId: string): Promise<Message | null> {
+    const msg = this.store.getMessage(messageId);
+    if (!msg || !msg.fromMe || msg.status !== 'failed' || !msg.remoteId.startsWith('local-')) throw Object.assign(new Error('Nachricht kann nicht erneut gesendet werden'), { statusCode: 400 });
+    const chat = this.chatOrThrow(msg.chatId);
+    const a = this.adapterFor(chat);
+    let send: () => Promise<string>;
+    if (!msg.attachments.length) send = () => a.sendText(chat.remoteId, msg.text, msg.replyToRemoteId);
+    else {
+      const att = msg.attachments[0];
+      const data = att.fileId ? this.store.readFile(att.fileId) : null;
+      if (!data) throw Object.assign(new Error('Anhang ist nicht mehr vorhanden'), { statusCode: 410 });
+      const file: OutgoingFile = { data, name: att.name || 'datei', mime: att.mime || 'application/octet-stream', voice: att.kind === 'voice', durationSec: att.durationSec,
+        ...(att.width && att.height ? { width: att.width, height: att.height } : {}) };
+      send = () => a.sendFile(chat.remoteId, file, msg.text || undefined, msg.replyToRemoteId);
+    }
+    const tmp = this.store.patchMessage(msg.id, { status: 'pending' })!;
+    this.emit({ type: 'message', message: tmp });
+    return this.finish(chat, tmp, send);
+  }
+
+  /** Nie gesendete Nachricht ganz entfernen (nur lokal vorhanden) */
+  discard(messageId: string) {
+    const msg = this.store.getMessage(messageId);
+    if (!msg || !msg.fromMe || !msg.remoteId.startsWith('local-')) throw Object.assign(new Error('Nur nicht gesendete Nachrichten können verworfen werden'), { statusCode: 400 });
+    this.store.removeMessage(msg.id);
+    this.emit({ type: 'message_removed', id: msg.id, chatId: msg.chatId });
   }
 
   async sendText(chatId: string, text: string, replyTo?: string | null) {

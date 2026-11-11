@@ -154,6 +154,8 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         return new Map(ms).set(e.message.chatId, next);
       });
       if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
+    } else if (e.type === 'message_removed') {
+      setMessages((ms) => { const list = ms.get(e.chatId); return list ? new Map(ms).set(e.chatId, list.filter((m) => m.id !== e.id)) : ms; });
     } else if (e.type === 'planned') setPlanned(e.items);
     else if (e.type === 'reminder') {
       const c = e.chat;

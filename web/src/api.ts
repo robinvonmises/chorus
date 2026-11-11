@@ -40,6 +40,8 @@ export interface Message {
   id: string; chatId: string; remoteId: string; senderId: string; senderName: string; fromMe: boolean; ts: number;
   text: string; replyToRemoteId?: string | null; edited: boolean; deleted: boolean; attachments: Attachment[];
   reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
+  /** Nur live bei fehlgeschlagenem Senden: Grund */
+  error?: string;
   translation?: string | null;
   /** Sprache des Texts, wenn translation die deutsche Übersetzung ist (bei eigenen übersetzt gesendeten leer: dann ist translation das Original) */
   translationFrom?: string | null;
@@ -59,6 +61,7 @@ export type HubEvent =
   | { type: 'chat_removed'; id: string }
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
+  | { type: 'message_removed'; id: string; chatId: string }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: Planned[] }
   | { type: 'reminder'; item: Planned; chat: Chat | null };
@@ -196,6 +199,8 @@ export const api = {
   react: (msgId: string, emoji: string | null) => req('POST', `/api/messages/${enc(msgId)}/react`, { emoji }),
   forward: (msgId: string, chatIds: string[]) => req<{ ok: boolean; count: number }>('POST', `/api/messages/${enc(msgId)}/forward`, { chatIds }),
   edit: (msgId: string, text: string) => req('PATCH', `/api/messages/${enc(msgId)}`, { text }),
+  retry: (msgId: string) => req('POST', `/api/messages/${enc(msgId)}/retry`),
+  discard: (msgId: string) => req('DELETE', `/api/messages/${enc(msgId)}/discard`),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
   searchChats: (q: string) => req<Chat[]>('GET', `/api/chats/search?q=${encodeURIComponent(q)}`),
   startChat: (accountId: string, phone: string) => req<Chat>('POST', `/api/accounts/${accountId}/start-chat`, { phone }),

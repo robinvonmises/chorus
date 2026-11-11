@@ -277,7 +277,15 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       {menuAnim.mounted && menuShown && ((menu => (
         <div className={`overlay ${menuAnim.closing ? 'out' : ''}`} onClick={() => setMenu(null)}>
           <div className="msg-menu" style={menuPos(menu)} onClick={(e) => e.stopPropagation()}>
-            {menu.picker ? (
+            {menu.m.status === 'failed' && menu.m.fromMe ? (
+              // Nicht gesendet: nur das, was hier Sinn ergibt
+              <div className="menu-list">
+                <div className="menu-note">Nicht gesendet{menu.m.error ? `: ${menu.m.error}` : '.'}</div>
+                {menu.m.remoteId.startsWith('local-') && <button onClick={() => { const m = menu.m; setMenu(null); guard(() => api.retry(m.id)); }}><Icon name="refresh" size={18} />Erneut senden</button>}
+                {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
+                <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => m.remoteId.startsWith('local-') ? api.discard(m.id) : api.remove(m.id, false)); }}><Icon name="trash" size={18} />Löschen</button>
+              </div>
+            ) : menu.picker ? (
               <EmojiPicker onPick={(e) => { react(menu.m, e); setMenu(null); }} />
             ) : (<>
               <div className="quick-reactions">

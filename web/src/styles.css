@@ -206,6 +206,8 @@ input, textarea { font: inherit; color: inherit; }
 .chat-view[data-net="signal"] .msg.out .st.read { color: #2563eb; }
 .bubble .meta > .st.failed { opacity: 1; }
 .st.failed { color: #fca5a5; }
+button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: pointer; padding: 8px; margin: -8px; -webkit-tap-highlight-color: transparent; }
+.menu-note { padding: 8px 14px 4px; font-size: 13px; color: var(--danger); max-width: 280px; }
 .quote { display: grid; text-align: left; width: 100%; border-left: 3px solid currentColor; padding: 4px 8px; margin: 2px 0 6px; border-radius: 6px; background: rgba(127,127,127,.12); font-size: 13px; }
 .quote span { opacity: .8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hover-actions { position: absolute; top: 50%; transform: translateY(-50%); display: none; gap: 2px; }
