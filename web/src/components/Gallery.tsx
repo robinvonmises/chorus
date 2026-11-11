@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, attachmentUrl, thumbUrl, type Chat, type MediaKind, type Message } from '../api';
+import { api, attachmentUrl, type Chat, type MediaKind, type Message } from '../api';
 import { NETWORKS, dayLabel, fileSize, msgTime } from '../util';
 import { Icon } from './Icon';
 import { AttachmentView } from './Message';
@@ -51,8 +51,8 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
                 <button key={m.id + i} className="gallery-cell" title={`${who(m)} · ${dayLabel(m.ts)}`}
                   onClick={() => a.kind === 'image' ? openLightbox({ src: attachmentUrl(m, i), name: a.name, download: attachmentUrl(m, i, true) }) : onOpen(m)}>
                   {a.kind === 'video'
-                    ? <><img src={`${attachmentUrl(m, i)}&thumb=1`} alt="" loading="lazy" decoding="async" /><span className="gallery-play"><Icon name="play" size={18} /></span></>
-                    : <img src={thumbUrl(m, i)} alt="" loading="lazy" decoding="async" />}
+                    ? <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>
+                    : <img src={attachmentUrl(m, i)} alt="" loading="lazy" />}
                 </button>
               ))}
             </div>

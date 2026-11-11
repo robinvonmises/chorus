@@ -7,7 +7,6 @@ import websocket from '@fastify/websocket';
 import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
-import { thumbnail } from './thumbs.js';
 import fastifyStatic from '@fastify/static';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -706,7 +705,7 @@ app.get('/api/messages/:id/attachments/:idx', async (req, reply) => {
   return serveAttachment(req, reply, id, idx);
 });
 async function serveAttachment(req: FastifyRequest, reply: FastifyReply, id: string, idx: string) {
-  const q = req.query as { download?: string; play?: string; thumb?: string };
+  const q = req.query as { download?: string; play?: string };
   const h = H(req);
   const msg = h.store.getMessage(id);
   const i = Number(idx);
@@ -719,14 +718,6 @@ async function serveAttachment(req: FastifyRequest, reply: FastifyReply, id: str
     return reply.code(502).send({ error: 'Anhang konnte nicht vom Messenger geladen werden: ' + (e?.message ?? e) });
   }
   let mime = att.mime;
-  // ?thumb=1: kleine Vorschau für die Chat-Ansicht (Fotos, Video-Standbild); Original bleibt für Großansicht/Download
-  if (q.thumb === '1') {
-    const isVideo = att.kind === 'video' || /^video\//i.test(mime);
-    const isImage = !isVideo && att.kind !== 'sticker' && /^image\/(jpe?g|png|webp|heic|heif|avif|bmp)/i.test(mime);
-    const t = isVideo || isImage ? await thumbnail(`${C(req).p.id}:${id}:${i}`, isVideo ? 'video' : 'image', async () => data) : null;
-    if (t) return reply.header('Content-Type', 'image/jpeg').header('Cache-Control', 'private, max-age=31536000, immutable').send(t);
-    if (isVideo) return reply.code(404).send({ error: 'Keine Vorschau' });
-  }
   if (q.play === '1' && (/ogg|opus|webm|amr|3gpp/i.test(att.mime) || ((att.kind === 'voice' || att.kind === 'audio') && !/mpeg|mp4|aac|m4a|wav/i.test(att.mime)))) {
     const key = `${C(req).p.id}:${id}:${i}`;
     let mp3 = playCache.get(key);

@@ -93,7 +93,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
     if (await keyStore.get(pid)) await keyStore.set(pid, key);
     setPw({ a: '', b: '', msg: 'Passwort geändert.' });
   };
-  const logout = async () => { await keyStore.clear(pid); await window.caches?.delete('chorus-img-v1').catch(() => false); await api.logout(); onLocked(); };
+  const logout = async () => { await keyStore.clear(pid); await api.logout(); onLocked(); };
 
   const pushOn = localStorage.getItem('inbox:push') === '1';
   const bubbleMode = loadBubbles().mode === 'network' ? 'Farben je Dienst' : 'Einheitlich';

@@ -1,6 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
-import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
+import { attachmentUrl, type Attachment, type Message } from '../api';
 import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
 import { whenLabel } from './WhenPicker';
@@ -142,11 +142,11 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true) }); }}>
-        {!pending && <img src={thumbUrl(m, i)} alt={a.name} decoding="async" onError={() => setFailed(true)} />}
+        {!pending && <img src={url} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
       </a>
     );
   }
-  if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} poster={pending ? undefined : `${attachmentUrl(m, i)}&thumb=1`} controls preload="none" playsInline
+  if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} controls preload="none" playsInline
     style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined} />;
   if (a.kind === 'voice' || a.kind === 'audio') return <VoicePlayer m={m} i={i} url={pending ? null : `${url}&play=1`} dur={a.durationSec} voice={a.kind === 'voice'} name={a.name} />;
   return <FileCard m={m} a={a} i={i} />;
