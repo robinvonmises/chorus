@@ -110,7 +110,9 @@ const logStream = {
     } catch { /* ignore */ }
   },
 };
-const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logStream }, trustProxy: trustProxySetting() as boolean | string, bodyLimit: 2 * 1024 * 1024 });
+const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info', stream: logStream }, trustProxy: trustProxySetting() as boolean | string, bodyLimit: 2 * 1024 * 1024,
+  // Nachrichten-IDs in Signal-Gruppen (Konto + Gruppen-ID + Zeit + UUID) sind länger als die Standardgrenze von 100 Zeichen → sonst „Bad Request“
+  routerOptions: { maxParamLength: 1000 } });
 await app.register(cookie);
 await app.register(websocket);
 await app.register(multipart, { limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024, files: 1 } });
