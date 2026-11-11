@@ -142,7 +142,7 @@ export function albumable(m: Message, lead = false) {
 
 /** Mehrere Fotos/Videos als Raster wie bei Signal: 2 nebeneinander, 3 = eins groß + zwei klein, ab 4 als 2×2 mit „+N“ */
 function Mosaic({ tiles, lead }: { tiles: { m: Message; a: Attachment; i: number }[]; lead: Message }) {
-  const items = tiles.map((t) => ({ src: attachmentUrl(t.m, t.i), name: t.a.name, download: attachmentUrl(t.m, t.i, true), video: effKind(t.a) === 'video' }));
+  const items = tiles.map((t) => ({ src: attachmentUrl(t.m, t.i), name: t.a.name, download: attachmentUrl(t.m, t.i, true), video: effKind(t.a) === 'video', ref: { m: t.m, i: t.i } }));
   const more = tiles.length - 4;
   return (
     <div className={`mosaic n${Math.min(tiles.length, 4)}`}>
@@ -190,7 +190,7 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     const sized = a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined;
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
-        onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true) }); }}>
+        onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), ref: { m, i } }); }}>
         {!pending && <img src={thumbUrl(m, i)} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
       </a>
     );

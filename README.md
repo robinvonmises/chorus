@@ -55,6 +55,7 @@ The interface is deliberately quiet and iOS-like: soft colours, smooth motion an
 - **Reminders** on any message ("remind me tomorrow morning"), with a notification that jumps right back to it
 - **Search across all messengers**: messages, transcripts and file names, with a jump to the hit in the chat
 - **Gallery** of all photos, videos, files, links and voice messages, per chat or across all chats
+- **Save to Immich or Nextcloud** (optional): link your own Immich (API key with `asset.upload`) and/or Nextcloud (app password, WebDAV) under Settings → Storage. Photos and videos go to Immich with one tap in the full-screen view, files to a Nextcloud folder of your choice; the server uploads the original, credentials stay encrypted on the server
 
 ### Media
 - Send photos, videos, voice messages and files (drag & drop or paste on the desktop)

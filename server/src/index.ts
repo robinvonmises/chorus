@@ -24,6 +24,7 @@ import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
 import { emailFactory } from './adapters/email.js';
 import { Ai, AiError } from './ai.js';
+import { Storage, StorageError, type Target } from './storage.js';
 import { AutopilotRunner } from './autopilot.js';
 import { Translator, guessLang } from './translate.js';
 import { Planner } from './planner.js';
@@ -861,6 +862,28 @@ app.get('/api/export', async (req, reply) => {
   });
   try { await exportZip(h, reply.raw, chat ? [chat.id] : null); }
   catch (e) { app.log.error(e); reply.raw.destroy(e as Error); }
+});
+// ---------- Speicherziele: Immich (Fotos/Videos), Nextcloud (Dateien) ----------
+const S = (req: FastifyRequest) => new Storage(H(req).store);
+const target = (v: unknown): Target => { if (v === 'immich' || v === 'nextcloud') return v; throw new StorageError(400, 'Unbekanntes Speicherziel'); };
+app.get('/api/storage', async (req) => S(req).publicSettings());
+app.put('/api/storage', async (req) => S(req).update((req.body ?? {}) as any));
+app.post('/api/storage/test', async (req) => ({ message: await S(req).test(target((req.body as any)?.target)) }));
+app.post('/api/messages/:id/attachments/:idx/save', async (req) => {
+  const { id, idx } = req.params as { id: string; idx: string };
+  const h = H(req);
+  const msg = h.store.getMessage(id);
+  const i = Number(idx);
+  const att = msg?.attachments[i];
+  if (!msg || !att) throw new StorageError(404, 'Nicht gefunden');
+  const s = S(req), pub = s.publicSettings();
+  const t = target((req.body as any)?.target);
+  if (!pub[t].enabled) throw new StorageError(400, t === 'immich' ? 'Immich ist nicht eingerichtet' : 'Nextcloud ist nicht eingerichtet');
+  let data: Buffer;
+  try { data = await h.attachmentData(msg, i); }
+  catch (e: any) { throw new StorageError(502, 'Anhang konnte nicht vom Messenger geladen werden: ' + (e?.message ?? e)); }
+  const message = await s.save(t, { data, name: att.name || `chorus-${i}`, mime: att.mime, ts: msg.ts, id: `${id}:${i}`, durationSec: att.durationSec });
+  return { message };
 });
 app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
 app.put('/api/media', async (req) => { H(req).autoSaveMedia = !!(req.body as any)?.autoSave; return { autoSave: H(req).autoSaveMedia }; });

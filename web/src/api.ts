@@ -105,6 +105,10 @@ export const api = {
   renameProfile: (id: string, name: string) => req<PublicProfile>('PATCH', `/api/profiles/${id}`, { name }),
   deleteProfile: (id: string) => req('DELETE', `/api/profiles/${id}`),
   setAvatar: (id: string, jpeg: Blob) => { const f = new FormData(); f.append('file', jpeg, 'avatar.jpg'); return req<PublicProfile>('PUT', `/api/profiles/${id}/avatar`, f); },
+  storage: () => req<StorageSettings>('GET', '/api/storage'),
+  setStorage: (patch: { immich?: Record<string, unknown>; nextcloud?: Record<string, unknown> }) => req<StorageSettings>('PUT', '/api/storage', patch),
+  testStorage: (target: StorageTarget) => req<{ message: string }>('POST', '/api/storage/test', { target }),
+  saveTo: (m: Message, i: number, target: StorageTarget) => req<{ message: string }>('POST', `/api/messages/${enc(m.id)}/attachments/${i}/save`, { target }),
   media: () => req<{ autoSave: boolean }>('GET', '/api/media'),
   setMedia: (autoSave: boolean) => req<{ autoSave: boolean }>('PUT', '/api/media', { autoSave }),
   removeAvatar: (id: string) => req<PublicProfile>('DELETE', `/api/profiles/${id}/avatar`),
@@ -226,6 +230,11 @@ export const api = {
 };
 
 export const enc = encodeURIComponent;
+export type StorageTarget = 'immich' | 'nextcloud';
+export interface StorageSettings {
+  immich: { enabled: boolean; url: string; hasKey: boolean };
+  nextcloud: { enabled: boolean; url: string; user: string; hasPass: boolean; folder: string };
+}
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
 /** Kleine Vorschau (max. 720 px) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */
 export const thumbUrl = (m: Message, i: number) => {
