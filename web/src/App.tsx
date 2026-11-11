@@ -317,7 +317,27 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   }, []);
   const sortedChats = useMemo(() => [...chats.values()].filter((c) => !gone.has(c.id)).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs), [chats, gone]);
   const unreadTotal = useMemo(() => sortedChats.reduce((n, c) => n + (c.muted || c.archived ? 0 : c.unread), 0), [sortedChats]);
-  useEffect(() => { document.title = unreadTotal ? `(${unreadTotal}) Chorus` : 'Chorus'; (navigator as any).setAppBadge?.(unreadTotal || undefined)?.catch?.(() => {}); }, [unreadTotal]);
+  useEffect(() => {
+    document.title = unreadTotal ? `(${unreadTotal}) Chorus` : 'Chorus';
+    const n = navigator as any; // setAppBadge() ohne Zahl zeigt einen Punkt, deshalb bei 0 ausdrücklich löschen
+    (unreadTotal ? n.setAppBadge?.(unreadTotal) : n.clearAppBadge?.())?.catch?.(() => {});
+  }, [unreadTotal]);
+  // Gelesene Chats: ihre Benachrichtigungen aus der Mitteilungszentrale nehmen (Tag = Chat-ID, Erinnerungen bleiben).
+  // Nur bekannte Chats, damit nichts verschwindet, bevor die Liste geladen ist.
+  const readSig = useMemo(() => sortedChats.filter((c) => c.unread === 0 || c.id === active).map((c) => c.id).join('\n'), [sortedChats, active]);
+  useEffect(() => {
+    const read = new Set(readSig ? readSig.split('\n') : []);
+    if (!read.size) return;
+    const clean = () => {
+      if (document.visibilityState !== 'visible') return;
+      navigator.serviceWorker?.ready.then((reg) => reg.getNotifications()).then((ns) => {
+        for (const x of ns) { const id = x.data?.chatId; if (id && x.tag === id && read.has(id)) x.close(); }
+      }).catch(() => {});
+    };
+    clean();
+    document.addEventListener('visibilitychange', clean);
+    return () => document.removeEventListener('visibilitychange', clean);
+  }, [readSig]);
 
   const chat = active ? chats.get(active) ?? null : null;
   const account = chat ? accounts.find((a) => a.id === chat.accountId) : undefined;
