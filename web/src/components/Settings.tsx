@@ -10,6 +10,8 @@ import { TwoFactor } from './TwoFactor';
 import { ProfilesSection } from './Profiles';
 import { MyProfile } from './MyProfile';
 import { BackupSection } from './Backup';
+import { StorageSection } from './StorageSettings';
+import { useStorage } from '../storageState';
 import { BubbleSection } from './BubbleSettings';
 import { AdminSection } from './AdminSection';
 import { PushSection } from './PushSection';
@@ -21,10 +23,10 @@ const STATE_TEXT: Record<Account['status']['state'], string> = {
   connected: 'Verbunden', connecting: 'Verbinde …', disconnected: 'Getrennt', need_input: 'Anmeldung offen', qr: 'QR-Code scannen', error: 'Fehler',
 };
 
-type Page = 'me' | 'ai' | 'push' | 'look' | 'backup' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
+type Page = 'me' | 'ai' | 'push' | 'look' | 'backup' | 'storage' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
 
 const TITLES: Record<string, string> = {
-  me: 'Mein Profil', ai: 'KI-Assistent', push: 'Benachrichtigungen', look: 'Darstellung', backup: 'Sicherung',
+  me: 'Mein Profil', ai: 'KI-Assistent', push: 'Benachrichtigungen', look: 'Darstellung', backup: 'Sicherung', storage: 'Speicherorte',
   security: 'Sicherheit', profiles: 'Profile', server: 'Server', about: 'Über Chorus',
 };
 
@@ -54,6 +56,8 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
   const me = server.profile!;
   const [comfort, setComfort] = useState(me.comfort);
   const pid = me.id;
+  const st = useStorage();
+  const storeVal = [st?.immich.enabled && 'Immich', st?.nextcloud.enabled && 'Nextcloud'].filter(Boolean).join(', ');
   const [pw, setPw] = useState({ a: '', b: '', msg: '' });
   const [page, setPage] = useState<Page | null>(null);
   const [sync, setSync] = useState<'' | 'läuft …' | 'Fertig' | 'Fehlgeschlagen'>('');
@@ -112,6 +116,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
       case 'push': return <div className="ios-card pad"><PushSection /></div>;
       case 'look': return <div className="ios-card pad"><BubbleSection nets={[...new Set(accounts.map((a) => a.network))]} /></div>;
       case 'backup': return <div className="ios-card pad"><BackupSection /></div>;
+      case 'storage': return <div className="ios-card pad"><StorageSection /></div>;
       case 'profiles': return <div className="ios-card pad"><ProfilesSection key={`${me.name}:${me.avatar}`} server={server} onRenamed={onProfileChanged} /></div>;
       case 'server': return <div className="ios-card pad"><AdminSection /></div>;
       case 'about': return <div className="ios-card pad"><p className="muted">Chorus {server.version}. Deine Daten liegen verschlüsselt auf deinem eigenen Server.</p></div>;
@@ -175,6 +180,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
               <Row tile={<Tile color="#ff3b30" icon="bell" />} title="Benachrichtigungen" value={pushOn ? 'Push an' : undefined} onClick={() => go('push')} />
               <Row tile={<Tile color="#007aff" icon="palette" />} title="Darstellung" value={bubbleMode} onClick={() => go('look')} />
               <Row tile={<Tile color="#30b0c7" icon="cloud" />} title="Sicherung" onClick={() => go('backup')} />
+              <Row tile={<Tile color="#34c759" icon="download" />} title="Speicherorte" sub="Immich, Nextcloud" value={storeVal || undefined} onClick={() => go('storage')} />
             </div>
 
             <div className="ios-card">

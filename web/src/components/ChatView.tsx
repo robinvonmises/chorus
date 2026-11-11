@@ -1,3 +1,4 @@
+import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, attachmentUrl, type Account, type Chat, type Message, type Planned } from '../api';
 import { WhenPicker, whenLabel } from './WhenPicker';
@@ -135,6 +136,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     }
   }, [loadOlder, messages?.length, chat.id]);
 
+  const storage = useStorage();
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2500); };
   const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? 'Fehler'); } };
 
@@ -314,6 +316,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                 {menu.m.attachments.map((a, i) => (
                   <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
                 ))}
+                {!menu.m.deleted && menu.m.attachments.flatMap((a, i) => targetsFor(storage, a).map((t) => (
+                  <button key={`${t}${i}`} onClick={() => { const m = menu.m; setMenu(null); flash('Wird gespeichert …'); saveAttachment(m, i, t).then(flash, (e: any) => flash(e.message ?? 'Fehler')); }}>
+                    <Icon name="cloud" size={18} />{TARGET_LABEL[t]}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
+                )))}
                 {menu.m.fromMe && menu.m.text && !menu.m.attachments.length && <button onClick={() => { setEditing(menu.m); setReplyTo(null); setMenu(null); }}><Icon name="edit" size={18} />Bearbeiten</button>}
                 {menu.m.fromMe && <button className="danger" onClick={() => { const m = menu.m; setMenu(null); if (confirm('Für alle löschen?')) guard(() => api.remove(m.id, true)); }}><Icon name="trash" size={18} />Für alle löschen</button>}
                 <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => api.remove(m.id, false)); }}><Icon name="trash" size={18} />Für mich löschen</button>

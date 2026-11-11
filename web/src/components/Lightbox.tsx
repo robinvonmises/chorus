@@ -1,8 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { duration } from '../util';
+import type { Message } from '../api';
+import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
 
-type Item = { src: string; name: string; download: string; video?: boolean };
+/** ref: Herkunft im Chat, damit „In Immich/Nextcloud speichern“ das Original serverseitig hochladen kann */
+type Item = { src: string; name: string; download: string; video?: boolean; ref?: { m: Message; i: number } };
 type Z = { s: number; x: number; y: number };
 type Pt = { x: number; y: number };
 type Open = { list: Item[]; idx: number };
@@ -28,6 +31,10 @@ export function Lightbox() {
   const [z, setZ] = useState<Z>(Z0);
   const [live, setLive] = useState(false);
   const img = useRef<HTMLImageElement>(null);
+  const storage = useStorage();
+  const [note, setNote] = useState('');
+  const [saving, setSaving] = useState(false);
+  const flashNote = (t: string) => { setNote(t); setTimeout(() => setNote((x) => (x === t ? '' : x)), 2500); };
   const zr = useRef<Z>(Z0); zr.current = z;
   // Geste: swipe (schließen), pan (im Zoom), pinch (zwei Finger)
   const g = useRef<null | { mode: 'swipe' | 'pan' | 'pinch'; t: number; p0: Pt; z0: Z; d0?: number; moved: boolean; axis?: 'x' | 'y' }>(null);
@@ -152,7 +159,14 @@ export function Lightbox() {
       onWheel={(e) => { if (item.video) return; const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
-        <a className="icon-btn" href={item.download} download={item.name} title="Speichern"><Icon name="download" /></a>
+        {(() => {
+          const ref = item.ref, att = ref?.m.attachments[ref.i];
+          const t = ref && att ? targetsFor(storage, att)[0] : undefined;
+          if (!ref || !t) return null;
+          return <button className="icon-btn" disabled={saving} title={TARGET_LABEL[t]} aria-label={TARGET_LABEL[t]}
+            onClick={async () => { setSaving(true); flashNote('Wird gespeichert …'); try { flashNote(await saveAttachment(ref.m, ref.i, t)); } catch (e: any) { flashNote(e.message ?? 'Fehler'); } finally { setSaving(false); } }}><Icon name="cloud" /></button>;
+        })()}
+        <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>
         <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
       {[-1, 0, 1].map((off) => {
@@ -176,6 +190,7 @@ export function Lightbox() {
       })}
       {many && open!.idx > 0 && <button className="icon-btn lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Voriges Bild"><Icon name="back" /></button>}
       {many && open!.idx < open!.list.length - 1 && <button className="icon-btn lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Nächstes Bild"><Icon name="back" className="rot-180" /></button>}
+      {note && <div className="toast" onClick={(e) => e.stopPropagation()}>{note}</div>}
     </div>
   );
 }

@@ -64,7 +64,7 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
                 <div className="gallery-grid">
                   {cells.map(({ m, a, i }) => (
                     <button key={m.id + i} className="gallery-cell" title={`${who(m)} · ${dayLabel(m.ts)}`}
-                      onClick={() => a.kind === 'image' ? openLightbox({ src: attachmentUrl(m, i), name: a.name, download: attachmentUrl(m, i, true) }) : onOpen(m)}>
+                      onClick={() => a.kind === 'image' ? openLightbox({ src: attachmentUrl(m, i), name: a.name, download: attachmentUrl(m, i, true), ref: { m, i } }) : onOpen(m)}>
                       <Thumb m={m} a={a} i={i} />
                     </button>
                   ))}
