@@ -1,23 +1,36 @@
 name: Release
 
+# Creates a GitHub release (and its tag) from docs/releases/<tag>.md.
+# Runs on a pushed v* tag, or by hand: Actions → Release → Run workflow.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag, e.g. v0.3.0 (created on main if missing)'
+        required: true
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create GitHub release from docs/releases/<tag>.md
+      - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           notes="docs/releases/${TAG}.md"
           test -f "$notes" || { echo "missing $notes"; exit 1; }
           gh release view "$TAG" >/dev/null 2>&1 && exit 0
-          gh release create "$TAG" --title "Chorus ${TAG#v}" --notes-file "$notes" --verify-tag
+          gh release create "$TAG" --title "Chorus ${TAG#v}" --notes-file "$notes" --target "$GITHUB_SHA"
+          # A tag created with the workflow token does not trigger other workflows,
+          # so start the image build (semver tags) explicitly.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            gh workflow run docker.yml --ref "$TAG"
+          fi
