@@ -18,24 +18,18 @@ let armedAt = 0;
 export const armRise = () => { armedAt = Date.now(); };
 export const takeRise = () => { const ok = Date.now() - armedAt < 15000; armedAt = 0; return ok; };
 
-/**
- * Ablauf nach iMessage (Bild für Bild aus Waynes Bildschirmaufnahme, 30 fps):
- * 1. Das Eingabefeld wird zur Blase: Hintergrund so breit wie das Feld, Text an seiner Stelle im Feld.
- * 2. ~270 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
- * 3. ~630 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
- * Die echte Blase bleibt dabei an ihrem Platz und ist nur unsichtbar; eine Kopie fliegt in einer
- * fixierten Ebene darüber (nur transform), damit sie über dem Eingabefeld sichtbar ist und nichts am Scrollen ändert.
- */
+/** Sende-Animation nach iMessage-Vorbild, Details im Ablauf-Kommentar unten. */
 export function rise(msg: Element | null | undefined) {
   if (!(msg instanceof HTMLElement) || !active() || typeof msg.animate !== 'function') return;
   const bubble = msg.querySelector('.bubble');
-  const field = document.querySelector('.composer textarea')?.closest('.composer') ?? document.querySelector('.composer');
-  if (!(bubble instanceof HTMLElement) || !field) return;
-  const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect();
+  const field = document.querySelector('.composer textarea') ?? document.querySelector('.composer');
+  const wrap = field?.closest('.composer-wrap') ?? field;
+  if (!(bubble instanceof HTMLElement) || !field || !wrap) return;
+  const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect(), wt = wrap.getBoundingClientRect().top;
   if (!b.width || !f.width || b.height > 400) return;
   const host = msg.closest('.chat-view') ?? document.body;
   const list = msg.parentElement;
-  let layer: HTMLDivElement | null = null;
+  let layer: HTMLDivElement | null = null, stage: HTMLDivElement | null = null;
   // Der Server ersetzt die gerade gesendete Nachricht oft kurz danach durch eine neue (andere ID → neues Element).
   // Alles, was während des Flugs als eigene Blase dazukommt, bleibt bis zur Landung unsichtbar, sonst ist sie doppelt da.
   const hidden: HTMLElement[] = [msg];
@@ -48,37 +42,47 @@ export function rise(msg: Element | null | undefined) {
     if (done) return; done = true;
     mo?.disconnect();
     hidden.forEach((el) => { el.style.opacity = ''; });
-    layer?.remove(); layer = null;
+    stage?.remove(); stage = null; layer = null;
   };
   try {
     const cs = getComputedStyle(bubble);
+    // Bühne: feste Ebene über dem Chat, sichtbar nur oberhalb der Eingabeleiste und im Eingabefeld selbst.
+    // So taucht die Blase hinter der Leiste auf, statt sie zu überdecken (wie bei iMessage).
+    stage = document.createElement('div');
+    Object.assign(stage.style, { position: 'fixed', left: '0px', top: '0px', right: '0px', bottom: '0px', zIndex: '60', pointerEvents: 'none' });
+    host.appendChild(stage);
+    const o = stage.getBoundingClientRect(); // falls die Ebene nicht am Bildschirmrand beginnt (umgebende Transformation)
+    const X = (v: number) => `${Math.round(v - o.left)}px`, Y = (v: number) => `${Math.round(v - o.top)}px`;
+    stage.style.clipPath = `polygon(0px 0px, 100% 0px, 100% ${Y(wt)}, ${X(f.right)} ${Y(wt)}, ${X(f.right)} ${Y(f.bottom)}, ${X(f.left)} ${Y(f.bottom)}, ${X(f.left)} ${Y(wt)}, 0px ${Y(wt)})`;
+
     layer = document.createElement('div');
     layer.className = msg.className;
-    Object.assign(layer.style, { position: 'fixed', left: '0px', top: '0px', width: `${b.width}px`, height: `${b.height}px`, maxWidth: 'none', margin: '0', zIndex: '60', pointerEvents: 'none' });
+    Object.assign(layer.style, { position: 'absolute', left: X(b.left), top: Y(b.top), width: `${b.width}px`, height: `${b.height}px`, maxWidth: 'none', margin: '0', transformOrigin: '100% 100%' });
     const bg = document.createElement('div');
     Object.assign(bg.style, { position: 'absolute', top: '0', bottom: '0', right: '0', width: `${b.width}px`, background: cs.backgroundColor, borderRadius: cs.borderRadius });
     const copy = bubble.cloneNode(true) as HTMLElement;
     Object.assign(copy.style, { background: 'transparent', boxSizing: 'border-box', width: `${b.width}px`, height: `${b.height}px`, margin: '0' });
     layer.append(bg, copy);
-    host.appendChild(layer);
-    // Falls die Ebene nicht am Bildschirmrand beginnt (umgebende Transformation), ausgleichen
-    const o = layer.getBoundingClientRect();
-    layer.style.left = `${b.left - o.left}px`; layer.style.top = `${b.top - o.top}px`;
+    stage.appendChild(layer);
     msg.style.opacity = '0';
     if (mo && list) mo.observe(list, { childList: true });
 
-    const dy = Math.round((f.top + f.height / 2) - (b.top + b.height / 2)); // senkrecht mittig im Feld
-    const dx = Math.round(Math.min(0, f.right - b.right));                   // rechte Kante wie das Feld
-    const bw0 = Math.max(b.width, f.width);                                   // Hintergrund anfangs feldbreit (Breite statt scaleX, damit die Rundung rund bleibt)
-    const tx = Math.round(Math.min(0, f.left - (b.left + dx)));               // Text anfangs links im Feld
-    const T = 900, A = 0.3; // Wayne: eher 0,8–1 s
-    const slide = 'cubic-bezier(.45, .05, .25, 1)', up = 'cubic-bezier(.3, .75, .3, 1)';
+    /* Ablauf nach Waynes iMessage-Aufnahme (16:05, 30 fps):
+       1. Im Feld, wie hinter Milchglas: blass und unscharf, feldbreit, schrumpft nach rechts.
+       2. Taucht oben hinter der Leiste auf, dabei kleiner (~82 %) und wird scharf.
+       3. Wächst an ihrem Platz auf volle Größe. */
+    const dy = Math.round((f.top + f.height / 2) - (b.top + b.height / 2));
+    const dx = Math.round(Math.min(0, f.right - b.right));
+    const bw0 = Math.max(b.width, f.width);
+    const tx = Math.round(Math.min(0, f.left - (b.left + dx)));
+    const T = 850, A = 0.3; // Wayne: eher 0,8–1 s
+    const slide = 'cubic-bezier(.45, .05, .25, 1)', up = 'cubic-bezier(.25, .7, .3, 1)', grow = 'cubic-bezier(.3, .6, .3, 1)';
     const anims = [
       layer.animate([
-        { transform: `translate(${dx}px, ${dy}px)`, easing: slide },
-        { offset: A, transform: `translate(0px, ${dy}px)`, easing: up },
-        { offset: 0.8, transform: 'translate(0px, -2px)', easing: 'cubic-bezier(.4, 0, .4, 1)' },
-        { transform: 'translate(0px, 0px)' },
+        { transform: `translate(${dx}px, ${dy}px) scale(1)`, filter: 'blur(5px)', opacity: 0.5, easing: slide },
+        { offset: A, transform: `translate(0px, ${dy}px) scale(.82)`, filter: 'blur(3px)', opacity: 0.75, easing: up },
+        { offset: 0.62, transform: 'translate(0px, 0px) scale(.88)', filter: 'blur(0px)', opacity: 1, easing: grow },
+        { transform: 'translate(0px, 0px) scale(1)', filter: 'blur(0px)', opacity: 1 },
       ], { duration: T }),
       bg.animate([
         { width: `${bw0}px`, easing: slide },
