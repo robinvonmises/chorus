@@ -256,7 +256,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         </div>
       ) : (
         <div className={`composer ${text.trim() && !tools ? 'compact' : ''}`}>
-          <button className="icon-btn tools-toggle" onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
+          <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
           {!editing && <button className="icon-btn tool" onClick={() => fileIn.current?.click()} aria-label="Datei anhängen"><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
