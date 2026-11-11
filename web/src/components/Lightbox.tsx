@@ -113,7 +113,7 @@ export function Lightbox() {
       onWheel={(e) => { const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         <a className="icon-btn" href={item.download} download={item.name} title="Speichern"><Icon name="download" /></a>
-        <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="x" /></button>
+        <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
       <img ref={img} src={item.src} alt={item.name} draggable={false} onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => toggleZoom(rel(e.clientX, e.clientY))}
