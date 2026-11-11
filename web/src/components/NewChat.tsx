@@ -50,7 +50,7 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
         <div className="modal-body newchat">
           <div className="search">
             <Icon name="search" size={18} />
-            <input autoFocus placeholder="Name, Gruppe oder Telefonnummer" value={q} onChange={(e) => { setQ(e.target.value); setErr(''); }} />
+            <input autoFocus autoComplete="off" autoCorrect="off" enterKeyHint="search" placeholder="Name, Gruppe oder Telefonnummer" value={q} onChange={(e) => { setQ(e.target.value); setErr(''); }} />
           </div>
           {looksLikePhone && (
             <div className="newchat-phone">
