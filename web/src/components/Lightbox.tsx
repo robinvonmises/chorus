@@ -4,6 +4,7 @@ import { duration } from '../util';
 import type { Message } from '../api';
 import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
 import { openSaveAs } from './NextcloudBrowser';
+import { standalone, useShareFile } from './FileViewer';
 
 /** ref: Herkunft im Chat, damit „In Immich/Nextcloud speichern“ das Original serverseitig hochladen kann */
 type Item = { src: string; name: string; download: string; video?: boolean; ref?: { m: Message; i: number } };
@@ -36,6 +37,9 @@ export function Lightbox() {
   const [note, setNote] = useState('');
   const [saving, setSaving] = useState(false);
   const flashNote = (t: string) => { setNote(t); setTimeout(() => setNote((x) => (x === t ? '' : x)), 2500); };
+  // Als Home-Bildschirm-App: Teilen statt Download-Link (der führt auf eine Seite ohne Rückweg)
+  const att = item?.ref ? item.ref.m.attachments[item.ref.i] : undefined;
+  const sh = useShareFile(standalone && item ? item.src : null, item?.name ?? '', att?.mime ?? '', att?.size ?? 0);
   const zr = useRef<Z>(Z0); zr.current = z;
   // Geste: swipe (schließen), pan (im Zoom), pinch (zwei Finger)
   const g = useRef<null | { mode: 'swipe' | 'pan' | 'pinch'; t: number; p0: Pt; z0: Z; d0?: number; moved: boolean; axis?: 'x' | 'y' }>(null);
@@ -168,7 +172,10 @@ export function Lightbox() {
             onClick={async () => { setSaving(true); flashNote('Wird gespeichert …'); try { flashNote(await saveAttachment(ref.m, ref.i, 'immich')); } catch (e: any) { flashNote(e.message ?? 'Fehler'); } finally { setSaving(false); } }}><Icon name="cloud" /></button>}
             {ts.includes('nextcloud') && <button className="icon-btn" title="In Nextcloud speichern …" aria-label="In Nextcloud speichern" onClick={() => openSaveAs(ref.m, ref.i)}><Icon name="folder" /></button>}</>;
         })()}
-        <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>
+        {standalone
+          ? sh.can && <button className="icon-btn" disabled={!sh.ready} title="Teilen / Sichern" aria-label="Teilen / Sichern"
+              onClick={async () => { try { if (!(await sh.share())) flashNote('Teilen ist hier nicht möglich'); } catch (e: any) { flashNote(e?.message ?? 'Teilen fehlgeschlagen'); } }}><Icon name="share" /></button>
+          : <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>}
         <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
       {[-1, 0, 1].map((off) => {

@@ -1,5 +1,6 @@
 import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
 import { openSaveAs } from './NextcloudBrowser';
+import { openFile, standalone } from './FileViewer';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, attachmentUrl, type Account, type Chat, type Message, type Planned } from '../api';
 import { WhenPicker, whenLabel } from './WhenPicker';
@@ -314,9 +315,11 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
                 {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash('Wird übersetzt …'); api.ai.translateOne(m.id).then((r) => { if (r.already) flash('Die Nachricht ist schon Deutsch.'); }).catch((e: any) => flash(e.message ?? 'Fehler')); }}><Icon name="globe" size={18} />Übersetzen</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
-                {menu.m.attachments.map((a, i) => (
-                  <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
-                ))}
+                {menu.m.attachments.map((a, i) => standalone || !['image', 'sticker', 'video'].includes(a.kind)
+                  // Als Home-Bildschirm-App führt ein Download-Link auf eine Seite ohne Rückweg: in der eigenen Vorschau öffnen
+                  ? <button key={i} onClick={() => { const m = menu.m; setMenu(null); openFile(m, i); }}><Icon name="share" size={18} />{a.kind === 'file' ? 'Öffnen / Teilen' : 'Teilen / Sichern'}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
+                  : <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
+                )}
                 {!menu.m.deleted && menu.m.attachments.flatMap((a, i) => targetsFor(storage, a).map((t) => (
                   <button key={`${t}${i}`} onClick={() => { const m = menu.m; setMenu(null); if (t === 'nextcloud') { openSaveAs(m, i); return; } flash('Wird gespeichert …'); saveAttachment(m, i, t).then(flash, (e: any) => flash(e.message ?? 'Fehler')); }}>
                     <Icon name={t === 'nextcloud' ? 'folder' : 'cloud'} size={18} />{t === 'nextcloud' ? 'In Nextcloud speichern …' : TARGET_LABEL[t]}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>

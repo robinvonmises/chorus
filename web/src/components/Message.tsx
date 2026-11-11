@@ -1,5 +1,6 @@
 import { memo, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
+import { openFile } from './FileViewer';
 import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
 import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
@@ -203,10 +204,10 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
 
 function FileCard({ m, a, i, note }: { m: Message; a: Attachment; i: number; note?: string }) {
   return (
-    <a className="att-file" href={attachmentUrl(m, i, true)} download={a.name}>
+    <a className="att-file" href={attachmentUrl(m, i, true)} onClick={(e) => { e.preventDefault(); if (m.status !== 'pending') openFile(m, i); }}>
       <span className="att-file-icon"><Icon name="file" /></span>
       <span className="att-file-main"><b>{a.name}</b><small>{note ?? fileSize(a.size)}</small></span>
-      <Icon name="download" size={20} />
+      <Icon name="back" size={18} className="rot-180" />
     </a>
   );
 }
