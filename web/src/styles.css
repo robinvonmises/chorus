@@ -994,3 +994,7 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .im-albums img, .im-nocover { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: var(--line); display: grid; place-items: center; }
 .im-albums b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .im-albums small { color: var(--ink-3); }
+
+/* Büroklammer-Menü: Gerät, Immich, Nextcloud */
+.att-menu-bg { position: fixed; inset: 0; z-index: 4; }
+.att-menu { position: absolute; bottom: 100%; left: 8px; margin-bottom: 8px; min-width: 230px; padding: 6px; background: var(--bg); border-radius: 16px; box-shadow: var(--shadow); z-index: 5; animation: pop-in .18s var(--ease-out) both; }
