@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, attachmentUrl, thumbUrl, type Attachment, type Chat, type MediaKind, type Message } from '../api';
 import { NETWORKS, dayLabel, fileSize, msgTime } from '../util';
 import { Icon } from './Icon';
-import { AttachmentView } from './Message';
+import { AttachmentView, MediaThumb as Thumb } from './Message';
 import { openLightbox } from './Lightbox';
 
 const TABS: { k: MediaKind; label: string }[] = [
@@ -102,12 +102,3 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
   );
 }
 
-/** Kleine Vorschau vom Server (?thumb=1); falls es keine gibt, wie bisher das Original */
-function Thumb({ m, a, i }: { m: Message; a: Attachment; i: number }) {
-  const [failed, setFailed] = useState(false);
-  if (failed && a.kind === 'video') return <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>;
-  return <>
-    <img src={failed ? attachmentUrl(m, i) : thumbUrl(m, i)} alt="" loading="lazy" decoding="async" onError={() => !failed && setFailed(true)} />
-    {a.kind === 'video' && <span className="gallery-play"><Icon name="play" size={18} /></span>}
-  </>;
-}

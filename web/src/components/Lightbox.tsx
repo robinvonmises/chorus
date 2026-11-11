@@ -1,11 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 
-type Item = { src: string; name: string; download: string };
+type Item = { src: string; name: string; download: string; video?: boolean };
 type Z = { s: number; x: number; y: number };
 type Pt = { x: number; y: number };
-const subs = new Set<(i: Item | null) => void>();
-export function openLightbox(i: Item) { for (const s of subs) s(i); }
+type Open = { list: Item[]; idx: number };
+const subs = new Set<(o: Open) => void>();
+/** Öffnet ein Bild; mit Liste (z. B. Foto-Mosaik) kann man seitlich wischen oder mit den Pfeilen blättern */
+export function openLightbox(i: Item, list?: Item[], idx?: number) {
+  const o = list && list.length > 1 ? { list, idx: idx ?? Math.max(0, list.indexOf(i)) } : { list: [i], idx: 0 };
+  for (const s of subs) s(o);
+}
 
 const MAX = 5;
 const Z0: Z = { s: 1, x: 0, y: 0 };
@@ -13,29 +18,40 @@ const dist = (a: Pt, b: Pt) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** Vollbild-Bildansicht: Pinch/Doppeltipp zoomt, im Zoom verschieben; ohne Zoom wischen nach oben/unten, Tippen daneben, Esc oder X schließt */
 export function Lightbox() {
-  const [item, setItem] = useState<Item | null>(null);
+  const [open, setOpen] = useState<Open | null>(null);
+  const item = open ? open.list[open.idx] : null;
+  const many = (open?.list.length ?? 0) > 1;
   const [closing, setClosing] = useState(false);
   const [dy, setDy] = useState(0);
+  const [dx, setDx] = useState(0);
   const [z, setZ] = useState<Z>(Z0);
   const [live, setLive] = useState(false);
   const img = useRef<HTMLImageElement>(null);
   const zr = useRef<Z>(Z0); zr.current = z;
   // Geste: swipe (schließen), pan (im Zoom), pinch (zwei Finger)
-  const g = useRef<null | { mode: 'swipe' | 'pan' | 'pinch'; t: number; p0: Pt; z0: Z; d0?: number; moved: boolean }>(null);
+  const g = useRef<null | { mode: 'swipe' | 'pan' | 'pinch'; t: number; p0: Pt; z0: Z; d0?: number; moved: boolean; axis?: 'x' | 'y' }>(null);
   const lastTap = useRef<{ t: number; p: Pt } | null>(null);
 
-  const reset = () => { setDy(0); setZ(Z0); setLive(false); g.current = null; };
-  useEffect(() => { const f = (i: Item | null) => { setItem(i); setClosing(false); reset(); }; subs.add(f); return () => { subs.delete(f); }; }, []);
-  const close = () => { setClosing(true); setTimeout(() => { setItem(null); setClosing(false); reset(); }, 220); };
+  const reset = () => { setDy(0); setDx(0); setZ(Z0); setLive(false); g.current = null; };
+  useEffect(() => { const f = (o: Open) => { setOpen(o); setClosing(false); reset(); }; subs.add(f); return () => { subs.delete(f); }; }, []);
+  const close = () => { setClosing(true); setTimeout(() => { setOpen(null); setClosing(false); reset(); }, 220); };
+  /** Blättern: d = +1 nächstes, -1 voriges Bild */
+  const go = (d: number) => {
+    const idx = (open?.idx ?? 0) + d;
+    if (!open || idx < 0 || idx >= open.list.length) { setDx(0); return; }
+    reset(); setOpen({ ...open, idx });
+  };
+  const goRef = useRef(go); goRef.current = go;
+  const isOpen = !!open;
   useEffect(() => {
-    if (!item) return;
-    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); };
+    if (!isOpen) return;
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight') goRef.current(1); else if (e.key === 'ArrowLeft') goRef.current(-1); };
     addEventListener('keydown', k);
     history.pushState({ lightbox: 1 }, '');
     const pop = () => close();
     addEventListener('popstate', pop);
     return () => { removeEventListener('keydown', k); removeEventListener('popstate', pop); };
-  }, [item]);
+  }, [isOpen]);
   const closeNav = () => { if (history.state?.lightbox) history.back(); else close(); };
 
   /** Punkt relativ zur Bildschirmmitte (= Mitte des unverschobenen Bildes) */
@@ -88,7 +104,12 @@ export function Lightbox() {
         const p = rel(e.touches[0].clientX, e.touches[0].clientY);
         if (dist(p, c.p0) > 8) c.moved = true;
         if (c.mode === 'pan') setZ({ ...c.z0, x: c.z0.x + p.x - c.p0.x, y: c.z0.y + p.y - c.p0.y });
-        else if (c.mode === 'swipe') setDy(p.y - c.p0.y);
+        else if (c.mode === 'swipe') {
+          // Seitlich wischen blättert (nur bei mehreren Bildern), nach oben/unten schließt
+          if (!c.axis && c.moved) c.axis = many && Math.abs(p.x - c.p0.x) > Math.abs(p.y - c.p0.y) ? 'x' : 'y';
+          if (c.axis === 'x') setDx(p.x - c.p0.x);
+          else if (c.axis === 'y') setDy(p.y - c.p0.y);
+        }
       }}
       onTouchEnd={(e) => {
         const c = g.current; if (!c) return;
@@ -99,6 +120,11 @@ export function Lightbox() {
         g.current = null; setLive(false);
         if (c.mode === 'pinch') { setZ(clamp(zr.current)); lastTap.current = null; return; }
         if (c.mode === 'pan') setZ(clamp(zr.current));
+        if (c.mode === 'swipe' && c.axis === 'x') {
+          const fast = Math.abs(dx) > 30 && Date.now() - c.t < 250;
+          if (Math.abs(dx) > 70 || fast) go(dx < 0 ? 1 : -1); else setDx(0);
+          return;
+        }
         if (c.mode === 'swipe') {
           const fast = Math.abs(dy) > 40 && Date.now() - c.t < 250;
           if (Math.abs(dy) > 120 || fast) { closeNav(); return; }
@@ -112,17 +138,23 @@ export function Lightbox() {
       }}
       onWheel={(e) => { const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
+        {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
         <a className="icon-btn" href={item.download} download={item.name} title="Speichern"><Icon name="download" /></a>
         <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
       </div>
-      <img ref={img} src={item.src} alt={item.name} draggable={false} onClick={(e) => e.stopPropagation()}
+      {item.video
+        ? <video key={item.src} src={item.src} controls autoPlay playsInline onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} />
+        : <img ref={img} key={item.src} src={item.src} alt={item.name} draggable={false} onClick={(e) => e.stopPropagation()}
         onDoubleClick={(e) => toggleZoom(rel(e.clientX, e.clientY))}
         style={{
           transform: z.s !== 1 || z.x || z.y
             ? `translate(${z.x}px, ${z.y}px) scale(${z.s})`
-            : `translateY(${dy}px) scale(${1 - Math.min(Math.abs(dy), 300) / 1500})`,
+            : `translate(${dx}px, ${dy}px) scale(${1 - Math.min(Math.abs(dy), 300) / 1500})`,
           transition: anim ? 'none' : undefined,
-        }} />
+        }} />}
+      {many && open!.idx > 0 && <button className="icon-btn lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Voriges Bild"><Icon name="back" /></button>}
+      {many && open!.idx < open!.list.length - 1 && <button className="icon-btn lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Nächstes Bild"><Icon name="back" className="rot-180" /></button>}
     </div>
   );
 }

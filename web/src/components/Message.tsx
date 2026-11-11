@@ -16,8 +16,10 @@ export function previewOf(m: Message): string {
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
+export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
+  /** Mehrere kurz nacheinander geschickte Foto-Nachrichten desselben Absenders, als eine Blase gezeigt (m = erste) */
+  album?: Message[];
   /** Gruppen, eingehend: Profilbild des Absenders (null = Initialen); undefined = keine Bild-Spalte */
   senderAvatar?: string | null;
   /** Live-Übersetzung: Sprache des Chatpartners (für „Übersetzt aus …“) */
@@ -32,7 +34,12 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, s
 }) {
   const press = useRef<number | null>(null);
   const big = !m.deleted && !m.attachments.length && isOnlyEmoji(m.text);
-  const media = m.attachments.length > 0 && ['image', 'video', 'sticker'].includes(effKind(m.attachments[0]));
+  const msgs = album ?? [m];
+  const last = msgs[msgs.length - 1];
+  // Fotos/Videos aus allen Nachrichten des Albums: ab zwei Stück als Mosaik
+  const tiles = msgs.flatMap((x) => x.attachments.map((a, i) => ({ m: x, a, i })).filter((t) => isTile(t.a)));
+  const mosaic = tiles.length >= 2;
+  const media = mosaic || (m.attachments.length > 0 && ['image', 'video', 'sticker'].includes(effKind(m.attachments[0])));
 
   const startPress = (e: React.TouchEvent) => {
     const t = e.touches[0];
@@ -42,7 +49,7 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, s
 
   // Reaktionen gruppieren
   const groups = new Map<string, { n: number; mine: boolean }>();
-  for (const r of m.reactions) {
+  for (const r of msgs.flatMap((x) => x.reactions)) {
     const g = groups.get(r.emoji) ?? { n: 0, mine: false };
     g.n++; g.mine ||= r.fromMe;
     groups.set(r.emoji, g);
@@ -64,7 +71,8 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, s
           </button>
         )}
         {m.deleted ? <i>Diese Nachricht wurde gelöscht.</i> : <>
-          {m.attachments.map((a, i) => <AttachmentView key={i} m={m} a={a} i={i} />)}
+          {mosaic && <Mosaic tiles={tiles} lead={m} />}
+          {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
           {m.translation && (() => {
@@ -77,10 +85,10 @@ export const MessageBubble = memo(function MessageBubble({ m, group, showName, s
         <span className="meta">
           {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}
           {m.edited && !m.deleted && <span>bearbeitet</span>}
-          <span>{msgTime(m.ts)}</span>
-          {m.fromMe && (m.status === 'failed'
-            ? <button className="st failed" title="Nicht gesendet – tippen für „Erneut senden“" aria-label="Nicht gesendet, Optionen" onClick={(e) => { e.stopPropagation(); onAction(m, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>
-            : <StatusIcon s={m.status} />)}
+          <span>{msgTime(last.ts)}</span>
+          {last.fromMe && (last.status === 'failed'
+            ? <button className="st failed" title="Nicht gesendet – tippen für „Erneut senden“" aria-label="Nicht gesendet, Optionen" onClick={(e) => { e.stopPropagation(); onAction(last, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>
+            : <StatusIcon s={last.status} />)}
         </span>
       </div>
       {!m.deleted && (
@@ -121,6 +129,45 @@ function StatusIcon({ s }: { s: Message['status'] }) {
   if (s === 'read') return <Icon name="checks" size={16} className="st read" />;
   if (s === 'delivered') return <Icon name="checks" size={16} className="st" />;
   return <Icon name="check" size={14} className="st" />;
+}
+
+/** Kommt ins Mosaik: Foto oder Video (keine Sticker, keine GIF-Animationen) */
+function isTile(a: Attachment) { const k = effKind(a); return (k === 'image' && !/gif/i.test(a.mime)) || k === 'video'; }
+
+/** Ist die Nachricht ein reines Foto/Video ohne Text, Zitat o. ä.? Dann darf sie sich einem Album anschließen. */
+export function albumable(m: Message, lead = false) {
+  if (m.deleted || m.status === 'failed' || !m.attachments.length || !m.attachments.every(isTile)) return false;
+  return lead || (!m.text && !m.replyToRemoteId && !m.translation && !m.transcript);
+}
+
+/** Mehrere Fotos/Videos als Raster wie bei Signal: 2 nebeneinander, 3 = eins groß + zwei klein, ab 4 als 2×2 mit „+N“ */
+function Mosaic({ tiles, lead }: { tiles: { m: Message; a: Attachment; i: number }[]; lead: Message }) {
+  const items = tiles.map((t) => ({ src: attachmentUrl(t.m, t.i), name: t.a.name, download: attachmentUrl(t.m, t.i, true), video: effKind(t.a) === 'video' }));
+  const more = tiles.length - 4;
+  return (
+    <div className={`mosaic n${Math.min(tiles.length, 4)}`}>
+      {tiles.slice(0, 4).map((t, k) => {
+        const pending = t.m.status === 'pending';
+        return (
+          <a key={`${t.m.id}:${t.i}`} className="mosaic-tile" href={pending ? undefined : items[k].src} data-remote={t.m !== lead ? t.m.remoteId : undefined}
+            onClick={(e) => { e.preventDefault(); if (!pending) openLightbox(items[k], items, k); }}>
+            {!pending && <MediaThumb m={t.m} a={{ ...t.a, kind: effKind(t.a) }} i={t.i} />}
+            {k === 3 && more > 0 && <span className="mosaic-more">+{more}</span>}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Kleine Vorschau vom Server (?thumb=1); falls es keine gibt, das Original */
+export function MediaThumb({ m, a, i }: { m: Message; a: Attachment; i: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed && a.kind === 'video') return <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>;
+  return <>
+    <img src={failed ? attachmentUrl(m, i) : thumbUrl(m, i)} alt="" loading="lazy" decoding="async" onError={() => !failed && setFailed(true)} />
+    {a.kind === 'video' && <span className="gallery-play"><Icon name="play" size={18} /></span>}
+  </>;
 }
 
 /** Als Datei geschickte Fotos/Videos trotzdem als Bild/Video zeigen (auch bei älteren Nachrichten) */
