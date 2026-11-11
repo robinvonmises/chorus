@@ -23,13 +23,16 @@ export function rise(msg: Element | null | undefined) {
   const bubble = msg.querySelector('.bubble') ?? msg;
   const inner = msg.parentElement;
   const field = document.querySelector('.composer textarea, .composer');
-  const from = field?.getBoundingClientRect().top ?? 0;
-  const dy = Math.max(24, Math.min(140, from - bubble.getBoundingClientRect().top));
+  // Start dort, wo im Eingabefeld der Text stand (links unten), dann nach rechts und hoch an ihren Platz
+  const f = field?.getBoundingClientRect(), b = bubble.getBoundingClientRect();
+  const dy = f ? Math.max(24, Math.min(220, f.top - b.top)) : 60;
+  const dx = f ? Math.max(-480, Math.min(0, f.left - b.left)) : 0;
   msg.style.setProperty('--rise-y', `${Math.round(dy)}px`);
+  msg.style.setProperty('--rise-x', `${Math.round(dx)}px`);
   // Unteren Rand des Inhalts kappen, solange die Blase unterhalb startet: sonst wächst die Scrollhöhe kurz und es springt
   inner?.classList.add('rising');
   msg.classList.add('rise');
-  const done = () => { msg.classList.remove('rise'); inner?.classList.remove('rising'); msg.style.removeProperty('--rise-y'); };
+  const done = () => { msg.classList.remove('rise'); inner?.classList.remove('rising'); msg.style.removeProperty('--rise-y'); msg.style.removeProperty('--rise-x'); };
   msg.addEventListener('animationend', done, { once: true });
-  setTimeout(done, 700);
+  setTimeout(done, 800);
 }
