@@ -56,6 +56,7 @@ export interface ServerState {
 export type HubEvent =
   | { type: 'account'; account: Account }
   | { type: 'account_removed'; id: string }
+  | { type: 'chat_removed'; id: string }
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
   | { type: 'notify'; chat: Chat; message: Message }
@@ -121,6 +122,7 @@ export const api = {
   input: (id: string, field: string, value: string) => req('POST', `/api/accounts/${id}/input`, { field, value }),
 
   chats: () => req<Chat[]>('GET', '/api/chats'),
+  deleteChat: (id: string) => req('DELETE', `/api/chats/${enc(id)}`),
   patchChat: (id: string, patch: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived' | 'alias' | 'note'>>) => req<Chat>('PATCH', `/api/chats/${enc(id)}`, patch),
   markUnread: (id: string) => req<Chat>('POST', `/api/chats/${enc(id)}/unread`),
   /** Profilbilder der Absender in einer Gruppe (senderId → Bild-URL); pending: weitere werden gerade geholt */

@@ -179,6 +179,10 @@ export interface Adapter {
   logout(): Promise<void>;
   /** Profil eines Chats: Nummer, Status, Bild … (so weit der Messenger es hergibt) */
   contactInfo?(chatRemoteId: string, kind: Chat['kind']): Promise<ContactInfo & { avatar?: Buffer | null }>;
+  /** E-Mail: Mails eines Chats auf dem Server archivieren bzw. zurück in den Posteingang */
+  archiveChat?(chatRemoteId: string, archived: boolean): Promise<void>;
+  /** E-Mail: Mails eines Chats in den Papierkorb */
+  deleteChat?(chatRemoteId: string): Promise<void>;
   /** Chatliste neu vom Messenger holen */
   resync?(): Promise<void>;
   /** Neuen Einzelchat über Telefonnummer (internationales Format, nur Ziffern mit +) */

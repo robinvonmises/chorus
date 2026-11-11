@@ -203,6 +203,11 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? `Übersetzung · ${tr.langName ?? 'an'}` : 'Live-Übersetzung'}</button>
               {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
+              {chat.network === 'email' && <button onClick={async () => {
+                setHeadMenu(false);
+                if (!confirm(`Alle E-Mails zu „${chat.title}“ in den Papierkorb verschieben?`)) return;
+                try { await api.deleteChat(chat.id); onBack(); } catch (e: any) { flash(e.message ?? 'Löschen fehlgeschlagen'); }
+              }}><Icon name="trash" size={18} />E-Mails löschen</button>}
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
             </div>
           )}

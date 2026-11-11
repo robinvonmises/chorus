@@ -139,6 +139,9 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     else if (e.type === 'account_removed') {
       setAccounts((as) => as.filter((a) => a.id !== e.id));
       setChats((cs) => new Map([...cs].filter(([, c]) => c.accountId !== e.id)));
+    } else if (e.type === 'chat_removed') {
+      setChats((cs) => { const n = new Map(cs); n.delete(e.id); return n; });
+      setActive((a) => (a === e.id ? null : a));
     } else if (e.type === 'chat') setChats((cs) => new Map(cs).set(e.chat.id, e.chat));
     else if (e.type === 'message') {
       setMessages((ms) => {

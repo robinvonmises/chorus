@@ -428,8 +428,13 @@ app.post('/api/accounts/:id/input', async (req) => {
 app.get('/api/chats', async (req) => H(req).store.listChats());
 app.patch('/api/chats/:id', async (req) => {
   const id = (req.params as any).id;
-  H(req).store.updateChat(id, req.body as any);
+  const body = (req.body ?? {}) as any;
+  // E-Mail: Archivieren verschiebt die Mails auch auf dem Server
+  if ('archived' in body && H(req).store.getChat(id)?.network === 'email') await H(req).archiveChat(id, !!body.archived);
+  H(req).store.updateChat(id, body);
   return H(req).emitChat(id);
+});
+app.delete('/api/chats/:id', async (req) => { await H(req).deleteChat((req.params as any).id); return { ok: true };
 });
 app.post('/api/chats/:id/unread', async (req) => {
   const id = (req.params as any).id; const h = H(req);

@@ -118,6 +118,15 @@ export class Store {
     if (r.alias) c.title = r.alias;
     return c;
   }
+  /** Chat samt Nachrichten und gespeicherten Anhängen entfernen */
+  deleteChat(id: string) {
+    const rows = this.db.prepare('SELECT attachments FROM messages WHERE chat_id=?').all(id) as { attachments: string }[];
+    for (const r of rows) for (const a of JSON.parse(r.attachments) as Attachment[]) if (a.fileId) this.deleteFile(a.fileId);
+    const c = this.db.prepare('SELECT avatar_file_id, custom_avatar FROM chats WHERE id=?').get(id) as { avatar_file_id: string | null; custom_avatar: string | null } | undefined;
+    if (c?.avatar_file_id) this.deleteFile(c.avatar_file_id);
+    if (c?.custom_avatar) this.deleteFile(c.custom_avatar);
+    this.db.prepare('DELETE FROM chats WHERE id=?').run(id);
+  }
   getChat(id: string): Chat | null {
     const r = this.db.prepare('SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id WHERE c.id=?').get(id);
     return r ? this.rowToChat(r) : null;
