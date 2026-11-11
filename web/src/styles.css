@@ -289,6 +289,9 @@ input, textarea { font: inherit; color: inherit; }
 .net-card { display: grid; justify-items: center; gap: 8px; padding: 18px 10px; border-radius: 18px; border: 1.5px solid var(--line); }
 @media (hover: hover) { .net-card:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); } }
 .net-card small { color: var(--ink-3); }
+.wa-risk { background: var(--warn-bg); color: var(--warn-ink); border-radius: 14px; padding: 4px 14px 12px; font-size: 14px; }
+.wa-risk-ok { display: flex; gap: 8px; align-items: flex-start; font-weight: 600; }
+.wa-risk-ok input { margin-top: 3px; flex: none; }
 .steps { background: var(--bg-2); border-radius: 14px; padding: 4px 14px; font-size: 14px; }
 .qr { border-radius: 16px; background: #fff; padding: 8px; }
 .qr.placeholder { width: 280px; height: 280px; background: var(--bg-3); }
