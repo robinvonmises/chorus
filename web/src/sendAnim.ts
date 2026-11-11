@@ -18,21 +18,68 @@ let armedAt = 0;
 export const armRise = () => { armedAt = Date.now(); };
 export const takeRise = () => { const ok = Date.now() - armedAt < 15000; armedAt = 0; return ok; };
 
+/**
+ * Ablauf nach iMessage (Bild für Bild aus Waynes Bildschirmaufnahme, 30 fps):
+ * 1. Das Eingabefeld wird zur Blase: Hintergrund so breit wie das Feld, Text an seiner Stelle im Feld.
+ * 2. ~120 ms: Hintergrund schrumpft nach rechts auf Blasenbreite, Text gleitet mit, Höhe bleibt im Feld.
+ * 3. ~260 ms: erst dann steigt die Blase senkrecht an ihren Platz, mit leichtem Nachfedern.
+ * Die echte Blase bleibt dabei an ihrem Platz und ist nur unsichtbar; eine Kopie fliegt in einer
+ * fixierten Ebene darüber (nur transform), damit sie über dem Eingabefeld sichtbar ist und nichts am Scrollen ändert.
+ */
 export function rise(msg: Element | null | undefined) {
-  if (!(msg instanceof HTMLElement) || !active()) return;
-  const bubble = msg.querySelector('.bubble') ?? msg;
-  const inner = msg.parentElement;
-  const field = document.querySelector('.composer textarea, .composer');
-  // Start dort, wo im Eingabefeld der Text stand (links unten), dann nach rechts und hoch an ihren Platz
-  const f = field?.getBoundingClientRect(), b = bubble.getBoundingClientRect();
-  const dy = f ? Math.max(24, Math.min(220, f.top - b.top)) : 60;
-  const dx = f ? Math.max(-480, Math.min(0, f.left - b.left)) : 0;
-  msg.style.setProperty('--rise-y', `${Math.round(dy)}px`);
-  msg.style.setProperty('--rise-x', `${Math.round(dx)}px`);
-  // Unteren Rand des Inhalts kappen, solange die Blase unterhalb startet: sonst wächst die Scrollhöhe kurz und es springt
-  inner?.classList.add('rising');
-  msg.classList.add('rise');
-  const done = () => { msg.classList.remove('rise'); inner?.classList.remove('rising'); msg.style.removeProperty('--rise-y'); msg.style.removeProperty('--rise-x'); };
-  msg.addEventListener('animationend', done, { once: true });
-  setTimeout(done, 800);
+  if (!(msg instanceof HTMLElement) || !active() || typeof msg.animate !== 'function') return;
+  const bubble = msg.querySelector('.bubble');
+  const field = document.querySelector('.composer textarea')?.closest('.composer') ?? document.querySelector('.composer');
+  if (!(bubble instanceof HTMLElement) || !field) return;
+  const b = bubble.getBoundingClientRect(), f = field.getBoundingClientRect();
+  if (!b.width || !f.width || b.height > 400) return;
+  const host = msg.closest('.chat-view') ?? document.body;
+  let layer: HTMLDivElement | null = null;
+  const restore = () => { msg.style.opacity = ''; layer?.remove(); layer = null; };
+  try {
+    const cs = getComputedStyle(bubble);
+    layer = document.createElement('div');
+    layer.className = msg.className;
+    Object.assign(layer.style, { position: 'fixed', left: '0px', top: '0px', width: `${b.width}px`, height: `${b.height}px`, maxWidth: 'none', margin: '0', zIndex: '60', pointerEvents: 'none' });
+    const bg = document.createElement('div');
+    Object.assign(bg.style, { position: 'absolute', top: '0', bottom: '0', right: '0', width: `${b.width}px`, background: cs.backgroundColor, borderRadius: cs.borderRadius });
+    const copy = bubble.cloneNode(true) as HTMLElement;
+    Object.assign(copy.style, { background: 'transparent', boxSizing: 'border-box', width: `${b.width}px`, height: `${b.height}px`, margin: '0' });
+    layer.append(bg, copy);
+    host.appendChild(layer);
+    // Falls die Ebene nicht am Bildschirmrand beginnt (umgebende Transformation), ausgleichen
+    const o = layer.getBoundingClientRect();
+    layer.style.left = `${b.left - o.left}px`; layer.style.top = `${b.top - o.top}px`;
+    msg.style.opacity = '0';
+
+    const dy = Math.round((f.top + f.height / 2) - (b.top + b.height / 2)); // senkrecht mittig im Feld
+    const dx = Math.round(Math.min(0, f.right - b.right));                   // rechte Kante wie das Feld
+    const bw0 = Math.max(b.width, f.width);                                   // Hintergrund anfangs feldbreit (Breite statt scaleX, damit die Rundung rund bleibt)
+    const tx = Math.round(Math.min(0, f.left - (b.left + dx)));               // Text anfangs links im Feld
+    const T = 400, A = 0.3;
+    const slide = 'cubic-bezier(.3, .6, .3, 1)', up = 'cubic-bezier(.25, .9, .35, 1)';
+    const anims = [
+      layer.animate([
+        { transform: `translate(${dx}px, ${dy}px)`, easing: slide },
+        { offset: A, transform: `translate(0px, ${dy}px)`, easing: up },
+        { offset: 0.82, transform: 'translate(0px, -3px)', easing: 'ease-in-out' },
+        { transform: 'translate(0px, 0px)' },
+      ], { duration: T }),
+      bg.animate([
+        { width: `${bw0}px`, easing: slide },
+        { offset: A, width: `${b.width}px` },
+        { width: `${b.width}px` },
+      ], { duration: T }),
+      copy.animate([
+        { transform: `translateX(${tx}px)`, easing: slide },
+        { offset: A, transform: 'translateX(0px)' },
+        { transform: 'translateX(0px)' },
+      ], { duration: T }),
+    ];
+    anims[0].onfinish = restore;
+    anims[0].oncancel = restore;
+    setTimeout(restore, T + 300); // Sicherheitsnetz: echte Blase kommt in jedem Fall zurück
+  } catch {
+    restore();
+  }
 }
