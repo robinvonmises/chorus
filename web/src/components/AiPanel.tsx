@@ -52,6 +52,15 @@ export function AiPanel({ chat, replyTo, onClose, onUse, onError }: {
         : !chat.aiEnabled ? <OptIn chat={chat} busy={busy} run={run} what={tab === 'auto' ? 'Der Autobot' : 'Zusammenfassen und Vorschläge'} />
         : tab === 'overview' ? <OverviewTab chat={chat} busy={busy} run={run} onUse={onUse} />
         : <AutoTab chat={chat} onError={onError} />}
+      {ai && chat.aiEnabled && (
+        <div className="ai-revoke">
+          <span>Chatverlauf ist für die KI freigegeben.</span>
+          <button className="link-btn" disabled={!!busy} onClick={() => {
+            if (!confirm('KI-Freigabe für diesen Chat zurücknehmen? Antwortvorschläge, Zusammenfassung, Übersetzung und Autobot sind dann hier aus.')) return;
+            run('toggle', () => api.ai.setChat(chat.id, false).then(() => {}));
+          }}>Freigabe zurücknehmen</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -156,7 +165,7 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
 function OptIn({ chat, busy, run, what }: { chat: Chat; busy: Busy; run: Run; what: string }) {
   return (
     <div className="ai-body ai-empty">
-      <p>{what} braucht den Verlauf dieses Chats. Gib ihn einmal frei. Die KI liest ihn nur, wenn du sie hier benutzt oder der Autobot an ist.</p>
+      <p>{what} braucht den Verlauf dieses Chats. Gib ihn einmal frei. Die KI liest dann die letzten Nachrichten, wenn du sie hier benutzt, für Antwortvorschläge auf neue Nachrichten und, falls an, für Übersetzung und Autobot. Du kannst die Freigabe jederzeit zurücknehmen.</p>
       <button className="btn primary small" disabled={!!busy} onClick={() => run('toggle', () => api.ai.setChat(chat.id, true).then(() => {}))}>Chatverlauf freigeben</button>
     </div>
   );

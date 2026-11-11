@@ -467,6 +467,8 @@ export class Hub {
     this.store.updateChat(chatId, { aiEnabled: on });
     const before = this.store.getChat(chatId);
     if (!on && before?.autopilot?.on) this.store.setAutopilot(chatId, { ...before.autopilot, on: false });
+    // Freigabe zurückgenommen: auch die Live-Übersetzung aus, sonst stünde sie weiter als „an“ da
+    if (!on && before?.translate?.on) this.store.setTranslate(chatId, { ...before.translate, on: false });
     const c = this.store.getChat(chatId);
     if (c) this.emit({ type: 'chat', chat: c });
     return c;

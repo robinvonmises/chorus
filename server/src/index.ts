@@ -613,7 +613,9 @@ app.put('/api/ai/settings', async (req) => A(req).update(req.body as any));
 app.get('/api/ai/voices', async (req) => A(req).voices());
 app.post('/api/chats/:id/ai', async (req) => {
   const id = (req.params as any).id;
-  return H(req).setChatAi(id, !!(req.body as any)?.on);
+  const on = !!(req.body as any)?.on;
+  if (!on) A(req).forgetChat(id);
+  return H(req).setChatAi(id, on);
 });
 app.post('/api/chats/:id/ai/summary', async (req) => {
   const id = (req.params as any).id;
