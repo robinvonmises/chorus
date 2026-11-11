@@ -126,7 +126,7 @@ docker compose build && docker run --rm -p 8080:8080 -e DEMO=1 chorus-chorus
 | | How | Notes |
 | --- | --- | --- |
 | **Signal** | Scan a QR code (Signal → Settings → Linked devices → +) | Runs as a linked device via [signal-cli](https://github.com/AsamK/signal-cli). Signal doesn't transfer old history, so you see everything from the moment of linking. |
-| **WhatsApp** | Scan a QR code or enter a pairing code | Uses the unofficial [Baileys](https://github.com/WhiskeySockets/Baileys) library. **Unofficial clients violate WhatsApp's terms of service and accounts can be banned.** Use at your own risk and open WhatsApp on your phone at least every 14 days. |
+| **WhatsApp** | Scan a QR code or enter a pairing code | Uses the unofficial [Baileys](https://github.com/WhiskeySockets/Baileys) library. **Unofficial clients violate WhatsApp's terms of service and accounts can be banned.** Bans are rare for normal personal use and mostly hit accounts that send bulk or automated messages or are brand new, but they can't be ruled out. Chorus shows this warning and asks for confirmation before linking. Use at your own risk and open WhatsApp on your phone at least every 14 days. |
 | **Telegram** | Create an app at [my.telegram.org/apps](https://my.telegram.org/apps), enter `api_id` and `api_hash`, then log in by QR code or phone number | Uses [GramJS](https://github.com/gram-js/gramjs). |
 
 ## Configuration

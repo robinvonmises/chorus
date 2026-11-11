@@ -57,6 +57,7 @@ export function AccountWizard({ server, accounts, onClose }: { server: ServerSta
 function QrIntro({ net, onCreated }: { net: 'signal' | 'whatsapp'; onCreated: (id: string) => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [ok, setOk] = useState(net !== 'whatsapp');
   const [method, setMethod] = useState<'qr' | 'phone'>(matchMedia('(pointer: coarse)').matches && net === 'whatsapp' ? 'phone' : 'qr');
   const go = async () => {
     setBusy(true); setErr('');
@@ -78,8 +79,15 @@ function QrIntro({ net, onCreated }: { net: 'signal' | 'whatsapp'; onCreated: (i
           </div>
         </div>
       )}
+      {net === 'whatsapp' && (
+        <div className="wa-risk">
+          <p><b>Bitte kurz lesen:</b> Chorus ist kein offizieller WhatsApp-Client, sondern nutzt eine inoffizielle Anbindung (Baileys). Das verstößt gegen die Nutzungsbedingungen von WhatsApp, und WhatsApp kann Konten deshalb sperren.</p>
+          <p>Bei normaler privater Nutzung kommt das selten vor. Betroffen sind vor allem Konten, die massenhaft oder automatisiert Nachrichten verschicken oder ganz neu sind. Ausschließen lässt sich eine Sperre aber nicht. Die Nutzung erfolgt auf eigenes Risiko.</p>
+          <label className="wa-risk-ok"><input type="checkbox" checked={ok} onChange={(e) => setOk(e.target.checked)} /> Verstanden, ich verbinde WhatsApp auf eigenes Risiko.</label>
+        </div>
+      )}
       {err && <div className="error">{err}</div>}
-      <button className="btn primary wide" disabled={busy} onClick={go}>{busy ? 'Einen Moment …' : method === 'qr' ? 'QR-Code anzeigen' : 'Weiter'}</button>
+      <button className="btn primary wide" disabled={busy || !ok} onClick={go}>{busy ? 'Einen Moment …' : method === 'qr' ? 'QR-Code anzeigen' : 'Weiter'}</button>
     </div>
   );
 }
