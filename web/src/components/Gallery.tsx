@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, attachmentUrl, type Chat, type MediaKind, type Message } from '../api';
+import { api, attachmentUrl, thumbUrl, type Attachment, type Chat, type MediaKind, type Message } from '../api';
 import { NETWORKS, dayLabel, fileSize, msgTime } from '../util';
 import { Icon } from './Icon';
 import { AttachmentView } from './Message';
@@ -8,6 +8,7 @@ import { openLightbox } from './Lightbox';
 const TABS: { k: MediaKind; label: string }[] = [
   { k: 'media', label: 'Medien' }, { k: 'files', label: 'Dateien' }, { k: 'links', label: 'Links' }, { k: 'voice', label: 'Sprache' },
 ];
+const MONTH = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' });
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|www\.[^\s<]+[^\s<.,;:!?)\]'"])/g;
 
 /** Medien, Dateien, Links und Sprachnachrichten eines Chats (oder aller Chats) */
@@ -32,6 +33,17 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
   const who = (m: Message) => (chatIds?.length === 1 ? (m.fromMe ? 'Du' : m.senderName) : chats.get(m.chatId)?.title ?? '');
   const s = q.trim().toLowerCase();
   const shown = useMemo(() => (items ?? []).filter((m) => !s || [m.text, m.senderName, chats.get(m.chatId)?.title, ...m.attachments.map((a) => a.name)].some((t) => t?.toLowerCase().includes(s))), [items, s, chats]);
+  const months = useMemo(() => {
+    if (tab !== 'media') return [];
+    const out = new Map<string, { m: Message; a: Attachment; i: number }[]>();
+    for (const m of shown) m.attachments.forEach((a, i) => {
+      if (a.kind !== 'image' && a.kind !== 'video') return;
+      const k = MONTH.format(new Date(m.ts));
+      if (!out.has(k)) out.set(k, []);
+      out.get(k)!.push({ m, a, i });
+    });
+    return [...out];
+  }, [shown, tab]);
   const links = useMemo(() => tab !== 'links' ? [] : shown.flatMap((m) => (m.text.match(URL_RE) ?? []).map((u) => ({ m, u: u.startsWith('http') ? u : 'https://' + u }))), [shown, tab]);
 
   return (
@@ -46,16 +58,19 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
           {!items && <p className="muted center">Lade …</p>}
           {items && !shown.length && <p className="muted center">{s ? 'Nichts gefunden.' : 'Hier ist noch nichts.'}</p>}
           {tab === 'media' && (
-            <div className="gallery-grid">
-              {shown.flatMap((m) => m.attachments.map((a, i) => ({ m, a, i })).filter(({ a }) => a.kind === 'image' || a.kind === 'video')).map(({ m, a, i }) => (
-                <button key={m.id + i} className="gallery-cell" title={`${who(m)} · ${dayLabel(m.ts)}`}
-                  onClick={() => a.kind === 'image' ? openLightbox({ src: attachmentUrl(m, i), name: a.name, download: attachmentUrl(m, i, true) }) : onOpen(m)}>
-                  {a.kind === 'video'
-                    ? <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>
-                    : <img src={attachmentUrl(m, i)} alt="" loading="lazy" />}
-                </button>
-              ))}
-            </div>
+            months.map(([label, cells]) => (
+              <section key={label} className="gallery-month">
+                <h3>{label}</h3>
+                <div className="gallery-grid">
+                  {cells.map(({ m, a, i }) => (
+                    <button key={m.id + i} className="gallery-cell" title={`${who(m)} · ${dayLabel(m.ts)}`}
+                      onClick={() => a.kind === 'image' ? openLightbox({ src: attachmentUrl(m, i), name: a.name, download: attachmentUrl(m, i, true) }) : onOpen(m)}>
+                      <Thumb m={m} a={a} i={i} />
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))
           )}
           {tab === 'links' && (
             <ul className="gallery-list">
@@ -85,4 +100,14 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
       </div>
     </div>
   );
+}
+
+/** Kleine Vorschau vom Server (?thumb=1); falls es keine gibt, wie bisher das Original */
+function Thumb({ m, a, i }: { m: Message; a: Attachment; i: number }) {
+  const [failed, setFailed] = useState(false);
+  if (failed && a.kind === 'video') return <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>;
+  return <>
+    <img src={failed ? attachmentUrl(m, i) : thumbUrl(m, i)} alt="" loading="lazy" decoding="async" onError={() => !failed && setFailed(true)} />
+    {a.kind === 'video' && <span className="gallery-play"><Icon name="play" size={18} /></span>}
+  </>;
 }
