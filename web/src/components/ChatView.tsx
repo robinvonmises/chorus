@@ -76,15 +76,19 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const [trSheet, setTrSheet] = useState(false);
 
   // Scrollposition: unten bleiben bei neuen Nachrichten, Position halten beim Nachladen
+  const prevLast = useRef<string | null>(null);
   useLayoutEffect(() => {
     const el = scroller.current;
     if (!el || !messages) return;
     const first = messages[0]?.id ?? null;
-    if (prevFirst.current && first !== prevFirst.current && messages.length > prevLen.current) {
-      el.scrollTop = el.scrollHeight - prevHeight.current + el.scrollTop; // älteres oben eingefügt
-    } else if (prevLen.current === 0 || atBottom || messages.at(-1)?.fromMe) {
+    if (prevLen.current && messages.length > prevLen.current && (first !== prevFirst.current || messages.at(-1)?.id === prevLast.current)) {
+      el.scrollTop = el.scrollHeight - prevHeight.current + el.scrollTop; // älteres oben eingefügt (bei verknüpften Chats auch mittendrin)
+    } else if (prevLen.current === 0 || atBottom || (messages.at(-1)?.fromMe && messages.at(-1)?.id !== prevLast.current)) {
+      // Nur bei einer wirklich neuen eigenen Nachricht nach unten springen, nicht bei jeder Aktualisierung
+      // (Lesebestätigung, Reaktion …), sonst reißt es einen beim Hochscrollen immer wieder nach unten
       el.scrollTop = el.scrollHeight;
     }
+    prevLast.current = messages.at(-1)?.id ?? null;
     prevLen.current = messages.length;
     prevFirst.current = first;
     prevHeight.current = el.scrollHeight;
