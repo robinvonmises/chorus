@@ -339,8 +339,12 @@ button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: poi
   .composer-wrap { padding: 10px 12px; padding-bottom: calc(12px + var(--safe-b)); }
   .composer { gap: 6px; }
   .list-head h1 { font-size: 28px; }
-  .modal-bg { padding: 0; place-items: end stretch; }
-  .modal, .modal.wide { max-width: none; border-radius: 24px 24px 0 0; max-height: 94dvh; padding-bottom: var(--safe-b); }
+  /* Wie die App an den sichtbaren Bereich gebunden: Mit Tastatur schiebt iOS sonst den Kopf des Fensters nach oben aus dem Bild */
+  .modal-bg { padding: 0; place-items: end stretch; bottom: auto; top: var(--vvt, 0); height: var(--vvh, 100dvh); }
+  .modal, .modal.wide { max-width: none; border-radius: 24px 24px 0 0; max-height: calc(var(--vvh, 100dvh) - 6dvh); padding-bottom: var(--safe-b); }
+  /* Suchfeld bleibt stehen, nur die Liste scrollt */
+  .modal-body.newchat { overflow: hidden; flex: 1; min-height: min(50vh, calc(var(--vvh, 100dvh) - 6dvh - 70px)); }
+  .modal-body.newchat .chats { max-height: none; }
   .att-img, .att-video { max-width: 72vw; }
 }
 @media (min-width: 861px) and (max-width: 1100px) {
