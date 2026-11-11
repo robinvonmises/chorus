@@ -280,6 +280,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                 {reminders.has(menu.m.id)
                   ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash('Erinnerung gelöscht'); }); }}><Icon name="alarm" size={18} />Erinnerung löschen</button>
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
+                {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash('Wird übersetzt …'); api.ai.translateOne(m.id).then((r) => { if (r.already) flash('Die Nachricht ist schon Deutsch.'); }).catch((e: any) => flash(e.message ?? 'Fehler')); }}><Icon name="globe" size={18} />Übersetzen</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
                 {menu.m.attachments.map((a, i) => (
                   <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>

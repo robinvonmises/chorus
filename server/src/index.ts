@@ -719,6 +719,22 @@ app.post('/api/messages/:id/transcribe', async (req) => {
   return h.setTranscript(msg.id, text);
 });
 
+/** Eine einzelne Nachricht ins Deutsche übersetzen (Langdruck → „Übersetzen“).
+ *  Bewusst ohne KI-Freigabe des Chats: der Nutzer stößt das pro Nachricht selbst an, und nur der Text dieser einen Nachricht geht an die KI. */
+app.post('/api/messages/:id/translate', async (req) => {
+  const h = H(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
+  if (!A(req).publicSettings().features.text) throw new AiError(400, 'Zum Übersetzen bitte zuerst in den Einstellungen einen KI-Schlüssel eintragen.');
+  const text = [msg.text, msg.transcript].filter(Boolean).join('\n').trim();
+  if (!text) throw new AiError(400, 'Diese Nachricht enthält keinen Text.');
+  const [r] = await A(req).translateIn([{ id: msg.id, text }]);
+  if (!r?.translation) return { message: msg, already: true };
+  const upd = h.store.patchMessage(msg.id, { translation: r.translation, translationFrom: r.langName || null });
+  if (upd) h.emit({ type: 'message', message: upd });
+  return { message: upd ?? msg, already: false };
+});
+
 /** Anhang ausliefern; wird bei Bedarf erst beim Messenger abgeholt.
  *  ?play=1: Audio in einem Format, das jeder Browser abspielt (Opus/OGG → MP3 für Safari/iOS).
  *  Unterstützt Range-Anfragen (Safari braucht sie für Audio und Video). */
