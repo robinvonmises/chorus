@@ -1090,3 +1090,10 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
   60% { transform: rotate(6deg); } 80% { transform: rotate(-3deg); } 100% { transform: rotate(0deg); }
 }
 @media (prefers-reduced-motion: reduce) { .fx-zero, .fx-zero img { animation: none; display: none; } }
+
+/* Ruhemodus nachts: eine feste, durchklickbare Tönung über allem (keine Filter), Zähler atmen */
+html.fx-night body::after { content: ''; position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; background: rgba(120, 60, 0, .09); }
+@media (prefers-color-scheme: dark) { html.fx-night body::after { background: rgba(255, 140, 40, .06); } }
+html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite; }
+@keyframes fx-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { html.fx-night .badge { animation: none; } }

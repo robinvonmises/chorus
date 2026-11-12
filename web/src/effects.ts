@@ -5,11 +5,12 @@ import { useEffect, useState } from 'react';
  * (Standard: an). Bewusst nur CSS transform/opacity, keine Layout-Übergänge; bei „Bewegung reduzieren“
  * laufen keine Animationen.
  */
-export type Fx = 'inboxZero' | 'daylight';
+export type Fx = 'inboxZero' | 'daylight' | 'night';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
   { id: 'inboxZero', title: 'Gelesen-Moment', hint: 'Wenn alles gelesen ist, schwingt das Chorus-Logo einmal aus' },
   { id: 'daylight', title: 'Tageszeit-Hintergrund', hint: 'Chat-Hintergrund färbt sich mit der Uhrzeit: morgens kühl, abends golden. Ersetzt den gewählten Hintergrund' },
+  { id: 'night', title: 'Ruhemodus nachts', hint: 'Von 22 bis 6 Uhr wird alles leicht gedimmt und wärmer, Ungelesen-Zähler atmen langsam' },
 ];
 
 const key = (f: Fx) => `inbox:fx:${f}`;
@@ -48,4 +49,10 @@ export function daylightCss(d = new Date()): string {
   const a = DAY[i], b = DAY[i + 1];
   const t = (h - a[0]) / (b[0] - a[0]);
   return `linear-gradient(170deg, ${mix(a[1], b[1], t)}, ${mix(a[2], b[2], t)} 50%, ${mix(a[3], b[3], t)})`;
+}
+
+/** Ruhemodus nachts: Klasse am <html> setzen (22–6 Uhr) */
+export function applyNight(d = new Date()) {
+  const h = d.getHours();
+  document.documentElement.classList.toggle('fx-night', fxOn('night') && (h >= 22 || h < 6));
 }
