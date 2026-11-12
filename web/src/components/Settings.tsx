@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { EmailConfig } from '../api';
 import { api, serverText, type Account, type ServerState } from '../api';
 import { deriveKey, keyStore, newSalt } from '../keys';
-import { NETWORKS } from '../util';
+import { NETWORKS, askMailDelete, setAskMailDelete } from '../util';
 import { Icon } from './Icon';
 import { LinkStatus } from './AccountWizard';
 import { AiSettingsSection } from './AiSettings';
@@ -332,6 +332,7 @@ function EmailSettings({ id }: { id: string }) {
   const [others, setOthers] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ask, setAsk] = useState(askMailDelete);
   useEffect(() => { api.emailConfig(id).then((x) => { setC(x); setOthers((x.hideSignatures ?? []).join('\n\n---\n\n')); }).catch((e) => setMsg(e.message)); }, [id]);
   if (!c) return <small className="muted">{msg || T('Lade …')}</small>;
   const set = (k: keyof EmailConfig | 'password') => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setC({ ...c, [k]: e.target.value });
@@ -355,6 +356,10 @@ function EmailSettings({ id }: { id: string }) {
       <label className="toggle">
         <input type="checkbox" checked={c.hideBulk !== false} onChange={(e) => setC({ ...c, hideBulk: e.target.checked })} />
         <span><b>{T('Newsletter ausblenden')}</b><small>{T('Mails mit Abmelde-Link und automatische Mails erscheinen nicht als Chat (gilt für neue Mails).')}</small></span>
+      </label>
+      <label className="toggle">
+        <input type="checkbox" checked={ask} onChange={(e) => { setAsk(e.target.checked); setAskMailDelete(e.target.checked); }} />
+        <span><b>{T('Vor dem Löschen nachfragen')}</b><small>{T('Aus: Gelöschte E-Mails landen sofort im Papierkorb, ohne Rückfrage (gilt für dieses Gerät).')}</small></span>
       </label>
       <label className="field"><span>{T('Absendername')}</span><input className="input" value={c.name ?? ''} onChange={set('name')} /></label>
       <label className="field"><span>{T('Neues (App-)Passwort')}</span><input className="input" type="password" autoComplete="off" value={c.password ?? ''} onChange={set('password')} placeholder={T('leer lassen = unverändert')} /></label>

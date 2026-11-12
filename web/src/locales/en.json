@@ -841,5 +841,7 @@
  "•••••••• gespeichert": "•••••••• saved",
  "→ Gerät hinzufügen": "→ Link a device",
  "🎤 Sprachnachricht": "🎤 Voice message",
- "📷 Foto": "📷 Photo"
+ "📷 Foto": "📷 Photo",
+ "Vor dem Löschen nachfragen": "Ask before deleting",
+ "Aus: Gelöschte E-Mails landen sofort im Papierkorb, ohne Rückfrage (gilt für dieses Gerät).": "Off: deleted emails go straight to the trash without asking (applies to this device)."
 }

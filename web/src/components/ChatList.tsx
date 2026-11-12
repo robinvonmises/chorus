@@ -1,7 +1,7 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, serverText, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
-import { NETWORKS, dayLabel, listTime } from '../util';
+import { NETWORKS, askMailDelete, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { T } from '../i18n';
@@ -91,7 +91,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     if (what === 'delete') {
       const mail = ids.every((id) => chats.find((c) => c.id === id)?.network === 'email');
       const n = ids.length;
-      if (!confirm(mail ? (n > 1 ? T('{0} E-Mail-Unterhaltungen in den Papierkorb verschieben?', n) : T('Diese E-Mail-Unterhaltung in den Papierkorb verschieben?'))
+      if (!(mail && !askMailDelete()) && !confirm(mail ? (n > 1 ? T('{0} E-Mail-Unterhaltungen in den Papierkorb verschieben?', n) : T('Diese E-Mail-Unterhaltung in den Papierkorb verschieben?'))
         : (n > 1 ? T('{0} Chats löschen?', n) : T('Chat löschen?')) + T(' Er verschwindet aus Chorus, auf dem Handy bleibt er erhalten.'))) return false;
       setSel(null);
       // Sofort weg, der Rest läuft im Hintergrund; bei Fehler kommt der Chat zurück

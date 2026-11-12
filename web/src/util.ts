@@ -84,3 +84,7 @@ export function isOnlyEmoji(text: string): boolean {
 
 /** „Niederländisch“ → „Niederländischen“ (für „Aus dem …“) */
 export const adjLang = (n: string) => (/e$/.test(n) ? n + 'n' : /isch$/.test(n) ? n + 'en' : n);
+
+/** E-Mails vor dem Löschen bestätigen lassen? Standard aus, je Gerät. */
+export const askMailDelete = () => localStorage.getItem('inbox:askMailDelete') === '1';
+export const setAskMailDelete = (on: boolean) => localStorage.setItem('inbox:askMailDelete', on ? '1' : '0');

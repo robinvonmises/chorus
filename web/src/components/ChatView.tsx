@@ -4,7 +4,7 @@ import { openFile, standalone } from './FileViewer';
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, attachmentUrl, type Account, type Chat, type Message, type Planned } from '../api';
 import { WhenPicker, whenLabel } from './WhenPicker';
-import { NETWORKS, QUICK_REACTIONS, adjLang, dayLabel } from '../util';
+import { NETWORKS, QUICK_REACTIONS, adjLang, askMailDelete, dayLabel } from '../util';
 import { TranslateSheet } from './TranslateSheet';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
@@ -230,7 +230,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? T('Aus dem Archiv holen') : 'Archivieren'}</button>
               {chat.network === 'email' && <button onClick={async () => {
                 setHeadMenu(false);
-                if (!confirm(T('Alle E-Mails zu „{0}“ in den Papierkorb verschieben?', chat.title))) return;
+                if (askMailDelete() && !confirm(T('Alle E-Mails zu „{0}“ in den Papierkorb verschieben?', chat.title))) return;
                 onRemove();
               }}><Icon name="trash" size={18} />{T('E-Mails löschen')}</button>}
               <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash(T('Export wird erstellt, der Download startet gleich …')); }}><Icon name="download" size={18} />{T('Chat herunterladen')}</a>
