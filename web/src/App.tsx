@@ -18,6 +18,7 @@ import { usePlayer } from './player';
 import { Rail, Avatar } from './components/Rail';
 import { previewOf } from './components/Message';
 import { T } from './i18n';
+import { clearSnapshot, readSnapshot, writeSnapshot, type Snapshot } from './snapshot';
 
 /**
  * Frisch geladene Liste mit der alten abgleichen: Unveränderte Einträge behalten ihr altes Objekt.
@@ -41,37 +42,46 @@ export type Filter = { nets: Network[]; unread: boolean; archived: boolean };
 export type Panel = null | 'settings' | 'add' | 'new';
 
 export default function App() {
-  const [server, setServer] = useState<ServerState | null>(null);
+  // Letzter Stand vom Gerät: sofort anzeigen, der Server-Abgleich läuft dahinter
+  const [snap] = useState<Snapshot | null>(() => readSnapshot(lastProfile.get()));
+  const [server, setServer] = useState<ServerState | null>(() => snap ? { ...snap.server, authed: true } : null);
+  const [live, setLive] = useState(false); // true, sobald der Server die Anmeldung bestätigt hat
+  const [gen, setGen] = useState(0); // erhöht, wenn erst entsperrt werden musste: Hauptansicht frisch aufbauen
   const [ready, setReady] = useState(false);
   const [error, setError] = useState('');
   const [savedKey, setSavedKey] = useState<{ profileId: string; key: string } | null>(null);
 
-  const boot = useCallback(async () => {
+  const booting = useRef<Promise<void> | null>(null);
+  const boot = useCallback(() => booting.current ??= (async () => {
     setReady(false);
     try {
       let s = await api.state();
       setSavedKey(null);
+      const wasLocked = !s.authed;
       if (s.profiles.length && !s.authed) {
         // Auf diesem Gerät gespeicherten Schlüssel des zuletzt benutzten Profils versuchen
         const pid = lastProfile.get() ?? (s.profiles.length === 1 ? s.profiles[0].id : null);
         const prof = s.profiles.find((p) => p.id === pid && p.initialized);
         const k = prof ? await keyStore.get(prof.id) : undefined;
         if (prof && k) {
-          try { await api.unlock(prof.id, k); s = await api.state(); }
+          try { await api.unlock(prof.id, k, undefined, true); s = await api.state(); }
           catch (e: any) {
             if (e.status === 401 && e.data?.need2fa) setSavedKey({ profileId: prof.id, key: k }); // Passwort stimmt, nur der Code fehlt
             else if (e.status === 401) await keyStore.clear(prof.id);
           }
         }
       }
+      if (!s.authed) clearSnapshot();
+      else if (wasLocked) setGen((g) => g + 1);
       setServer(s);
+      setLive(s.authed);
       setError('');
     } catch (e: any) {
       setError(T('Server nicht erreichbar. Versuche es gleich nochmal.'));
       setTimeout(boot, 3000);
     }
     setReady(true);
-  }, []);
+  })().finally(() => { booting.current = null; }), []);
 
   useEffect(() => { boot(); }, [boot]);
   useEffect(() => {
@@ -82,23 +92,25 @@ export default function App() {
   useEffect(() => { if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {}); }, []);
   // Push-Abo bei jedem Start und beim Zurückkommen prüfen (verschwindet z. B. nach Neuinstallation still)
   useEffect(() => {
-    if (!server?.authed) return;
+    if (!server?.authed || !live) return;
     syncPush();
     const onVis = () => { if (document.visibilityState === 'visible') syncPush(); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
-  }, [server?.authed]);
+  }, [server?.authed, live]);
 
   if (!ready && !server) return <div className="splash"><img src="/icon.svg?v=3" width={64} alt="" /></div>;
   if (error && !server) return <div className="splash"><p>{error}</p></div>;
   if (!server!.authed) return <Lock state={server!} savedKey={savedKey} onDone={boot} />;
-  return <Main server={server!} onLocked={boot} onRefresh={() => api.state().then(setServer).catch(() => {})} />;
+  return <Main key={gen} server={server!} live={live} snap={snap} onLocked={boot} onRefresh={() => api.state().then(setServer).catch(() => {})} />;
 }
 
-function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: () => void; onRefresh: () => void }) {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [chats, setChats] = useState<Map<string, Chat>>(new Map());
-  const [messages, setMessages] = useState<Map<string, Message[]>>(new Map());
+function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState; live: boolean; snap: Snapshot | null; onLocked: () => void; onRefresh: () => void }) {
+  const [accounts, setAccounts] = useState<Account[]>(() => snap?.accounts ?? []);
+  const [chats, setChats] = useState<Map<string, Chat>>(() => new Map((snap?.chats ?? []).map((c) => [c.id, c])));
+  const [messages, setMessages] = useState<Map<string, Message[]>>(() => new Map(snap?.messages ?? []));
+  // Aus dem Gerätespeicher übernommene Nachrichtenlisten: beim ersten Abruf durch die frischen ersetzen
+  const fromSnap = useRef(new Set((snap?.messages ?? []).map(([id]) => id)));
   const [active, setActive] = useState<string | null>(() => decodeURIComponent(location.hash.match(/chat=([^&]+)/)?.[1] ?? '') || null);
   const [filter, setFilterRaw] = useState<Filter>(() => {
     try { const f = JSON.parse(localStorage.getItem('inbox:filter') ?? ''); if (Array.isArray(f.nets)) return { nets: f.nets, unread: !!f.unread, archived: false }; } catch { /* ignore */ }
@@ -116,8 +128,9 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const activeRef = useRef(active);
   activeRef.current = active;
 
-  // Erstes Laden
+  // Erstes Laden (erst, wenn der Server die Anmeldung bestätigt hat)
   useEffect(() => {
+    if (!live) return;
     api.planned().then(setPlanned).catch(() => {});
     api.accounts().then((a) => { setAccounts(a); if (!a.length) setPanel('add'); });
     api.chats().then(async (cs) => {
@@ -126,18 +139,26 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       const top = [...cs].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs).slice(0, 25);
       for (const c of top) await prefetch(c.id);
     });
-  }, []);
+  }, [live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loaded = useRef(new Set<string>());
   const prefetch = useCallback(async (id: string) => {
     if (loaded.current.has(id)) return;
     loaded.current.add(id);
-    try { const ms = await api.messages(id); setMessages((m) => (m.has(id) ? m : new Map(m).set(id, ms))); }
+    try {
+      const ms = await api.messages(id);
+      setMessages((m) => {
+        if (m.has(id) && !fromSnap.current.has(id)) return m;
+        fromSnap.current.delete(id);
+        const cur = m.get(id), next = keepSame(cur, ms);
+        return next === cur ? m : new Map(m).set(id, next);
+      });
+    }
     catch { loaded.current.delete(id); }
   }, []);
 
   // Live-Ereignisse
-  useEffect(() => connectEvents((e: HubEvent) => {
+  useEffect(() => live ? connectEvents((e: HubEvent) => {
     if (e.type === 'account') setAccounts((as) => as.some((a) => a.id === e.account.id) ? as.map((a) => a.id === e.account.id ? e.account : a) : [...as, e.account]);
     else if (e.type === 'account_removed') {
       setAccounts((as) => as.filter((a) => a.id !== e.id));
@@ -173,7 +194,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
       if (document.visibilityState === 'visible') { if (e.chat.id !== activeRef.current) showBanner(e.chat, e.message); }
       else notify(e.chat, e.message);
     }
-  }, onlineStatus, onLocked, () => refreshRef.current()), [onLocked]);
+  }, onlineStatus, onLocked, () => refreshRef.current()) : undefined, [onLocked, live]);
 
   const [banner, setBanner] = useState<{ chat: Chat; text: string; n: number; msgId?: string } | null>(null);
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -224,8 +245,34 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const linkedRef = useRef<string[]>([]);
   linkedRef.current = linkedIds;
   useEffect(() => {
+    if (!live) return;
     for (const id of linkedIds.slice(1)) { void prefetch(id); api.markRead(id).catch(() => {}); }
-  }, [linkedIds.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [linkedIds.join(','), live]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Stand auf dem Gerät merken, damit die App nach einem Kaltstart sofort etwas zeigt.
+  // Nur mit gespeichertem Schlüssel („angemeldet bleiben“), sonst würde der Stand vor der Passwortabfrage sichtbar.
+  const recent = useRef<string[]>((snap?.messages ?? []).map(([id]) => id));
+  useEffect(() => { if (active) recent.current = [active, ...recent.current.filter((x) => x !== active)].slice(0, 8); }, [active]);
+  const snapRef = useRef(() => {});
+  snapRef.current = () => {
+    const pid = server.profile?.id;
+    if (!live || !pid || !chats.size) return;
+    void keyStore.get(pid).then((k) => {
+      if (k) writeSnapshot(pid, server, accounts, [...chats.values()], messages, recent.current);
+      else clearSnapshot();
+    });
+  };
+  // Höchstens alle 3 s schreiben (auch wenn laufend Neues kommt), beim Wegwechseln sofort
+  const snapTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (!live || snapTimer.current) return;
+    snapTimer.current = window.setTimeout(() => { snapTimer.current = null; snapRef.current(); }, 3000);
+  }, [live, chats, messages, accounts]);
+  useEffect(() => {
+    const h = () => { if (document.visibilityState === 'hidden') snapRef.current(); };
+    document.addEventListener('visibilitychange', h);
+    return () => { document.removeEventListener('visibilitychange', h); if (snapTimer.current) clearTimeout(snapTimer.current); };
+  }, []);
 
   // Zu einer bestimmten Nachricht springen (Suche, Galerie, Erinnerung): Chat öffnen und bis dorthin nachladen
   const [focus, setFocus] = useState<{ id: string; remoteId: string; n: number } | null>(null);
@@ -248,11 +295,12 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
 
   // Nachrichten des aktiven Chats laden
   useEffect(() => {
-    if (!active) return;
+    if (!active || !live) return;
     let cancelled = false;
     loaded.current.add(active);
     api.messages(active).then((ms) => {
       if (cancelled) return;
+      fromSnap.current.delete(active);
       setMessages((m) => {
         const cur = m.get(active), next = keepSame(cur, ms);
         return next === cur ? m : new Map(m).set(active, next); // unverändert: nicht neu zeichnen
@@ -261,7 +309,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     });
     api.markRead(active).catch(() => {});
     return () => { cancelled = true; };
-  }, [active]);
+  }, [active, live]);
 
   const loadOlderOne = useCallback(async (id: string) => {
     const list = messages.get(id) ?? [];
@@ -332,7 +380,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
   const readSig = useMemo(() => sortedChats.filter((c) => c.unread === 0 || c.id === active).map((c) => c.id).join('\n'), [sortedChats, active]);
   useEffect(() => {
     const read = new Set(readSig ? readSig.split('\n') : []);
-    if (!read.size) return;
+    if (!read.size || !live) return; // gespeicherter Stand kann veraltet sein: keine Mitteilungen schließen
     const clean = () => {
       if (document.visibilityState !== 'visible') return;
       navigator.serviceWorker?.ready.then((reg) => reg.getNotifications()).then((ns) => {
@@ -342,7 +390,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     clean();
     document.addEventListener('visibilitychange', clean);
     return () => document.removeEventListener('visibilitychange', clean);
-  }, [readSig]);
+  }, [readSig, live]);
 
   const chat = active ? chats.get(active) ?? null : null;
   const account = chat ? accounts.find((a) => a.id === chat.accountId) : undefined;

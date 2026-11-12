@@ -20,26 +20,11 @@ const syncThemeColor = () => {
   if (old) old.replaceWith(m); else document.head.appendChild(m);
 };
 const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
-// In der iOS-Web-App (Homescreen) übernimmt iOS die Leistenfarbe nur beim Start. Deshalb neu laden, wenn der Modus
-// beim Sichtbarwerden wirklich ein anderer ist als beim Laden. Nicht auf jedes change-Ereignis reagieren:
-// iOS schaltet im Hintergrund kurz hin und her (Vorschaubilder für den App-Umschalter).
-const iosApp = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-const loadedDark = !!darkMq?.matches;
-const reloadIfSchemeChanged = () => {
-  if (!iosApp || document.visibilityState !== 'visible' || !darkMq || darkMq.matches === loadedDark) return;
-  const last = Number(sessionStorage.getItem('inbox:scheme-reload') || 0);
-  if (Date.now() - last < 5000) return;
-  sessionStorage.setItem('inbox:scheme-reload', String(Date.now()));
-  location.reload();
-};
-darkMq?.addEventListener?.('change', () => {
-  requestAnimationFrame(syncThemeColor);
-  setTimeout(reloadIfSchemeChanged, 500);
-});
+// Kein Neuladen bei Moduswechsel: iOS meldet im Hintergrund falsche Wechsel, das Neuladen wirkte wie ein Neustart der App.
+// Die Leistenfarbe der Homescreen-App passt iOS dann erst beim nächsten Start an.
+darkMq?.addEventListener?.('change', () => requestAnimationFrame(syncThemeColor));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
-  requestAnimationFrame(syncThemeColor);
-  setTimeout(reloadIfSchemeChanged, 500);
+  if (document.visibilityState === 'visible') requestAnimationFrame(syncThemeColor);
 });
 requestAnimationFrame(syncThemeColor);
 

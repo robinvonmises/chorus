@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { EmailConfig } from '../api';
+import { clearSnapshot } from '../snapshot';
 import { api, serverText, type Account, type ServerState } from '../api';
 import { deriveKey, keyStore, newSalt } from '../keys';
 import { NETWORKS, askMailDelete, setAskMailDelete } from '../util';
@@ -105,7 +106,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
     if (await keyStore.get(pid)) await keyStore.set(pid, key);
     setPw({ a: '', b: '', msg: T('Passwort geändert.') });
   };
-  const logout = async () => { await keyStore.clear(pid); await api.logout(); onLocked(); };
+  const logout = async () => { clearSnapshot(); await keyStore.clear(pid); await api.logout(); onLocked(); };
 
   const pushOn = localStorage.getItem('inbox:push') === '1';
   const bubbleMode = loadAccent().name;
