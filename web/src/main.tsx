@@ -3,14 +3,17 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
 import { applyAccent, applyBubbles, applyChatBg } from './bubbles';
+import { applyNight } from './effects';
 import { T } from './i18n';
 applyAccent();
 applyBubbles();
 applyChatBg();
 // Tageszeit-Hintergrund nachführen (nur eine CSS-Variable) und bei Schalterwechsel neu setzen
-window.addEventListener('chorus:fx', () => applyChatBg());
-setInterval(() => { if (!document.hidden) applyChatBg(); }, 5 * 60_000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) applyChatBg(); });
+const timeFx = () => { applyChatBg(); applyNight(); };
+applyNight();
+window.addEventListener('chorus:fx', timeFx);
+setInterval(() => { if (!document.hidden) timeFx(); }, 5 * 60_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) timeFx(); });
 
 // iOS-Statusleiste: Farbe beim Wechsel Hell/Dunkel nachziehen. Das Meta-Tag wird ersetzt statt geändert,
 // weil iOS eine bloße Änderung in der Web-App oft übersieht. Farbe = Hintergrund der Kopfleiste (--bg).
