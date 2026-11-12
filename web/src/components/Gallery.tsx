@@ -4,11 +4,12 @@ import { NETWORKS, dayLabel, fileSize, msgTime } from '../util';
 import { Icon } from './Icon';
 import { AttachmentView, MediaThumb as Thumb } from './Message';
 import { openLightbox } from './Lightbox';
+import { T, lang, locale } from '../i18n';
 
 const TABS: { k: MediaKind; label: string }[] = [
-  { k: 'media', label: 'Medien' }, { k: 'files', label: 'Dateien' }, { k: 'links', label: 'Links' }, { k: 'voice', label: 'Sprache' },
+  { k: 'media', label: T('Medien') }, { k: 'files', label: T('Dateien') }, { k: 'links', label: T('Links') }, { k: 'voice', label: T('Sprache') },
 ];
-const MONTH = new Intl.DateTimeFormat('de-DE', { month: 'long', year: 'numeric' });
+const MONTH = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|www\.[^\s<]+[^\s<.,;:!?)\]'"])/g;
 
 /** Medien, Dateien, Links und Sprachnachrichten eines Chats (oder aller Chats) */
@@ -30,7 +31,7 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
     const r = await api.gallery(tab, chatIds, last.ts).catch(() => []);
     setItems((x) => [...(x ?? []), ...r]); setMore(r.length >= 120);
   };
-  const who = (m: Message) => (chatIds?.length === 1 ? (m.fromMe ? 'Du' : m.senderName) : chats.get(m.chatId)?.title ?? '');
+  const who = (m: Message) => (chatIds?.length === 1 ? (m.fromMe ? T('Du') : m.senderName) : chats.get(m.chatId)?.title ?? '');
   const s = q.trim().toLowerCase();
   const shown = useMemo(() => (items ?? []).filter((m) => !s || [m.text, m.senderName, chats.get(m.chatId)?.title, ...m.attachments.map((a) => a.name)].some((t) => t?.toLowerCase().includes(s))), [items, s, chats]);
   const months = useMemo(() => {
@@ -48,15 +49,15 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
 
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal wide gallery" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Medien und Dateien">
-        <header className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button></header>
+      <div className="modal wide gallery" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={T('Medien und Dateien')}>
+        <header className="modal-head"><h2>{title}</h2><button className="icon-btn" onClick={onClose} aria-label={T('Schließen')}><Icon name="close" /></button></header>
         <div className="gallery-tabs" role="tablist">
           {TABS.map((t) => <button key={t.k} role="tab" aria-selected={tab === t.k} className={tab === t.k ? 'on' : ''} onClick={() => setTab(t.k)}>{t.label}</button>)}
         </div>
-        <div className="search gallery-search"><Icon name="search" size={18} /><input placeholder="Durchsuchen" value={q} onChange={(e) => setQ(e.target.value)} />{q && <button className="icon-btn small" onClick={() => setQ('')}><Icon name="close" size={16} /></button>}</div>
+        <div className="search gallery-search"><Icon name="search" size={18} /><input placeholder={T("Durchsuchen")} value={q} onChange={(e) => setQ(e.target.value)} />{q && <button className="icon-btn small" onClick={() => setQ('')}><Icon name="close" size={16} /></button>}</div>
         <div className="modal-body gallery-body">
-          {!items && <p className="muted center">Lade …</p>}
-          {items && !shown.length && <p className="muted center">{s ? 'Nichts gefunden.' : 'Hier ist noch nichts.'}</p>}
+          {!items && <p className="muted center">{T('Lade …')}</p>}
+          {items && !shown.length && <p className="muted center">{s ? T('Nichts gefunden.') : T('Hier ist noch nichts.')}</p>}
           {tab === 'media' && (
             months.map(([label, cells]) => (
               <section key={label} className="gallery-month">
@@ -77,7 +78,7 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
               {links.map(({ m, u }, i) => (
                 <li key={m.id + i}>
                   <a className="gallery-link" href={u} target="_blank" rel="noreferrer noopener"><Icon name="link" size={18} /><span><b>{u.replace(/^https?:\/\//, '').slice(0, 80)}</b><small>{who(m)} · {dayLabel(m.ts)}</small></span></a>
-                  <button className="icon-btn small" onClick={() => onOpen(m)} title="Im Chat zeigen"><Icon name="chat" size={18} /></button>
+                  <button className="icon-btn small" onClick={() => onOpen(m)} title={T('Im Chat zeigen')}><Icon name="chat" size={18} /></button>
                 </li>
               ))}
             </ul>
@@ -90,12 +91,12 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
                     {m.attachments.map((a, i) => (tab === 'voice' ? a.kind === 'voice' : a.kind === 'file' || a.kind === 'audio') && <AttachmentView key={i} m={m} a={a} i={i} />)}
                     <small className="muted">{chatIds?.length !== 1 && <span className="dot" style={{ background: NETWORKS[chats.get(m.chatId)?.network ?? 'demo'].color }} />}{who(m)} · {dayLabel(m.ts)} {msgTime(m.ts)}{m.attachments[0] && tab === 'files' ? ` · ${fileSize(m.attachments[0].size)}` : ''}</small>
                   </div>
-                  <button className="icon-btn small" onClick={() => onOpen(m)} title="Im Chat zeigen"><Icon name="chat" size={18} /></button>
+                  <button className="icon-btn small" onClick={() => onOpen(m)} title={T('Im Chat zeigen')}><Icon name="chat" size={18} /></button>
                 </li>
               ))}
             </ul>
           )}
-          {more && items && items.length > 0 && <button className="btn ghost block" onClick={loadMore}>Mehr laden</button>}
+          {more && items && items.length > 0 && <button className="btn ghost block" onClick={loadMore}>{T('Mehr laden')}</button>}
         </div>
       </div>
     </div>

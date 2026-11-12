@@ -5,6 +5,7 @@ import type { Message } from '../api';
 import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
 import { openSaveAs } from './NextcloudBrowser';
 import { standalone, useShareFile } from './FileViewer';
+import { T } from '../i18n';
 
 /** ref: Herkunft im Chat, damit „In Immich/Nextcloud speichern“ das Original serverseitig hochladen kann */
 type Item = { src: string; name: string; download: string; video?: boolean; ref?: { m: Message; i: number } };
@@ -166,7 +167,7 @@ export function Lightbox() {
       onWheel={(e) => { if (item.video) return; const s = Math.min(MAX, Math.max(1, zr.current.s * Math.exp(-e.deltaY / 300))); setZ(clamp(zoomAt(zr.current, s, rel(e.clientX, e.clientY)))); }}>
       <div className="lightbox-bar" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
         {many && <span className="lightbox-count">{open!.idx + 1} / {open!.list.length}</span>}
-        <button className="icon-btn" onClick={closeNav} title="Schließen"><Icon name="close" /></button>
+        <button className="icon-btn" onClick={closeNav} title={T('Schließen')}><Icon name="close" /></button>
       </div>
       {/* Aktionen unten, in Daumenreichweite */}
       <div className="lightbox-actions" onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()}>
@@ -175,13 +176,13 @@ export function Lightbox() {
           const ts = ref && att ? targetsFor(storage, att) : [];
           if (!ref || !ts.length) return null;
           return <>{ts.includes('immich') && <button className="icon-btn" disabled={saving} title={TARGET_LABEL.immich} aria-label={TARGET_LABEL.immich}
-            onClick={async () => { setSaving(true); flashNote('Wird gespeichert …'); try { flashNote(await saveAttachment(ref.m, ref.i, 'immich')); } catch (e: any) { flashNote(e.message ?? 'Fehler'); } finally { setSaving(false); } }}><Icon name="cloud" /></button>}
-            {ts.includes('nextcloud') && <button className="icon-btn" title="In Nextcloud speichern …" aria-label="In Nextcloud speichern" onClick={() => openSaveAs(ref.m, ref.i)}><Icon name="folder" /></button>}</>;
+            onClick={async () => { setSaving(true); flashNote(T('Wird gespeichert …')); try { flashNote(await saveAttachment(ref.m, ref.i, 'immich')); } catch (e: any) { flashNote(e.message ?? T('Fehler')); } finally { setSaving(false); } }}><Icon name="cloud" /></button>}
+            {ts.includes('nextcloud') && <button className="icon-btn" title={T('In Nextcloud speichern …')} aria-label={T('In Nextcloud speichern')} onClick={() => openSaveAs(ref.m, ref.i)}><Icon name="folder" /></button>}</>;
         })()}
         {standalone
-          ? sh.can && <button className="icon-btn" disabled={!sh.ready} title="Teilen / Sichern" aria-label="Teilen / Sichern"
-              onClick={async () => { try { if (!(await sh.share())) flashNote('Teilen ist hier nicht möglich'); } catch (e: any) { flashNote(e?.message ?? 'Teilen fehlgeschlagen'); } }}><Icon name="share" /></button>
-          : <a className="icon-btn" href={item.download} download={item.name} title="Auf dieses Gerät laden"><Icon name="download" /></a>}
+          ? sh.can && <button className="icon-btn" disabled={!sh.ready} title={T('Teilen / Sichern')} aria-label={T('Teilen / Sichern')}
+              onClick={async () => { try { if (!(await sh.share())) flashNote(T('Teilen ist hier nicht möglich')); } catch (e: any) { flashNote(e?.message ?? T('Teilen fehlgeschlagen')); } }}><Icon name="share" /></button>
+          : <a className="icon-btn" href={item.download} download={item.name} title={T('Auf dieses Gerät laden')}><Icon name="download" /></a>}
       </div>
       {[-1, 0, 1].map((off) => {
         const it = open!.list[open!.idx + off];
@@ -202,8 +203,8 @@ export function Lightbox() {
           </div>
         );
       })}
-      {many && open!.idx > 0 && <button className="icon-btn lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Voriges Bild"><Icon name="back" /></button>}
-      {many && open!.idx < open!.list.length - 1 && <button className="icon-btn lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label="Nächstes Bild"><Icon name="back" className="rot-180" /></button>}
+      {many && open!.idx > 0 && <button className="icon-btn lightbox-nav prev" onClick={(e) => { e.stopPropagation(); go(-1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label={T('Voriges Bild')}><Icon name="back" /></button>}
+      {many && open!.idx < open!.list.length - 1 && <button className="icon-btn lightbox-nav next" onClick={(e) => { e.stopPropagation(); go(1); }} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} aria-label={T('Nächstes Bild')}><Icon name="back" className="rot-180" /></button>}
       {note && <div className="toast" onClick={(e) => e.stopPropagation()}>{note}</div>}
     </div>
   );

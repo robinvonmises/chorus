@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { T } from '../i18n';
 
 /**
  * Videos vor dem Senden kürzen und zuschneiden.
@@ -170,7 +171,7 @@ export function VideoEditor({ file, initial, onCancel, onDone }: {
     onDone({ start: Math.round(range[0] * 1000) / 1000, end: Math.round(range[1] * 1000) / 1000, ...(fullCrop ? {} : { crop }) });
   };
   const changed = !(fullCrop && fullRange);
-  const cancel = () => { if (!changed || initial || confirm('Änderungen verwerfen?')) onCancel(); };
+  const cancel = () => { if (!changed || initial || confirm(T('Änderungen verwerfen?'))) onCancel(); };
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -185,13 +186,13 @@ export function VideoEditor({ file, initial, onCancel, onDone }: {
   const dur = meta?.dur || 1;
 
   return (
-    <div className="ie ve" role="dialog" aria-label="Video bearbeiten">
+    <div className="ie ve" role="dialog" aria-label={T('Video bearbeiten')}>
       <header className="ie-top">
-        <button className="ie-txt" onClick={cancel}>Abbrechen</button>
+        <button className="ie-txt" onClick={cancel}>{T('Abbrechen')}</button>
         <span className="ie-mid">
-          {changed && <button className="ie-txt" onClick={() => { setCrop({ x: 0, y: 0, w: 1, h: 1 }); setRatio(null); if (meta) setRange([0, meta.dur]); }}>Zurücksetzen</button>}
+          {changed && <button className="ie-txt" onClick={() => { setCrop({ x: 0, y: 0, w: 1, h: 1 }); setRatio(null); if (meta) setRange([0, meta.dur]); }}>{T('Zurücksetzen')}</button>}
         </span>
-        <button className="ie-txt done" onClick={finish}>Fertig</button>
+        <button className="ie-txt done" onClick={finish}>{T('Fertig')}</button>
       </header>
 
       <div className="ie-stage" ref={stage}>
@@ -207,7 +208,7 @@ export function VideoEditor({ file, initial, onCancel, onDone }: {
           {tool === 'trim' && !fullCrop && (
             <div className="ve-crop-shade" style={{ left: pct(crop.x), top: pct(crop.y), width: pct(crop.w), height: pct(crop.h) }} />
           )}
-          {!playing && meta && tool === 'trim' && <button className="ve-play" onClick={toggle} aria-label="Abspielen"><Icon name="play" size={30} /></button>}
+          {!playing && meta && tool === 'trim' && <button className="ve-play" onClick={toggle} aria-label={T('Abspielen')}><Icon name="play" size={30} /></button>}
         </div>
         {!meta && <div className="spinner" />}
       </div>
@@ -215,7 +216,7 @@ export function VideoEditor({ file, initial, onCancel, onDone }: {
       <footer className="ie-bottom">
         {tool === 'trim' ? (
           <div className="ve-trim">
-            <button className="icon-btn" onClick={toggle} aria-label={playing ? 'Pause' : 'Abspielen'}><Icon name={playing ? 'pause' : 'play'} /></button>
+            <button className="icon-btn" onClick={toggle} aria-label={playing ? T('Pause') : T('Abspielen')}><Icon name={playing ? 'pause' : 'play'} /></button>
             <div className="ve-strip" ref={strip} onPointerDown={scrub}>
               <div className="ve-frames">{Array.from({ length: FRAMES }, (_, i) => <span key={i} style={thumbs[i] ? { backgroundImage: `url(${thumbs[i]})` } : undefined} />)}</div>
               <div className="ve-dim" style={{ left: 0, width: pct(range[0] / dur) }} />
@@ -232,10 +233,10 @@ export function VideoEditor({ file, initial, onCancel, onDone }: {
             {RATIOS.map((r) => <button key={r.label} className={`pill ${ratio === r.r ? 'on' : ''}`} onClick={() => { setRatio(r.r); setCrop(fitRatio(r.r)); }}>{r.label}</button>)}
           </div>
         )}
-        <div className="ie-hint">{meta ? `${time(range[0])} – ${time(range[1])} · Länge ${time(range[1] - range[0])}` : 'Video wird geladen …'}</div>
+        <div className="ie-hint">{meta ? T('{0} – {1} · Länge {2}', time(range[0]), time(range[1]), time(range[1] - range[0])) : T('Video wird geladen …')}</div>
         <div className="ie-tools">
-          <button className={`ie-tool ${tool === 'trim' ? 'on' : ''}`} onClick={() => setTool('trim')} aria-label="Kürzen"><Icon name="scissors" /><small>Kürzen</small></button>
-          <button className={`ie-tool ${tool === 'crop' ? 'on' : ''}`} onClick={() => { vid.current?.pause(); setTool('crop'); }} aria-label="Zuschneiden"><Icon name="crop" /><small>Zuschneiden</small></button>
+          <button className={`ie-tool ${tool === 'trim' ? 'on' : ''}`} onClick={() => setTool('trim')} aria-label={T('Kürzen')}><Icon name="scissors" /><small>{T('Kürzen')}</small></button>
+          <button className={`ie-tool ${tool === 'crop' ? 'on' : ''}`} onClick={() => { vid.current?.pause(); setTool('crop'); }} aria-label={T('Zuschneiden')}><Icon name="crop" /><small>{T('Zuschneiden')}</small></button>
         </div>
       </footer>
     </div>

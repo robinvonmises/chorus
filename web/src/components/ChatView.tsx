@@ -18,6 +18,7 @@ import { ContactSheet } from './ContactSheet';
 import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 import { rise, takeRise } from '../sendAnim';
+import { T } from '../i18n';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
@@ -140,12 +141,12 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
 
   const storage = useStorage();
   const flash = (t: string) => { setToast(t); setTimeout(() => setToast(''), 2500); };
-  const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? 'Fehler'); } };
+  const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? T('Fehler')); } };
 
   // Feste Funktionen für die Blasen: Sonst zeichnet jede Kleinigkeit (auch eine Nachricht in einem anderen Chat) alle Blasen neu
-  const react = useCallback((m: Message, emoji: string | null) => { void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? 'Fehler')); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const react = useCallback((m: Message, emoji: string | null) => { void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? T('Fehler'))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openMenu = useCallback((mm: Message, p: { x: number; y: number }) => setMenu({ m: mm, ...p }), []);
-  const transcribe = useCallback((m: Message) => api.ai.transcribe(m.id).then(() => {}).catch((e: any) => flash(e.message ?? 'Fehler')), []);
+  const transcribe = useCallback((m: Message) => api.ai.transcribe(m.id).then(() => {}).catch((e: any) => flash(e.message ?? T('Fehler'))), []);
   const jump = useCallback((remoteId: string) => {
     const el = scroller.current?.querySelector(`[data-remote="${CSS.escape(remoteId)}"]`);
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
@@ -207,42 +208,42 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   return (
     <div className="chat-view" data-net={chat.network} onDragOver={(e) => e.preventDefault()}>
       <header className="chat-head">
-        <button className="icon-btn back" onClick={onBack} aria-label="Zurück"><Icon name="back" /></button>
-        <button className="chat-head-who" onClick={() => setContact(true)} aria-label="Profil anzeigen">
+        <button className="icon-btn back" onClick={onBack} aria-label={T('Zurück')}><Icon name="back" /></button>
+        <button className="chat-head-who" onClick={() => setContact(true)} aria-label={T('Profil anzeigen')}>
         <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
-          <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? `${chat.peer.name} · ` : ''}{chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && ' · nicht verbunden'}{tr?.on && <span> · 🌐 {tr.langName ?? 'Übersetzung an'}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> · 🤖 Autobot ({chat.autopilot.max - chat.autopilot.used} übrig)</span>}</small>
+          <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? `${chat.peer.name} · ` : ''}{chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && T(' · nicht verbunden')}{tr?.on && <span> · 🌐 {tr.langName ?? T('Übersetzung an')}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> {T('· 🤖 Autobot (')}{chat.autopilot.max - chat.autopilot.used} {T('übrig)')}</span>}</small>
         </div>
         </button>
-        <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>
+        <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>
         <div className="menu-wrap">
-          <button className="icon-btn" onClick={() => setHeadMenu((v) => !v)} aria-label="Chat-Menü"><Icon name="more" /></button>
+          <button className="icon-btn" onClick={() => setHeadMenu((v) => !v)} aria-label={T('Chat-Menü')}><Icon name="more" /></button>
           {headMenu && <div className="menu-catcher" onClick={() => setHeadMenu(false)} onTouchStart={() => setHeadMenu(false)} />}
           {headMenu && (
             <div className="menu right">
-              <button onClick={() => { setHeadMenu(false); onPatchChat({ pinned: !chat.pinned }); }}><Icon name="pin" size={18} />{chat.pinned ? 'Lösen' : 'Anheften'}</button>
-              <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? 'Ton an' : 'Stummschalten'}</button>
+              <button onClick={() => { setHeadMenu(false); onPatchChat({ pinned: !chat.pinned }); }}><Icon name="pin" size={18} />{chat.pinned ? T('Lösen') : 'Anheften'}</button>
+              <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? T('Ton an') : 'Stummschalten'}</button>
               <button onClick={() => { setHeadMenu(false); setContact(true); }}><Icon name="user" size={18} />{chat.kind === 'direct' ? 'Kontaktprofil' : 'Gruppeninfo'}</button>
-              <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? `Übersetzung · ${tr.langName ?? 'an'}` : 'Live-Übersetzung'}</button>
-              {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />Medien, Dateien & Links</button>}
-              <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? 'Aus dem Archiv holen' : 'Archivieren'}</button>
+              <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? T('Übersetzung · {0}', tr.langName ?? 'an') : T('Live-Übersetzung')}</button>
+              {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />{T('Medien, Dateien & Links')}</button>}
+              <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? T('Aus dem Archiv holen') : 'Archivieren'}</button>
               {chat.network === 'email' && <button onClick={async () => {
                 setHeadMenu(false);
-                if (!confirm(`Alle E-Mails zu „${chat.title}“ in den Papierkorb verschieben?`)) return;
+                if (!confirm(T('Alle E-Mails zu „{0}“ in den Papierkorb verschieben?', chat.title))) return;
                 onRemove();
-              }}><Icon name="trash" size={18} />E-Mails löschen</button>}
-              <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash('Export wird erstellt, der Download startet gleich …'); }}><Icon name="download" size={18} />Chat herunterladen</a>
+              }}><Icon name="trash" size={18} />{T('E-Mails löschen')}</button>}
+              <a href={`/api/export?chat=${encodeURIComponent(chat.id)}`} download onClick={() => { setHeadMenu(false); flash(T('Export wird erstellt, der Download startet gleich …')); }}><Icon name="download" size={18} />{T('Chat herunterladen')}</a>
             </div>
           )}
         </div>
       </header>
 
-      {loadingOld && <div className="loading-old floating">Lade ältere Nachrichten …</div>}
+      {loadingOld && <div className="loading-old floating">{T('Lade ältere Nachrichten …')}</div>}
       <div className="messages" ref={scroller} onScroll={onScroll} onTouchStart={touchStart} onTouchMove={touchMove}>
         <div className="messages-inner" ref={inner}>
-        {!messages && <div className="loading-old">Lade …</div>}
-        {messages && !messages.length && <div className="loading-old">Noch keine Nachrichten.</div>}
+        {!messages && <div className="loading-old">{T('Lade …')}</div>}
+        {messages && !messages.length && <div className="loading-old">{T('Noch keine Nachrichten.')}</div>}
         {items.map(({ m, day, showName, album }) => (
           <Fragment key={m.id}>
             {day && <div className="day"><span>{day}</span></div>}
@@ -266,14 +267,14 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         {scheduled.length > 0 && (
           <div className="planned-bar">
             <button className="planned-toggle" onClick={() => setShowPlanned((v) => !v)}>
-              <Icon name="clock" size={16} /><span>{scheduled.length === 1 ? `1 geplante Nachricht · ${whenLabel(scheduled[0].at)}` : `${scheduled.length} geplante Nachrichten`}</span>
+              <Icon name="clock" size={16} /><span>{scheduled.length === 1 ? T('1 geplante Nachricht · {0}', whenLabel(scheduled[0].at)) : T('{0} geplante Nachrichten', scheduled.length)}</span>
               <Icon name="back" size={14} className={showPlanned ? 'rot-90' : 'rot-270'} />
             </button>
             {showPlanned && scheduled.map((p) => (
               <div key={p.id} className={`planned-item ${p.error ? 'err' : ''}`}>
-                <span className="planned-text"><b>{p.error ? 'Nicht gesendet' : whenLabel(p.at)}{multi ? ` · ${NETWORKS[netOf.get(p.chatId) ?? 'demo'].name}` : ''}{p.translate ? ' · 🌐' : ''}</b>{p.text}</span>
-                <button className="btn small ghost" onClick={() => guard(() => api.planNow(p.id))}>Jetzt senden</button>
-                <button className="icon-btn small" onClick={() => guard(() => api.unplan(p.id))} aria-label="Löschen"><Icon name="trash" size={16} /></button>
+                <span className="planned-text"><b>{p.error ? T('Nicht gesendet') : whenLabel(p.at)}{multi ? ` · ${NETWORKS[netOf.get(p.chatId) ?? 'demo'].name}` : ''}{p.translate ? ' · 🌐' : ''}</b>{p.text}</span>
+                <button className="btn small ghost" onClick={() => guard(() => api.planNow(p.id))}>{T('Jetzt senden')}</button>
+                <button className="icon-btn small" onClick={() => guard(() => api.unplan(p.id))} aria-label={T('Löschen')}><Icon name="trash" size={16} /></button>
               </div>
             ))}
           </div>
@@ -281,7 +282,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         {!aiOpen && !editing && draftEmpty && ai?.features.text && chat.aiEnabled && (
           <QuickReplies chatId={chat.id} last={messages?.at(-1)} onUse={(t) => setInject({ text: t, n: Date.now() })} />
         )}
-        <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? `Nachricht über ${NETWORKS[sendChat.network].name}` : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? T('Nachricht über {0}', NETWORKS[sendChat.network].name) : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
@@ -292,10 +293,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             {menu.m.status === 'failed' && menu.m.fromMe ? (
               // Nicht gesendet: nur das, was hier Sinn ergibt
               <div className="menu-list">
-                <div className="menu-note">Nicht gesendet{menu.m.error ? `: ${menu.m.error}` : '.'}</div>
-                {menu.m.remoteId.startsWith('local-') && <button onClick={() => { const m = menu.m; setMenu(null); guard(() => api.retry(m.id)); }}><Icon name="refresh" size={18} />Erneut senden</button>}
-                {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
-                <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => m.remoteId.startsWith('local-') ? api.discard(m.id) : api.remove(m.id, false)); }}><Icon name="trash" size={18} />Löschen</button>
+                <div className="menu-note">{T('Nicht gesendet')}{menu.m.error ? `: ${menu.m.error}` : '.'}</div>
+                {menu.m.remoteId.startsWith('local-') && <button onClick={() => { const m = menu.m; setMenu(null); guard(() => api.retry(m.id)); }}><Icon name="refresh" size={18} />{T('Erneut senden')}</button>}
+                {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash(T('Kopiert')); }}><Icon name="copy" size={18} />{T('Text kopieren')}</button>}
+                <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => m.remoteId.startsWith('local-') ? api.discard(m.id) : api.remove(m.id, false)); }}><Icon name="trash" size={18} />{T('Löschen')}</button>
               </div>
             ) : menu.picker ? (
               <EmojiPicker onPick={(e) => { react(menu.m, e); setMenu(null); }} />
@@ -308,33 +309,33 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                 <button className="more" onClick={() => setMenu({ ...menu, picker: true })} title="Weitere"><Icon name="plus" size={18} /></button>
               </div>
               <div className="menu-list">
-                <button onClick={() => { setReplyTo(menu.m); setEditing(null); setMenu(null); }}><Icon name="reply" size={18} />Antworten</button>
-                {!menu.m.deleted && (menu.m.text || menu.m.attachments.length > 0) && <button onClick={() => { setForward(menu.m); setMenu(null); }}><Icon name="forward" size={18} />Weiterleiten</button>}
+                <button onClick={() => { setReplyTo(menu.m); setEditing(null); setMenu(null); }}><Icon name="reply" size={18} />{T('Antworten')}</button>
+                {!menu.m.deleted && (menu.m.text || menu.m.attachments.length > 0) && <button onClick={() => { setForward(menu.m); setMenu(null); }}><Icon name="forward" size={18} />{T('Weiterleiten')}</button>}
                 {reminders.has(menu.m.id)
-                  ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash('Erinnerung gelöscht'); }); }}><Icon name="alarm" size={18} />Erinnerung löschen</button>
-                  : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />Erinnern …</button>}
-                {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash('Wird übersetzt …'); api.ai.translateOne(m.id).then((r) => { if (r.already) flash('Die Nachricht ist schon Deutsch.'); }).catch((e: any) => flash(e.message ?? 'Fehler')); }}><Icon name="globe" size={18} />Übersetzen</button>}
-                {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash('Kopiert'); }}><Icon name="copy" size={18} />Text kopieren</button>}
+                  ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash(T('Erinnerung gelöscht')); }); }}><Icon name="alarm" size={18} />{T('Erinnerung löschen')}</button>
+                  : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />{T('Erinnern …')}</button>}
+                {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash(T('Wird übersetzt …')); api.ai.translateOne(m.id).then((r) => { if (r.already) flash(T('Die Nachricht ist schon Deutsch.')); }).catch((e: any) => flash(e.message ?? T('Fehler'))); }}><Icon name="globe" size={18} />{T('Übersetzen')}</button>}
+                {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash(T('Kopiert')); }}><Icon name="copy" size={18} />{T('Text kopieren')}</button>}
                 {menu.m.attachments.map((a, i) => standalone || !['image', 'sticker', 'video'].includes(a.kind)
                   // Als Home-Bildschirm-App führt ein Download-Link auf eine Seite ohne Rückweg: in der eigenen Vorschau öffnen
-                  ? <button key={i} onClick={() => { const m = menu.m; setMenu(null); openFile(m, i); }}><Icon name="share" size={18} />{a.kind === 'file' ? 'Öffnen / Teilen' : 'Teilen / Sichern'}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
-                  : <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? 'Bild speichern' : 'Herunterladen'}</a>
+                  ? <button key={i} onClick={() => { const m = menu.m; setMenu(null); openFile(m, i); }}><Icon name="share" size={18} />{a.kind === 'file' ? T('Öffnen / Teilen') : T('Teilen / Sichern')}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
+                  : <a key={i} href={attachmentUrl(menu.m, i, true)} download={a.name} onClick={() => setMenu(null)}><Icon name="download" size={18} />{a.kind === 'image' ? T('Bild speichern') : 'Herunterladen'}</a>
                 )}
                 {!menu.m.deleted && menu.m.attachments.flatMap((a, i) => targetsFor(storage, a).map((t) => (
-                  <button key={`${t}${i}`} onClick={() => { const m = menu.m; setMenu(null); if (t === 'nextcloud') { openSaveAs(m, i); return; } flash('Wird gespeichert …'); saveAttachment(m, i, t).then(flash, (e: any) => flash(e.message ?? 'Fehler')); }}>
-                    <Icon name={t === 'nextcloud' ? 'folder' : 'cloud'} size={18} />{t === 'nextcloud' ? 'In Nextcloud speichern …' : TARGET_LABEL[t]}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
+                  <button key={`${t}${i}`} onClick={() => { const m = menu.m; setMenu(null); if (t === 'nextcloud') { openSaveAs(m, i); return; } flash(T('Wird gespeichert …')); saveAttachment(m, i, t).then(flash, (e: any) => flash(e.message ?? T('Fehler'))); }}>
+                    <Icon name={t === 'nextcloud' ? 'folder' : 'cloud'} size={18} />{t === 'nextcloud' ? T('In Nextcloud speichern …') : TARGET_LABEL[t]}{menu.m.attachments.length > 1 ? ` (${a.name})` : ''}</button>
                 )))}
-                {menu.m.fromMe && menu.m.text && !menu.m.attachments.length && <button onClick={() => { setEditing(menu.m); setReplyTo(null); setMenu(null); }}><Icon name="edit" size={18} />Bearbeiten</button>}
-                {menu.m.fromMe && <button className="danger" onClick={() => { const m = menu.m; setMenu(null); if (confirm('Für alle löschen?')) guard(() => api.remove(m.id, true)); }}><Icon name="trash" size={18} />Für alle löschen</button>}
-                <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => api.remove(m.id, false)); }}><Icon name="trash" size={18} />Für mich löschen</button>
+                {menu.m.fromMe && menu.m.text && !menu.m.attachments.length && <button onClick={() => { setEditing(menu.m); setReplyTo(null); setMenu(null); }}><Icon name="edit" size={18} />{T('Bearbeiten')}</button>}
+                {menu.m.fromMe && <button className="danger" onClick={() => { const m = menu.m; setMenu(null); if (confirm(T('Für alle löschen?'))) guard(() => api.remove(m.id, true)); }}><Icon name="trash" size={18} />{T('Für alle löschen')}</button>}
+                <button className="danger" onClick={() => { const m = menu.m; setMenu(null); guard(() => api.remove(m.id, false)); }}><Icon name="trash" size={18} />{T('Für mich löschen')}</button>
               </div>
             </>)}
           </div>
         </div>
       ))(menu ?? menuShown))}
-      {remindFor && <WhenPicker title="Erinnern" confirm="Erinnern" hint="Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist."
+      {remindFor && <WhenPicker title={T('Erinnern')} confirm={T('Erinnern')} hint={T('Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist.')}
         onClose={() => setRemindFor(null)}
-        onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(`Erinnerung ${whenLabel(at)}`); }); }} />}
+        onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(T('Erinnerung {0}', whenLabel(at))); }); }} />}
       {forward && <ForwardSheet message={forward} onClose={() => setForward(null)} onDone={(t) => { setForward(null); flash(t); }} />}
       {toast && <div className="toast">{toast}</div>}
       {trSheet && <TranslateSheet chat={chat} onChat={onChat} onClose={() => setTrSheet(false)} onError={flash} />}
@@ -382,16 +383,16 @@ function QuickReplies({ chatId, last, onUse }: { chatId: string; last?: Message;
   if (!key || !list.length || quickDismissed.has(key)) return null;
   const done = () => { quickDismissed.add(key); force((n) => n + 1); };
   return (
-    <div className="quick-replies" role="group" aria-label="Antwortvorschläge">
-      {list.map((s, i) => <button key={i} className="quick-chip" onClick={() => { onUse(s.trim()); done(); }} title="Ins Eingabefeld übernehmen">{s}</button>)}
-      <button className="icon-btn small quick-x" onClick={done} aria-label="Vorschläge ausblenden"><Icon name="close" size={14} /></button>
+    <div className="quick-replies" role="group" aria-label={T('Antwortvorschläge')}>
+      {list.map((s, i) => <button key={i} className="quick-chip" onClick={() => { onUse(s.trim()); done(); }} title={T('Ins Eingabefeld übernehmen')}>{s}</button>)}
+      <button className="icon-btn small quick-x" onClick={done} aria-label={T('Vorschläge ausblenden')}><Icon name="close" size={14} /></button>
     </div>
   );
 }
 
 /** Datei, die gerade gesendet wird: erscheint sofort, mit Fortschritt */
 function PendingBubble({ o }: { o: Outgoing }) {
-  const label = o.phase === 'error' ? 'Nicht gesendet' : o.phase === 'work' || o.kind === 'voice' ? (o.kind === 'video' ? 'Wird verarbeitet …' : 'Wird gesendet …') : `Wird hochgeladen … ${Math.round(o.progress * 100)} %`;
+  const label = o.phase === 'error' ? T('Nicht gesendet') : o.phase === 'work' || o.kind === 'voice' ? (o.kind === 'video' ? T('Wird verarbeitet …') : T('Wird gesendet …')) : T('Wird hochgeladen … {0} %', Math.round(o.progress * 100));
   const ring = o.phase === 'upload' ? o.progress : null;
   return (
     <div className="msg out pending">
@@ -408,7 +409,7 @@ function PendingBubble({ o }: { o: Outgoing }) {
         )}
         {o.caption && <div className="text">{o.caption}</div>}
         <span className="meta pending-meta">{label}</span>
-        {o.phase === 'error' && <button className="pending-x" onClick={() => outbox.remove(o.id)}>Ausblenden</button>}
+        {o.phase === 'error' && <button className="pending-x" onClick={() => outbox.remove(o.id)}>{T('Ausblenden')}</button>}
       </div>
     </div>
   );

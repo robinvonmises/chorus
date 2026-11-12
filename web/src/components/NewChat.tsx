@@ -3,6 +3,7 @@ import { api, type Account, type Chat } from '../api';
 import { NETWORKS } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
+import { T, lang, locale } from '../i18n';
 
 /** „Neue Nachricht“: Kontakt oder Gruppe suchen oder an eine Nummer schreiben */
 export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
@@ -28,7 +29,7 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
     const known = new Set(chats.map((c) => c.id));
     return [...chats, ...found.filter((c) => !known.has(c.id))]
       .filter((c) => !s || c.title.toLowerCase().includes(s) || c.remoteId.toLowerCase().includes(s))
-      .sort((a, b) => Number(a.kind !== 'direct') - Number(b.kind !== 'direct') || a.title.localeCompare(b.title, 'de'))
+      .sort((a, b) => Number(a.kind !== 'direct') - Number(b.kind !== 'direct') || a.title.localeCompare(b.title, locale))
       .slice(0, 300);
   }, [chats, found, q]);
   const looksLikePhone = /^[+0][\d\s\-/()]{6,}$/.test(q.trim());
@@ -42,29 +43,29 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
 
   return (
     <div className="modal-bg" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Neue Nachricht">
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={T('Neue Nachricht')}>
         <header className="modal-head">
-          <h2>Neue Nachricht</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+          <h2>{T('Neue Nachricht')}</h2>
+          <button className="icon-btn" onClick={onClose} aria-label={T('Schließen')}><Icon name="close" /></button>
         </header>
         <div className="modal-body newchat">
           <div className="search">
             <Icon name="search" size={18} />
-            <input autoFocus autoComplete="off" autoCorrect="off" enterKeyHint="search" placeholder="Name, Gruppe oder Telefonnummer" value={q} onChange={(e) => { setQ(e.target.value); setErr(''); }} />
+            <input autoFocus autoComplete="off" autoCorrect="off" enterKeyHint="search" placeholder={T('Name, Gruppe oder Telefonnummer')} value={q} onChange={(e) => { setQ(e.target.value); setErr(''); }} />
           </div>
           {looksLikePhone && (
             <div className="newchat-phone">
               {phoneAccounts.length ? (<>
-                <span>An <b>{q.trim()}</b> schreiben über</span>
+                <span>{T('An')}{' '}<b>{q.trim()}</b> {T('schreiben über')}</span>
                 <div className="row gap">
                   {phoneAccounts.length > 1 ? (
                     <select className="input" value={acc} onChange={(e) => setAcc(e.target.value)}>
                       {phoneAccounts.map((a) => <option key={a.id} value={a.id}>{NETWORKS[a.network].name}{a.label !== NETWORKS[a.network].name ? ` (${a.label})` : ''}</option>)}
                     </select>
                   ) : <span className="pill on">{NETWORKS[phoneAccounts[0].network].name}</span>}
-                  <button className="btn primary" disabled={busy} onClick={byPhone}>{busy ? <span className="spinner" /> : 'Chat öffnen'}</button>
+                  <button className="btn primary" disabled={busy} onClick={byPhone}>{busy ? <span className="spinner" /> : T('Chat öffnen')}</button>
                 </div>
-              </>) : <span className="muted">Über die Nummer geht es bei Signal und WhatsApp. Verbinde zuerst einen der beiden.</span>}
+              </>) : <span className="muted">{T('Über die Nummer geht es bei Signal und WhatsApp. Verbinde zuerst einen der beiden.')}</span>}
               {err && <div className="error">{err}</div>}
             </div>
           )}
@@ -75,12 +76,12 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
                   <Avatar name={c.title} src={c.avatar} />
                   <span className="chat-main">
                     <span className="chat-top"><span className="chat-title">{c.title}</span></span>
-                    <span className="chat-bottom"><span className="chat-preview">{c.kind === 'group' ? 'Gruppe' : c.kind === 'channel' ? 'Kanal' : 'Kontakt'} · {NETWORKS[c.network].name}</span></span>
+                    <span className="chat-bottom"><span className="chat-preview">{c.kind === 'group' ? T('Gruppe') : c.kind === 'channel' ? T('Kanal') : T('Kontakt')} · {NETWORKS[c.network].name}</span></span>
                   </span>
                 </button>
               </li>
             ))}
-            {!list.length && !looksLikePhone && <li className="list-empty">Nichts gefunden. Du kannst auch eine Telefonnummer eingeben.</li>}
+            {!list.length && !looksLikePhone && <li className="list-empty">{T('Nichts gefunden. Du kannst auch eine Telefonnummer eingeben.')}</li>}
           </ul>
         </div>
       </div>

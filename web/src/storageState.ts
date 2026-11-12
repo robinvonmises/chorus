@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { api, type Attachment, type Message, type StorageSettings, type StorageTarget } from './api';
+import { T } from './i18n';
 
 /** Speicherziele (Immich, Nextcloud) einmal laden und überall teilen */
 let current: StorageSettings | null = null;
@@ -14,7 +15,7 @@ export function useStorage(): StorageSettings | null {
   return useSyncExternalStore((f) => { subs.add(f); if (!current) void storageState.refresh(); return () => subs.delete(f); }, () => current);
 }
 
-export const TARGET_LABEL: Record<StorageTarget, string> = { immich: 'In Immich speichern', nextcloud: 'In Nextcloud speichern' };
+export const TARGET_LABEL: Record<StorageTarget, string> = { immich: T('In Immich speichern'), nextcloud: T('In Nextcloud speichern') };
 /** Mögliche Ziele für einen Anhang, das Standardziel zuerst: Fotos/Videos → Immich, alles andere → Nextcloud */
 export function targetsFor(s: StorageSettings | null, a: Pick<Attachment, 'kind' | 'mime'>): StorageTarget[] {
   if (!s) return [];

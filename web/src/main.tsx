@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
 import { applyBubbles, applyChatBg } from './bubbles';
+import { T } from './i18n';
 applyBubbles();
 applyChatBg();
 
@@ -93,7 +94,7 @@ class Guard extends Component<{ children: ReactNode }, { failed: boolean }> {
     if (!this.state.failed) return this.props.children;
     return (
       <div style={{ display: 'grid', placeItems: 'center', height: '100dvh', padding: 24, textAlign: 'center', gap: 12 }}>
-        <div><p>Da ist etwas schiefgelaufen.</p><button className="btn primary" onClick={() => location.reload()}>Neu laden</button></div>
+        <div><p>{T('Da ist etwas schiefgelaufen.')}</p><button className="btn primary" onClick={() => location.reload()}>{T('Neu laden')}</button></div>
       </div>
     );
   }

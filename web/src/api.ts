@@ -1,4 +1,5 @@
 import { trustStore } from './keys';
+import { T, lang } from './i18n';
 export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
 
 export interface AccountStatus {
@@ -79,12 +80,19 @@ export interface AiSettings {
 }
 export interface Voice { id: string; name: string; category: string; previewUrl: string | null }
 
+/** Fehlermeldungen des Servers sind Deutsch: übersetzen, bei „Text: Detail“ zumindest den Anfang */
+export function serverText(m: string): string {
+  const full = T(m);
+  if (full !== m) return full;
+  const i = m.indexOf(': ');
+  return i > 0 ? `${T(m.slice(0, i))}: ${m.slice(i + 2)}` : m;
+}
 export class ApiError extends Error { constructor(public status: number, msg: string, public data: any = null) { super(msg); } }
 
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method,
-    headers: body !== undefined && !(body instanceof FormData) ? { 'content-type': 'application/json' } : undefined,
+    headers: { 'x-chorus-lang': lang, ...(body !== undefined && !(body instanceof FormData) ? { 'content-type': 'application/json' } : {}) },
     body: body === undefined ? undefined : body instanceof FormData ? body : JSON.stringify(body),
     credentials: 'same-origin',
   });
@@ -93,7 +101,7 @@ async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
     if (r.status === 401 && !url.startsWith('/api/vault')) window.dispatchEvent(new Event('inbox:unauthorized'));
     // Fastify-Rahmenfehler liefern error: "Bad Request" und den eigentlichen Grund in message
     const generic = !data?.error || /^(Bad Request|Not Found|Internal Server Error|Payload Too Large)$/i.test(data.error);
-    throw new ApiError(r.status, (generic && data?.message) || data?.error || `${r.status} ${r.statusText}`.trim(), data);
+    throw new ApiError(r.status, serverText((generic && data?.message) || data?.error || `${r.status} ${r.statusText}`.trim()), data);
   }
   return data as T;
 }
@@ -117,7 +125,7 @@ export const api = {
   immichThumb: (id: string) => `/api/storage/immich/assets/${enc(id)}/thumb`,
   async immichFile(a: ImmichAsset): Promise<File> {
     const r = await fetch(`/api/storage/immich/assets/${enc(a.id)}/send`, { credentials: 'same-origin' });
-    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? `Fehler ${r.status}`);
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? T('Fehler {0}', r.status));
     const cd = r.headers.get('Content-Disposition') ?? '';
     const m = cd.match(/filename\*=UTF-8''([^;]+)/i);
     return new File([await r.blob()], m ? decodeURIComponent(m[1]) : a.name || 'Foto', { type: r.headers.get('X-File-Mime') || 'application/octet-stream' });
@@ -126,7 +134,7 @@ export const api = {
   ncMkdir: (path: string) => req<{ path: string }>('POST', '/api/storage/nextcloud/mkdir', { path }),
   async ncFile(path: string): Promise<File> {
     const r = await fetch(`/api/storage/nextcloud/file?path=${enc(path)}`, { credentials: 'same-origin' });
-    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? `Fehler ${r.status}`);
+    if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as any).error ?? T('Fehler {0}', r.status));
     return new File([await r.blob()], path.split('/').pop() || 'Datei', { type: r.headers.get('X-File-Mime') || 'application/octet-stream' });
   },
   media: () => req<{ autoSave: boolean }>('GET', '/api/media'),
@@ -209,7 +217,7 @@ export const api = {
       x.withCredentials = true;
       x.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
       x.upload.onload = () => onProgress(1);
-      x.onerror = () => reject(new ApiError(0, 'Keine Verbindung zum Server'));
+      x.onerror = () => reject(new ApiError(0, T('Keine Verbindung zum Server')));
       x.onload = () => {
         let data: any = null;
         try { data = JSON.parse(x.responseText); } catch { /* keine JSON-Antwort */ }

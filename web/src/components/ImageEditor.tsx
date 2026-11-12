@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { T } from '../i18n';
 
 /** Bildbearbeitung vor dem Senden: zuschneiden, drehen, Stift, Marker, Formen, Text, Verpixeln, Auswahl */
 
@@ -15,13 +16,13 @@ type Rect = { x: number; y: number; w: number; h: number };
 
 const COLORS = ['#ffffff', '#111111', '#ff3b30', '#ff9500', '#ffcc00', '#34c759', '#007aff', '#af52de'];
 const TOOLS: { id: Tool; icon: string; label: string }[] = [
-  { id: 'crop', icon: 'crop', label: 'Zuschneiden' },
-  { id: 'pen', icon: 'pen', label: 'Stift' },
-  { id: 'marker', icon: 'marker', label: 'Marker' },
-  { id: 'arrow', icon: 'arrow', label: 'Pfeil' },
-  { id: 'rect', icon: 'square', label: 'Rechteck' },
-  { id: 'ellipse', icon: 'circle', label: 'Kreis' },
-  { id: 'text', icon: 'text', label: 'Text' },
+  { id: 'crop', icon: 'crop', label: T('Zuschneiden') },
+  { id: 'pen', icon: 'pen', label: T('Stift') },
+  { id: 'marker', icon: 'marker', label: T('Marker') },
+  { id: 'arrow', icon: 'arrow', label: T('Pfeil') },
+  { id: 'rect', icon: 'square', label: T('Rechteck') },
+  { id: 'ellipse', icon: 'circle', label: T('Kreis') },
+  { id: 'text', icon: 'text', label: T('Text') },
   { id: 'pixel', icon: 'pixel', label: 'Verpixeln' },
   { id: 'select', icon: 'cursor', label: 'Auswahl' },
 ];
@@ -346,7 +347,7 @@ export function ImageEditor({ file, onDone, onCancel }: { file: File; onDone: (f
       onDone(new File([b], name, { type: png ? 'image/png' : 'image/jpeg' }));
     }, png ? 'image/png' : 'image/jpeg', 0.92);
   };
-  const cancel = () => { if (!past.length || confirm('Änderungen verwerfen?')) onCancel(); };
+  const cancel = () => { if (!past.length || confirm(T('Änderungen verwerfen?'))) onCancel(); };
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
@@ -365,15 +366,15 @@ export function ImageEditor({ file, onDone, onCancel }: { file: File; onDone: (f
   const pct = (v: number, of: number) => `${(v / of) * 100}%`;
 
   return (
-    <div className="ie" role="dialog" aria-label="Bild bearbeiten">
+    <div className="ie" role="dialog" aria-label={T('Bild bearbeiten')}>
       <header className="ie-top">
-        <button className="ie-txt" onClick={cancel}>Abbrechen</button>
+        <button className="ie-txt" onClick={cancel}>{T('Abbrechen')}</button>
         <span className="ie-mid">
-          <button className="icon-btn" onClick={undo} disabled={!past.length} aria-label="Rückgängig"><Icon name="undo" /></button>
-          <button className="icon-btn" onClick={redo} disabled={!future.length} aria-label="Wiederholen"><Icon name="redo" /></button>
-          {tool === 'select' && sel != null && <button className="icon-btn" onClick={delSel} aria-label="Löschen"><Icon name="trash" /></button>}
+          <button className="icon-btn" onClick={undo} disabled={!past.length} aria-label={T('Rückgängig')}><Icon name="undo" /></button>
+          <button className="icon-btn" onClick={redo} disabled={!future.length} aria-label={T('Wiederholen')}><Icon name="redo" /></button>
+          {tool === 'select' && sel != null && <button className="icon-btn" onClick={delSel} aria-label={T('Löschen')}><Icon name="trash" /></button>}
         </span>
-        <button className="ie-txt done" onClick={finish}>Fertig</button>
+        <button className="ie-txt done" onClick={finish}>{T('Fertig')}</button>
       </header>
 
       <div className="ie-stage" ref={stage}>
@@ -389,7 +390,7 @@ export function ImageEditor({ file, onDone, onCancel }: { file: File; onDone: (f
           </div>
         ) : <div className="spinner" />}
         {textIn && (
-          <textarea className="ie-text" ref={(el) => { if (el && document.activeElement !== el) setTimeout(() => el.focus(), 0); }} value={textIn.value} rows={1} placeholder="Text"
+          <textarea className="ie-text" ref={(el) => { if (el && document.activeElement !== el) setTimeout(() => el.focus(), 0); }} value={textIn.value} rows={1} placeholder={T('Text')}
             style={{ left: Math.min(textIn.screen.x, (stage.current?.clientWidth ?? 300) - 220), top: textIn.screen.y, color, fontSize: Math.max(16, (fontSize * box.w) / W) }}
             onChange={(e) => setTextIn({ ...textIn, value: e.target.value })}
             onBlur={closeText}
@@ -402,15 +403,15 @@ export function ImageEditor({ file, onDone, onCancel }: { file: File; onDone: (f
           <div className="ie-row">
             {RATIOS.map((r) => <button key={r.label} className={`pill ${ratio === r.r ? 'on' : ''}`} onClick={() => { setRatio(r.r); setCrop(fitRatio(r.r)); }}>{r.label}</button>)}
             <span className="ie-sep" />
-            <button className="icon-btn" onClick={() => transform('rotate')} aria-label="Drehen" title="Drehen"><Icon name="rotate" /></button>
-            <button className="icon-btn" onClick={() => transform('flip')} aria-label="Spiegeln" title="Spiegeln"><Icon name="flip" /></button>
+            <button className="icon-btn" onClick={() => transform('rotate')} aria-label={T('Drehen')} title={T('Drehen')}><Icon name="rotate" /></button>
+            <button className="icon-btn" onClick={() => transform('flip')} aria-label={T('Spiegeln')} title={T('Spiegeln')}><Icon name="flip" /></button>
           </div>
         ) : (
           <div className="ie-row">
-            {showColors && COLORS.map((c) => <button key={c} className={`ie-color ${color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => pickColor(c)} aria-label={`Farbe ${c}`} />)}
-            {showSize && <input className="ie-size" type="range" min={1} max={12} value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label="Stärke" />}
-            {tool === 'pixel' && <span className="ie-hint">Bereich aufziehen, um ihn unkenntlich zu machen</span>}
-            {tool === 'select' && !selObj && <span className="ie-hint">Tippe auf eine Markierung, um sie zu verschieben, umzufärben oder zu löschen</span>}
+            {showColors && COLORS.map((c) => <button key={c} className={`ie-color ${color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => pickColor(c)} aria-label={T('Farbe {0}', c)} />)}
+            {showSize && <input className="ie-size" type="range" min={1} max={12} value={size} onChange={(e) => setSize(Number(e.target.value))} aria-label={T('Stärke')} />}
+            {tool === 'pixel' && <span className="ie-hint">{T('Bereich aufziehen, um ihn unkenntlich zu machen')}</span>}
+            {tool === 'select' && !selObj && <span className="ie-hint">{T('Tippe auf eine Markierung, um sie zu verschieben, umzufärben oder zu löschen')}</span>}
           </div>
         )}
         <div className="ie-tools">

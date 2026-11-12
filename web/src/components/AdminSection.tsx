@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { NETWORKS } from '../util';
 import { Icon } from './Icon';
+import { T, lang, locale } from '../i18n';
 
 type Status = Awaited<ReturnType<typeof api.adminStatus>>;
-const fmtUp = (s: number) => s < 3600 ? `${Math.round(s / 60)} Min.` : s < 86400 ? `${Math.floor(s / 3600)} Std. ${Math.round((s % 3600) / 60)} Min.` : `${Math.floor(s / 86400)} Tage`;
-const STATE: Record<string, string> = { connected: 'verbunden', connecting: 'verbindet', disconnected: 'getrennt', need_input: 'Anmeldung offen', qr: 'QR-Code offen', error: 'Fehler' };
+const fmtUp = (s: number) => s < 3600 ? T('{0} Min.', Math.round(s / 60)) : s < 86400 ? T('{0} Std. {1} Min.', Math.floor(s / 3600), Math.round((s % 3600) / 60)) : T('{0} Tage', Math.floor(s / 86400));
+const STATE: Record<string, string> = { connected: 'verbunden', connecting: 'verbindet', disconnected: 'getrennt', need_input: T('Anmeldung offen'), qr: T('QR-Code offen'), error: T('Fehler') };
 
 /** Einstellungen → Server (nur Admin): Zustand, Neustart, letzte Warnungen */
 export function AdminSection() {
@@ -17,7 +18,7 @@ export function AdminSection() {
   useEffect(() => { load(); }, []);
 
   const restart = async () => {
-    if (!confirm('Chorus neu starten? Das dauert etwa 20 Sekunden. Profile ohne Komfort-Modus sind danach gesperrt, bis sich die Person wieder anmeldet. Signal und WhatsApp liefern verpasste Nachrichten nach.')) return;
+    if (!confirm(T('Chorus neu starten? Das dauert etwa 20 Sekunden. Profile ohne Komfort-Modus sind danach gesperrt, bis sich die Person wieder anmeldet. Signal und WhatsApp liefern verpasste Nachrichten nach.'))) return;
     setRestarting(true);
     await api.adminRestart().catch(() => {});
     // Warten, bis der Server wieder antwortet, dann neu laden
@@ -32,16 +33,16 @@ export function AdminSection() {
 
   return (
     <section className="set-section">
-      <h3>Server</h3>
+      <h3>{T('Server')}</h3>
       {err && <div className="error">{err}</div>}
       {s && (
         <div className="admin-grid">
-          <div><small>Version</small><b>{s.version}</b></div>
-          <div><small>Läuft seit</small><b>{fmtUp(s.uptimeSec)}</b></div>
-          <div><small>Arbeitsspeicher</small><b>{s.memMB} MB</b><small>{s.hostFreeMB} von {s.hostMemMB} MB frei</small></div>
-          <div><small>Speicherplatz</small><b>{s.disk ? `${s.disk.freeGB} GB frei` : '–'}</b>{s.disk && <small>von {s.disk.totalGB} GB</small>}</div>
-          <div><small>Auslastung</small><b>{s.load.toFixed(2)}</b><small>{s.cpus} Kerne</small></div>
-          <div><small>ffmpeg</small><b>{s.ffmpeg ? 'vorhanden' : 'fehlt'}</b></div>
+          <div><small>{T('Version')}</small><b>{s.version}</b></div>
+          <div><small>{T('Läuft seit')}</small><b>{fmtUp(s.uptimeSec)}</b></div>
+          <div><small>{T('Arbeitsspeicher')}</small><b>{s.memMB} {T('MB')}</b><small>{s.hostFreeMB} {T('von')}{' '}{s.hostMemMB} {T('MB frei')}</small></div>
+          <div><small>{T('Speicherplatz')}</small><b>{s.disk ? T('{0} GB frei', s.disk.freeGB) : '–'}</b>{s.disk && <small>{T('von')}{' '}{s.disk.totalGB} {T('GB')}</small>}</div>
+          <div><small>{T('Auslastung')}</small><b>{s.load.toFixed(2)}</b><small>{s.cpus} {T('Kerne')}</small></div>
+          <div><small>{T('ffmpeg')}</small><b>{s.ffmpeg ? 'vorhanden' : 'fehlt'}</b></div>
         </div>
       )}
       {s && (
@@ -49,7 +50,7 @@ export function AdminSection() {
           {s.profiles.map((p) => (
             <div key={p.name} className="admin-profile">
               <b>{p.name}</b>
-              <small>{p.unlocked ? 'angemeldet' : 'gesperrt'}{p.comfort ? ' · Komfort-Modus' : ''}</small>
+              <small>{p.unlocked ? 'angemeldet' : 'gesperrt'}{p.comfort ? T(' · Komfort-Modus') : ''}</small>
               <span className="admin-nets">{p.accounts.map((a, i) => (
                 <span key={i} className={`admin-net ${a.state}`}><span className="dot" style={{ background: NETWORKS[a.network].color }} />{NETWORKS[a.network].name}: {STATE[a.state] ?? a.state}</span>
               ))}</span>
@@ -58,16 +59,16 @@ export function AdminSection() {
         </div>
       )}
       <div className="row gap wrap">
-        <button className="btn" onClick={async () => { await api.reconnect().catch(() => {}); setTimeout(load, 3000); }}><Icon name="refresh" size={18} /> Meine Messenger neu verbinden</button>
-        <button className="btn" onClick={async () => { await api.refreshContacts().catch(() => {}); alert('Profilbilder und Infos werden im Hintergrund neu geholt. Das dauert je nach Anzahl der Chats einige Minuten.'); }}><Icon name="user" size={18} /> Profilbilder neu laden</button>
-        <button className="btn danger-ghost" onClick={restart} disabled={restarting}><Icon name="power" size={18} /> {restarting ? 'Startet neu …' : 'Server neu starten'}</button>
-        <button className="btn ghost" onClick={load}>Aktualisieren</button>
+        <button className="btn" onClick={async () => { await api.reconnect().catch(() => {}); setTimeout(load, 3000); }}><Icon name="refresh" size={18} /> {T('Meine Messenger neu verbinden')}</button>
+        <button className="btn" onClick={async () => { await api.refreshContacts().catch(() => {}); alert(T('Profilbilder und Infos werden im Hintergrund neu geholt. Das dauert je nach Anzahl der Chats einige Minuten.')); }}><Icon name="user" size={18} /> {T('Profilbilder neu laden')}</button>
+        <button className="btn danger-ghost" onClick={restart} disabled={restarting}><Icon name="power" size={18} /> {restarting ? T('Startet neu …') : T('Server neu starten')}</button>
+        <button className="btn ghost" onClick={load}>{T('Aktualisieren')}</button>
       </div>
       {s && s.logs.length > 0 && (
         <>
-          <button className="link" style={{ justifySelf: 'start' }} onClick={() => setLogs((v) => !v)}>{logs ? 'Meldungen ausblenden' : `Letzte Warnungen und Fehler (${s.logs.length})`}</button>
+          <button className="link" style={{ justifySelf: 'start' }} onClick={() => setLogs((v) => !v)}>{logs ? T('Meldungen ausblenden') : T('Letzte Warnungen und Fehler ({0})', s.logs.length)}</button>
           {logs && <div className="admin-logs">{s.logs.map((l, i) => (
-            <div key={i} className={l.level >= 50 ? 'e' : 'w'}><time>{new Date(l.t).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>{l.msg}</div>
+            <div key={i} className={l.level >= 50 ? 'e' : 'w'}><time>{new Date(l.t).toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</time>{l.msg}</div>
           ))}</div>}
         </>
       )}

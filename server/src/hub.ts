@@ -531,6 +531,16 @@ export class Hub {
   }
 }
 
+/** Sprache der Oberfläche des Profils (gemerkt aus den Anfragen der App) */
+export function uiLang(store: { getSetting<T>(k: string, f: T): T }): 'en' | 'de' {
+  return store.getSetting<{ lang?: string }>('ai', {}).lang === 'de' ? 'de' : 'en';
+}
+const PREVIEW_EN: Record<string, string> = {
+  'Nachricht gelöscht': 'Message deleted', '📷 Foto': '📷 Photo', '🎤 Sprachnachricht': '🎤 Voice message', 'Neue Nachricht': 'New message', 'Erinnerung': 'Reminder',
+};
+/** Kurztexte des Servers für Benachrichtigungen in die Sprache des Profils bringen */
+export function localize(text: string, lang: 'en' | 'de'): string { return lang === 'en' ? PREVIEW_EN[text] ?? text : text; }
+
 export function previewText(m: Message): string {
   if (m.deleted) return 'Nachricht gelöscht';
   if (m.text) return m.text.slice(0, 200);

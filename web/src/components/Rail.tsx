@@ -2,6 +2,7 @@ import type { Account, Chat } from '../api';
 import type { Filter } from '../App';
 import { NETWORKS, initials, hue } from '../util';
 import { Icon } from './Icon';
+import { T } from '../i18n';
 
 /** Schmale Leiste links (nur Desktop): Filter nach Messenger, Einstellungen */
 export function Rail({ filter, setFilter, accounts, chats, onSettings }: {
@@ -12,8 +13,8 @@ export function Rail({ filter, setFilter, accounts, chats, onSettings }: {
   const only = (n: Chat['network'] | null) => setFilter({ ...filter, archived: false, nets: n ? [n] : [] });
   const isAll = !filter.nets.length;
   return (
-    <nav className="rail" aria-label="Messenger">
-      <button className={`rail-btn ${isAll ? 'on' : ''}`} onClick={() => only(null)} title="Alle Chats">
+    <nav className="rail" aria-label={T('Messenger')}>
+      <button className={`rail-btn ${isAll ? 'on' : ''}`} onClick={() => only(null)} title={T('Alle Chats')}>
         <Icon name="inbox" />
         {unread('all') > 0 && <span className="rail-badge">{unread('all') > 99 ? '99+' : unread('all')}</span>}
       </button>
@@ -23,13 +24,13 @@ export function Rail({ filter, setFilter, accounts, chats, onSettings }: {
         return (
           <button key={n} className={`rail-btn net ${filter.nets.includes(n) ? 'on' : ''}`} onClick={() => setFilter({ ...filter, archived: false, nets: filter.nets.includes(n) ? filter.nets.filter((x) => x !== n) : [...filter.nets, n] })} title={NETWORKS[n].name}>
             <span className="net-chip" style={{ background: NETWORKS[n].color }}>{NETWORKS[n].short}</span>
-            {bad && <span className="rail-warn" title="Verbindung prüfen">!</span>}
+            {bad && <span className="rail-warn" title={T('Verbindung prüfen')}>!</span>}
             {!bad && unread(n) > 0 && <span className="rail-badge">{unread(n)}</span>}
           </button>
         );
       })}
       <div className="rail-spacer" />
-      <button className="rail-btn" onClick={onSettings} title="Einstellungen"><Icon name="settings" /></button>
+      <button className="rail-btn" onClick={onSettings} title={T('Einstellungen')}><Icon name="settings" /></button>
     </nav>
   );
 }
