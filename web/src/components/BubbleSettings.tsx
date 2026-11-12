@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import type { Network } from '../api';
 import { NETWORKS } from '../util';
 import { sendAnimEnabled, setSendAnim } from '../sendAnim';
-import { FX, fxOn, setFx } from '../effects';
+import { FX, daylightCss, fxOn, setFx, useFx } from '../effects';
 import {
   ACCENTS, BUBBLE_DEFAULTS, BUBBLE_PALETTE, bubbleHex, loadAccent, saveAccent, CHAT_BACKGROUNDS, chatBgCss, customBgImage, ink, loadBubbles, loadChatBg, saveBubbles, saveChatBg, setCustomBg,
   type BubbleSettings,
@@ -54,10 +54,11 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
   const pickBg = (id: string) => { setBg(id); saveChatBg(id); };
   const previewNet = list[0];
   const [accent, setAccent] = useState(loadAccent);
+  const daylight = useFx('daylight');
   const outColor = b.mode === 'network' ? b.colors[previewNet] : bubbleHex(b.single);
 
   return (<>
-    <div className="look-preview" style={{ background: chatBgCss(bg) || undefined }}>
+    <div className="look-preview" style={{ background: (daylight ? daylightCss() : chatBgCss(bg)) || undefined }}>
       <span className="day"><span>{T('Heute')}</span></span>
       <span className="pv in">{T('Hast du heute Abend Zeit? 🍕')}</span>
       <span className="pv out" style={{ background: outColor, color: ink(outColor) }}>{T('Klar, um acht bei dir?')}</span>
