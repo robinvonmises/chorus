@@ -10,10 +10,12 @@ import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
 import { T, lang, locale } from '../i18n';
 
+const ATT_ICON = { image: '📷', video: '🎬', audio: '🎵', voice: '🎤', file: '📎', sticker: '' } as const;
+
 export function previewOf(m: Message): string {
   if (m.deleted) return T('Nachricht gelöscht');
-  if (m.text) return m.text;
   const a = m.attachments[0];
+  if (m.text) return (a && a.kind !== 'sticker' ? ATT_ICON[a.kind] + ' ' : '') + m.text;
   if (!a) return '';
   return { image: '📷 ' + T('Foto'), video: '🎬 ' + T('Video'), audio: '🎵 Audio', voice: '🎤 ' + T('Sprachnachricht'), file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }

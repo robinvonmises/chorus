@@ -52,10 +52,13 @@ export class Push {
     const full = this.preview(store);
     const lang = uiLang(store);
     const text = localize(previewText(m), lang);
+    const imgIdx = m.deleted ? -1 : m.attachments.findIndex((a) => a.kind === 'image' || a.kind === 'video');
     void this.send(store, {
       title: full ? chat.title : 'Chorus',
       body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : localize('Neue Nachricht', lang),
       chatId: chat.id, tag: chat.id,
+      // Vorschaubild (Foto/Video-Standbild). Der Service Worker lädt es selbst; iPhone/iPad zeigen keine Bilder in Benachrichtigungen
+      ...(full && imgIdx >= 0 ? { image: `/api/attachment?m=${encodeURIComponent(m.id)}&i=${imgIdx}&thumb=1` } : {}),
     }, undefined, skip);
   }
 }
