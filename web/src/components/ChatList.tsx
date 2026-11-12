@@ -161,6 +161,23 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     return () => ro.disconnect();
   });
 
+  // Chor-Wellen: neue eingehende Nachricht (Chat neuer und mehr Ungelesene) lässt das Band aufschwingen
+  const wavesOn = useFx('waves');
+  const lastSeen = useRef<Map<string, { ts: number; unread: number }> | null>(null);
+  const [wave, setWave] = useState<{ n: number; color: string } | null>(null);
+  useEffect(() => {
+    const prev = lastSeen.current;
+    const next = new Map<string, { ts: number; unread: number }>();
+    let hit: Chat | null = null;
+    for (const c of chats) {
+      next.set(c.id, { ts: c.lastTs, unread: c.unread });
+      const o = prev?.get(c.id);
+      if (prev && c.lastTs > (o?.ts ?? 0) && c.unread > (o?.unread ?? 0) && !c.muted && !c.archived && (!hit || c.lastTs > hit.lastTs)) hit = c;
+    }
+    lastSeen.current = next;
+    if (hit && wavesOn && !reducedMotion()) setWave({ n: Date.now(), color: NETWORKS[hit.network]?.color ?? 'var(--accent)' });
+  }, [chats, wavesOn]);
+
   // Gelesen-Moment: fällt die Zahl ungelesener Chats auf 0, schwingt das Logo einmal aus
   const zeroOn = useFx('inboxZero');
   const unreadTotal = useMemo(() => chats.reduce((n, c) => n + (!c.archived && !c.muted && c.unread > 0 ? 1 : 0), 0), [chats]);
@@ -201,6 +218,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           </div>}
         </header>
       )}
+      {wavesOn && <Waves key={wave?.n ?? 0} color={wave?.color} />}
       <div className="search">
         <Icon name="search" size={18} />
         <input placeholder={T('Suchen')} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -386,6 +404,20 @@ function SwipeRow({ children, left, right, far, disabled }: { children: React.Re
         onTouchStart={onStart} onTouchMove={onMove} onTouchEnd={onEnd} onTouchCancel={onEnd}>
         {children}
       </div>
+    </div>
+  );
+}
+
+/** Chor-Wellen: ruhiges Band; mit Farbe schwingt es einmal auf (nur transform/opacity) */
+const WAVE_PATH = (() => {
+  let d = 'M0 6';
+  for (let x = 0; x < 800; x += 20) d += ` Q${x + 5} 1 ${x + 10} 6 T${x + 20} 6`;
+  return d;
+})();
+function Waves({ color }: { color?: string }) {
+  return (
+    <div className={`fx-waves${color ? ' go' : ''}`} style={color ? { color } : undefined} aria-hidden="true">
+      <svg width="800" height="12" viewBox="0 0 800 12"><path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
     </div>
   );
 }

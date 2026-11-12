@@ -5,9 +5,10 @@ import { useEffect, useState } from 'react';
  * (Standard: an). Bewusst nur CSS transform/opacity, keine Layout-Übergänge; bei „Bewegung reduzieren“
  * laufen keine Animationen.
  */
-export type Fx = 'inboxZero' | 'daylight' | 'night' | 'burst';
+export type Fx = 'waves' | 'inboxZero' | 'daylight' | 'night' | 'burst';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
+  { id: 'waves', title: 'Chor-Wellen', hint: 'Feines Wellenband über der Chatliste, das bei neuen Nachrichten in der Farbe des Messengers aufschwingt' },
   { id: 'inboxZero', title: 'Gelesen-Moment', hint: 'Wenn alles gelesen ist, schwingt das Chorus-Logo einmal aus' },
   { id: 'daylight', title: 'Tageszeit-Hintergrund', hint: 'Chat-Hintergrund färbt sich mit der Uhrzeit: morgens kühl, abends golden. Ersetzt den gewählten Hintergrund' },
   { id: 'night', title: 'Ruhemodus nachts', hint: 'Von 22 bis 6 Uhr wird alles leicht gedimmt und wärmer, Ungelesen-Zähler atmen langsam' },
