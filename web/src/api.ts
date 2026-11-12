@@ -76,7 +76,7 @@ export type MediaKind = 'media' | 'files' | 'voice' | 'links';
 export interface AiSettings {
   provider: 'anthropic' | 'openai'; hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
   model: string; models: { id: string; label: string }[]; hasAnthropicKey: boolean; hasElevenKey: boolean;
-  voiceId: string; voiceName: string; features: { text: boolean; transcribe: boolean; voice: boolean };
+  voiceId: string; voiceName: string; quickReplies: boolean; features: { text: boolean; transcribe: boolean; voice: boolean };
 }
 export interface Voice { id: string; name: string; category: string; previewUrl: string | null }
 

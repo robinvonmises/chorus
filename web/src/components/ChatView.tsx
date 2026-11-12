@@ -279,7 +279,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             ))}
           </div>
         )}
-        {!aiOpen && !editing && draftEmpty && ai?.features.text && chat.aiEnabled && (
+        {!aiOpen && !editing && draftEmpty && ai?.features.text && ai.quickReplies !== false && chat.aiEnabled && (
           <QuickReplies chatId={chat.id} last={messages?.at(-1)} onUse={(t) => setInject({ text: t, n: Date.now() })} />
         )}
         <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? T('Nachricht über {0}', NETWORKS[sendChat.network].name) : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}

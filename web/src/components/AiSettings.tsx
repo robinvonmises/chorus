@@ -151,6 +151,16 @@ export function AiSettingsSection() {
       )}
     </div>
 
+    {ai.features.text && (<>
+      <p className="ios-caption">{T('Im Chat')}</p>
+      <div className="ios-card pad">
+        <label className="toggle">
+          <input type="checkbox" checked={ai.quickReplies} disabled={busy} onChange={(e) => save({ quickReplies: e.target.checked ? 'on' : 'off' }, e.target.checked ? T('Antwortvorschläge an.') : T('Antwortvorschläge aus.'))} />
+          <span><b>{T('Antwortvorschläge')}</b><small>{T('Drei kurze Antworten über dem Eingabefeld, wenn eine neue Nachricht kommt (nur in Chats mit KI-Freigabe). Aus: keine Vorschläge und keine Anfrage an die KI.')}</small></span>
+        </label>
+      </div>
+    </>)}
+
     {ai.features.text && searchAll !== null && (<>
       <p className="ios-caption">{T('Datenschutz')}</p>
       <div className="ios-card pad">

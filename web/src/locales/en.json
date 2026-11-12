@@ -843,5 +843,9 @@
  "🎤 Sprachnachricht": "🎤 Voice message",
  "📷 Foto": "📷 Photo",
  "Vor dem Löschen nachfragen": "Ask before deleting",
- "Aus: Gelöschte E-Mails landen sofort im Papierkorb, ohne Rückfrage (gilt für dieses Gerät).": "Off: deleted emails go straight to the trash without asking (applies to this device)."
+ "Aus: Gelöschte E-Mails landen sofort im Papierkorb, ohne Rückfrage (gilt für dieses Gerät).": "Off: deleted emails go straight to the trash without asking (applies to this device).",
+ "Im Chat": "In chats",
+ "Antwortvorschläge an.": "Reply suggestions on.",
+ "Antwortvorschläge aus.": "Reply suggestions off.",
+ "Drei kurze Antworten über dem Eingabefeld, wenn eine neue Nachricht kommt (nur in Chats mit KI-Freigabe). Aus: keine Vorschläge und keine Anfrage an die KI.": "Three short replies above the input field when a new message arrives (only in chats where AI is allowed). Off: no suggestions and no request to the AI."
 }
