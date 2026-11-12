@@ -19,12 +19,13 @@ const syncThemeColor = () => {
   if (old) old.replaceWith(m); else document.head.appendChild(m);
 };
 const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
-// In der iOS-Web-App (Homescreen) übernimmt iOS die Leistenfarbe nur beim Start. Deshalb nach einem
-// Hell/Dunkel-Wechsel einmal neu laden. Offener Chat (Adresse) und Entwürfe (localStorage) bleiben erhalten.
+// In der iOS-Web-App (Homescreen) übernimmt iOS die Leistenfarbe nur beim Start. Deshalb neu laden, wenn der Modus
+// beim Sichtbarwerden wirklich ein anderer ist als beim Laden. Nicht auf jedes change-Ereignis reagieren:
+// iOS schaltet im Hintergrund kurz hin und her (Vorschaubilder für den App-Umschalter).
 const iosApp = (navigator as Navigator & { standalone?: boolean }).standalone === true;
-let schemeChanged = false;
-const reloadForScheme = () => {
-  if (!schemeChanged || document.visibilityState !== 'visible') return;
+const loadedDark = !!darkMq?.matches;
+const reloadIfSchemeChanged = () => {
+  if (!iosApp || document.visibilityState !== 'visible' || !darkMq || darkMq.matches === loadedDark) return;
   const last = Number(sessionStorage.getItem('inbox:scheme-reload') || 0);
   if (Date.now() - last < 5000) return;
   sessionStorage.setItem('inbox:scheme-reload', String(Date.now()));
@@ -32,12 +33,12 @@ const reloadForScheme = () => {
 };
 darkMq?.addEventListener?.('change', () => {
   requestAnimationFrame(syncThemeColor);
-  if (iosApp) { schemeChanged = true; setTimeout(reloadForScheme, 300); }
+  setTimeout(reloadIfSchemeChanged, 500);
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   requestAnimationFrame(syncThemeColor);
-  if (iosApp) setTimeout(reloadForScheme, 300);
+  setTimeout(reloadIfSchemeChanged, 500);
 });
 requestAnimationFrame(syncThemeColor);
 
