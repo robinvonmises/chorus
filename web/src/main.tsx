@@ -7,6 +7,10 @@ import { T } from './i18n';
 applyAccent();
 applyBubbles();
 applyChatBg();
+// Tageszeit-Hintergrund nachführen (nur eine CSS-Variable) und bei Schalterwechsel neu setzen
+window.addEventListener('chorus:fx', () => applyChatBg());
+setInterval(() => { if (!document.hidden) applyChatBg(); }, 5 * 60_000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) applyChatBg(); });
 
 // iOS-Statusleiste: Farbe beim Wechsel Hell/Dunkel nachziehen. Das Meta-Tag wird ersetzt statt geändert,
 // weil iOS eine bloße Änderung in der Web-App oft übersieht. Farbe = Hintergrund der Kopfleiste (--bg).
