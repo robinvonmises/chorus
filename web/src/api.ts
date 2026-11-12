@@ -63,6 +63,7 @@ export type HubEvent =
   | { type: 'chat'; chat: Chat }
   | { type: 'message'; message: Message; replacedId?: string }
   | { type: 'message_removed'; id: string; chatId: string }
+  | { type: 'typing'; chatId: string; on: boolean }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: Planned[] }
   | { type: 'reminder'; item: Planned; chat: Chat | null };

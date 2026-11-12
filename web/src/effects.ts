@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
  * Kleine Design-Effekte zum Ausprobieren. Jeder ist einzeln in Einstellungen → Darstellung abschaltbar
  * (Standard: an). Bewusst nur CSS transform/opacity, keine Layout-Übergänge; bei „Bewegung reduzieren“
  * laufen keine Animationen.
  */
-export type Fx = 'waves' | 'inboxZero' | 'daylight' | 'night' | 'burst';
+export type Fx = 'waves' | 'typing' | 'inboxZero' | 'daylight' | 'night' | 'burst';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
   { id: 'waves', title: 'Chor-Wellen', hint: 'Feines Wellenband über der Chatliste, das bei neuen Nachrichten in der Farbe des Messengers aufschwingt' },
+  { id: 'typing', title: 'Lebendige Avatare', hint: 'Wer gerade tippt, bekommt einen sanft pulsierenden Ring ums Profilbild (Signal, WhatsApp, Telegram)' },
   { id: 'inboxZero', title: 'Gelesen-Moment', hint: 'Wenn alles gelesen ist, schwingt das Chorus-Logo einmal aus' },
   { id: 'daylight', title: 'Tageszeit-Hintergrund', hint: 'Chat-Hintergrund färbt sich mit der Uhrzeit: morgens kühl, abends golden. Ersetzt den gewählten Hintergrund' },
   { id: 'night', title: 'Ruhemodus nachts', hint: 'Von 22 bis 6 Uhr wird alles leicht gedimmt und wärmer, Ungelesen-Zähler atmen langsam' },
@@ -88,4 +89,20 @@ export function burst(messageId: string, emoji: string) {
   }
   document.body.appendChild(layer);
   window.setTimeout(() => layer.remove(), 900);
+}
+
+/** Wer tippt gerade? Nur live vom Server, läuft nach 12 s ohne Auffrischung von selbst ab */
+const typingNow = new Map<string, number>();
+const typingSubs = new Set<() => void>();
+const typingPing = () => { for (const f of typingSubs) f(); };
+export function setTyping(chatId: string, on: boolean) {
+  const old = typingNow.get(chatId);
+  if (old) clearTimeout(old);
+  if (on) typingNow.set(chatId, window.setTimeout(() => { typingNow.delete(chatId); typingPing(); }, 12_000));
+  else typingNow.delete(chatId);
+  if (!!old !== on) typingPing();
+}
+const typingSub = (f: () => void) => { typingSubs.add(f); return () => { typingSubs.delete(f); }; };
+export function useTyping(chatId: string) {
+  return useSyncExternalStore(typingSub, () => typingNow.has(chatId));
 }

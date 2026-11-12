@@ -151,6 +151,12 @@ export class WhatsAppAdapter implements Adapter {
       for (const m of messages) this.onMessage(m, true);
     });
     sock.ev.on('messages.upsert', ({ messages, type }) => { for (const m of messages) this.onMessage(m, type !== 'notify'); });
+    // Tippt gerade: WhatsApp meldet das nur für abonnierte Chats (siehe watchPresence)
+    sock.ev.on('presence.update', ({ id, presences }) => {
+      const chat = this.presenceChat.get(jidNormalizedUser(id)) ?? jidNormalizedUser(id);
+      const any = Object.values(presences ?? {}).some((p) => p?.lastKnownPresence === 'composing' || p?.lastKnownPresence === 'recording');
+      this.ev.typing(chat, any);
+    });
     sock.ev.on('messages.update', (ups) => {
       for (const { key, update } of ups) {
         if (!key.id || !key.remoteJid) continue;
@@ -202,6 +208,17 @@ export class WhatsAppAdapter implements Adapter {
     for (const g of Object.values(groups)) this.upsertChat(g.id, g.subject, 0);
   }
 
+  /** Tipp-Anzeige: nach einer eingehenden Nachricht den Chat abonnieren (höchstens alle 10 Minuten je Chat) */
+  private presenceChat = new Map<string, string>();
+  private presenceAt = new Map<string, number>();
+  private watchPresence(jid: string, chat: string) {
+    const j = jidNormalizedUser(jid);
+    this.presenceChat.set(j, chat);
+    if ((this.presenceAt.get(j) ?? 0) > Date.now() - 10 * 60_000) return;
+    this.presenceAt.set(j, Date.now());
+    this.sock?.presenceSubscribe(j).catch(() => {});
+  }
+
   /** Bevorzugt die Telefonnummer-JID, damit ein Kontakt nicht doppelt auftaucht */
   private chatId(key: WAMessageKey): string {
     const j = key.remoteJid!;
@@ -235,6 +252,7 @@ export class WhatsAppAdapter implements Adapter {
       return;
     }
 
+    if (!historic && !key.fromMe) this.watchPresence(key.remoteJid, chat);
     const senderJid = key.fromMe ? 'me' : jidNormalizedUser(key.participantAlt?.endsWith('@s.whatsapp.net') ? key.participantAlt : (key.participant || key.remoteJid));
     if (!key.fromMe && m.pushName) this.setName(senderJid, this.names.get(senderJid) ?? m.pushName);
     const senderName = key.fromMe ? 'Ich' : this.names.get(senderJid) ?? m.pushName ?? '+' + senderJid.split('@')[0];

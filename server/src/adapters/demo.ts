@@ -79,12 +79,13 @@ export class DemoAdapter implements Adapter {
   async stop() { this.timers.forEach(clearTimeout); }
   async input() {}
   private reply(chat: string, text: string) {
+    this.timers.push(setTimeout(() => this.ev.typing(chat, true), 300));
     this.timers.push(setTimeout(() => {
       this.ev.message({
         chatRemoteId: chat, remoteId: this.uid(), senderId: chat, senderName: chat === 'anna' ? 'Anna' : chat === 'tom' ? 'Tom' : chat === 'emma' ? 'Emma' : chat === 'bram' ? 'Bram' : 'Lena',
         fromMe: false, ts: Date.now(), text, edited: false, deleted: false, attachments: [], status: 'received',
       });
-    }, 1500));
+    }, 3000));
   }
   async sendText(chat: string, text: string) {
     const id = this.uid();

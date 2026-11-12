@@ -18,6 +18,7 @@ export type HubEvent =
   | { type: 'chat_removed'; id: string }
   | { type: 'message'; message: Message; replacedId?: string }
   | { type: 'message_removed'; id: string; chatId: string }
+  | { type: 'typing'; chatId: string; on: boolean }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: import('./planner.js').Planned[] }
   | { type: 'reminder'; item: import('./planner.js').Planned; chat: Chat | null };
@@ -144,6 +145,7 @@ export class Hub {
         const msg = store.patchMessage(id, { reactions: remove ? others : [...others, r] });
         if (msg) this.emit({ type: 'message', message: msg });
       },
+      typing: (chatRemote, on) => { const cid = chatId(chatRemote); if (store.getChat(cid)) this.emit({ type: 'typing', chatId: cid, on }); },
       storeFile: (data) => store.storeFile(data),
       getMessage: (chatRemote, remoteId) => store.getMessage(`${chatId(chatRemote)}:${remoteId}`),
       saveSession: (data) => store.saveSession(accountId, data),

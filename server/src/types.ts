@@ -143,6 +143,8 @@ export interface AdapterEvents {
   reactions(chatRemoteId: string, remoteId: string, reactions: Reaction[]): void;
   /** Einzelne Reaktion setzen/entfernen (ersetzt vorherige Reaktion desselben Absenders) */
   reactionChange(chatRemoteId: string, remoteId: string, r: Reaction, remove: boolean): void;
+  /** Jemand tippt gerade (on) oder hat aufgehört; wird nicht gespeichert, nur live weitergegeben */
+  typing(chatRemoteId: string, on: boolean): void;
   /** Speichert Bytes verschlüsselt und gibt eine fileId zurück */
   storeFile(data: Buffer): string;
   /** Bereits gespeicherte Nachricht nachschlagen */

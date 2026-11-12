@@ -199,6 +199,13 @@ export class SignalAdapter implements Adapter {
     const author: string = env.sourceUuid ?? env.sourceNumber;
     const authorName = this.nameOf(author, env.sourceName || env.sourceNumber);
 
+    // Tippt gerade (nur live, ohne Speichern)
+    if (env.typingMessage) {
+      const t = env.typingMessage;
+      this.ev.typing(t.groupId ? 'g:' + t.groupId : author, t.action === 'STARTED');
+      return;
+    }
+
     // Lesebestätigungen für eigene Nachrichten
     if (env.receiptMessage && this.me) {
       const status = env.receiptMessage.isRead || env.receiptMessage.isViewed ? 'read' : 'delivered';
