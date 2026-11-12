@@ -19,8 +19,26 @@ const syncThemeColor = () => {
   if (old) old.replaceWith(m); else document.head.appendChild(m);
 };
 const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
-darkMq?.addEventListener?.('change', () => requestAnimationFrame(syncThemeColor));
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestAnimationFrame(syncThemeColor); });
+// In der iOS-Web-App (Homescreen) übernimmt iOS die Leistenfarbe nur beim Start. Deshalb nach einem
+// Hell/Dunkel-Wechsel einmal neu laden. Offener Chat (Adresse) und Entwürfe (localStorage) bleiben erhalten.
+const iosApp = (navigator as Navigator & { standalone?: boolean }).standalone === true;
+let schemeChanged = false;
+const reloadForScheme = () => {
+  if (!schemeChanged || document.visibilityState !== 'visible') return;
+  const last = Number(sessionStorage.getItem('inbox:scheme-reload') || 0);
+  if (Date.now() - last < 5000) return;
+  sessionStorage.setItem('inbox:scheme-reload', String(Date.now()));
+  location.reload();
+};
+darkMq?.addEventListener?.('change', () => {
+  requestAnimationFrame(syncThemeColor);
+  if (iosApp) { schemeChanged = true; setTimeout(reloadForScheme, 300); }
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  requestAnimationFrame(syncThemeColor);
+  if (iosApp) setTimeout(reloadForScheme, 300);
+});
 requestAnimationFrame(syncThemeColor);
 
 // iOS verkleinert beim Einblenden der Tastatur nicht die Seite, sondern schiebt sie hoch.
