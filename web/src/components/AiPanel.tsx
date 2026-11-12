@@ -77,7 +77,7 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
   chat: Chat; replyTo: Message | null; busy: Busy; run: Run; voiceOk: boolean; dictateOk: boolean; openSettings: () => void; onError: (t: string) => void; onDone: () => void;
 }) {
   const [task, setTask] = useState('');
-  const [mode, setMode] = useState<'text' | 'voice'>(voiceOk ? 'voice' : 'text');
+  const [mode, setMode] = useState<'text' | 'voice'>('text');
   const [draft, setDraft] = useState<{ text: string; mode: 'text' | 'voice' } | null>(null);
   const [recording, setRecording] = useState(false);
   const rec = useRef<MediaRecorder | null>(null);
@@ -149,8 +149,8 @@ function WriteTab({ chat, replyTo, busy, run, voiceOk, dictateOk, openSettings, 
       </div>
       <div className="ai-row">
         <div className="seg-mini" role="radiogroup" aria-label={T('Senden als')}>
-          <button className={mode === 'voice' ? 'on' : ''} disabled={!voiceOk} onClick={() => setMode('voice')} title={voiceOk ? T('Als Sprachnachricht in deiner Stimme') : T('Dafür ElevenLabs und eine Stimme einrichten')}><Icon name="speak" size={15} /> {T('Sprache')}</button>
           <button className={mode === 'text' ? 'on' : ''} onClick={() => setMode('text')}><Icon name="send" size={15} /> {T('Text')}</button>
+          <button className={mode === 'voice' ? 'on' : ''} disabled={!voiceOk} onClick={() => setMode('voice')} title={voiceOk ? T('Als Sprachnachricht in deiner Stimme') : T('Dafür ElevenLabs und eine Stimme einrichten')}><Icon name="speak" size={15} /> {T('Sprache')}</button>
         </div>
         {!voiceOk && <button className="link small" onClick={openSettings}>{T('Stimme einrichten')}</button>}
         <span className="grow" />
