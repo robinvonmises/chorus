@@ -129,10 +129,11 @@ app.addHook('onSend', async (_req, reply, payload) => {
 });
 
 // ---------- Hilfen ----------
-function newSession(reply: FastifyReply, req: FastifyRequest, profileId: string) {
+/** keep = „Auf diesem Gerät angemeldet bleiben“: Cookie übersteht das Beenden der App (iOS beendet Web-Apps im Hintergrund oft) */
+function newSession(reply: FastifyReply, req: FastifyRequest, profileId: string, keep = false) {
   const sid = randomBytes(32).toString('base64url');
   sessions.set(sid, profileId);
-  reply.setCookie('sid', sid, { path: '/', httpOnly: true, sameSite: 'strict', secure: req.protocol === 'https' });
+  reply.setCookie('sid', sid, { path: '/', httpOnly: true, sameSite: 'strict', secure: req.protocol === 'https', ...(keep ? { maxAge: 30 * 86400 } : {}) });
 }
 const isHttps = (req: FastifyRequest) => req.protocol === 'https';
 const trustCookie = (c: Ctx) => `trust_${c.p.id}`;
@@ -260,7 +261,7 @@ app.post('/api/vault/unlock', strict, async (req, reply) => {
     if (remember) trustToken = trustDevice(reply, req, c);
   }
   c.vault.unlock(kek);
-  newSession(reply, req, c.p.id);
+  newSession(reply, req, c.p.id, remember === true);
   return { ok: true, trust: trustToken };
 });
 
