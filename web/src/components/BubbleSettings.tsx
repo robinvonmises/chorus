@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import type { Network } from '../api';
 import { NETWORKS } from '../util';
 import { sendAnimEnabled, setSendAnim } from '../sendAnim';
+import { FX, fxOn, setFx } from '../effects';
 import {
   ACCENTS, BUBBLE_DEFAULTS, BUBBLE_PALETTE, bubbleHex, loadAccent, saveAccent, CHAT_BACKGROUNDS, chatBgCss, customBgImage, ink, loadBubbles, loadChatBg, saveBubbles, saveChatBg, setCustomBg,
   type BubbleSettings,
@@ -118,5 +119,23 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
         </span>
       </label>
     </div>
+
+    <p className="ios-caption">{T('Effekte')}</p>
+    <div className="ios-card">
+      {FX.map((f) => <FxRow key={f.id} id={f.id} title={f.title} hint={f.hint} />)}
+    </div>
+    <p className="ios-foot">{T('Zum Ausprobieren. Bei „Bewegung reduzieren“ in den Systemeinstellungen laufen keine Animationen.')}</p>
   </>);
+}
+
+function FxRow({ id, title, hint }: { id: (typeof FX)[number]['id']; title: string; hint: string }) {
+  const [on, setOn] = useState(() => fxOn(id));
+  return (
+    <label className="ios-row toggle-row">
+      <span className="ios-row-main">
+        <span className="ios-row-text"><span className="ios-title">{T(title)}</span><small>{T(hint)}</small></span>
+        <input type="checkbox" className="switch" checked={on} onChange={(e) => { setOn(e.target.checked); setFx(id, e.target.checked); }} />
+      </span>
+    </label>
+  );
 }

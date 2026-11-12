@@ -1078,3 +1078,15 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .accent-tile.on > span { box-shadow: 0 0 0 2px var(--ios-card, var(--bg)), 0 0 0 4px var(--accent); transform: scale(1.05); }
 .accent-tile.on small { color: var(--accent); font-weight: 600; }
 .swatch.auto { display: grid; place-items: center; color: #fff; }
+
+/* ===== Effekte (einzeln abschaltbar, nur transform/opacity) ===== */
+.fx-zero { position: absolute; left: 50%; top: 38%; z-index: 30; display: grid; justify-items: center; gap: 8px; pointer-events: none;
+  transform: translateX(-50%); animation: fx-zero-fade 2.2s ease forwards; }
+.fx-zero img { border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); transform-origin: 50% 0; animation: fx-zero-swing 1.6s cubic-bezier(.3,.7,.4,1) both; }
+.fx-zero span { font-size: 14px; font-weight: 600; color: var(--ink-2); background: var(--bg); padding: 2px 10px; border-radius: 999px; }
+@keyframes fx-zero-fade { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes fx-zero-swing {
+  0% { transform: scale(.6) rotate(0deg); } 20% { transform: scale(1) rotate(14deg); } 40% { transform: rotate(-10deg); }
+  60% { transform: rotate(6deg); } 80% { transform: rotate(-3deg); } 100% { transform: rotate(0deg); }
+}
+@media (prefers-reduced-motion: reduce) { .fx-zero, .fx-zero img { animation: none; display: none; } }
