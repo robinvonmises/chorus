@@ -89,7 +89,7 @@ export default function App() {
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [server?.authed]);
 
-  if (!ready && !server) return <div className="splash"><img src="/icon.svg" width={64} alt="" /></div>;
+  if (!ready && !server) return <div className="splash"><img src="/icon.svg?v=3" width={64} alt="" /></div>;
   if (error && !server) return <div className="splash"><p>{error}</p></div>;
   if (!server!.authed) return <Lock state={server!} savedKey={savedKey} onDone={boot} />;
   return <Main server={server!} onLocked={boot} onRefresh={() => api.state().then(setServer).catch(() => {})} />;
@@ -371,7 +371,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
             onChat={(c) => setChats((cs) => new Map(cs).set(c.id, c))} />
         ) : (
           <div className="empty-chat">
-            <img src="/icon.svg" width={72} alt="" />
+            <img src="/icon.svg?v=3" width={72} alt="" />
             <h2>{T('Chorus')}</h2>
             <p>{T('Wähle links einen Chat aus.')}</p>
             {!accounts.length && <button className="btn primary" onClick={() => setPanel('add')}>{T('Messenger verbinden')}</button>}

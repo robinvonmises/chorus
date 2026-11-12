@@ -1,7 +1,12 @@
 /* Chorus – eigenes Design. Hell/Dunkel automatisch. */
 :root {
-  --accent: #4f46e5;
-  --accent-soft: #eef2ff;
+  /* App-Farbe: --brand* setzt applyAccent() je nach Wahl (Einstellungen → Darstellung) */
+  --brand: #059669;
+  --brand-soft: #ecfdf5;
+  --brand-dark: #34d399;
+  --brand-dark-soft: #0f2a22;
+  --accent: var(--brand);
+  --accent-soft: var(--brand-soft);
   --accent-ink: #ffffff;
   --bg: #ffffff;
   --bg-2: #f6f7f9;
@@ -11,7 +16,7 @@
   --ink-2: #4b5563;
   --ink-3: #8a919c;
   --bubble-in: #f0f1f4;
-  --bubble-out: #4f46e5;
+  --bubble-out: var(--brand);
   --bubble-out-ink: #ffffff;
   --danger: #dc2626;
   --warn-bg: #fff7e6;
@@ -30,10 +35,10 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --accent: #818cf8; --accent-soft: #23264a; --accent-ink: #0b0d17;
+    --accent: var(--brand-dark); --accent-soft: var(--brand-dark-soft); --accent-ink: #0b0d17;
     --bg: #0f1115; --bg-2: #161920; --bg-3: #1f232c; --line: #262a33;
     --ink: #eef0f4; --ink-2: #b2b8c3; --ink-3: #7c8491;
-    --bubble-in: #1f232c; --bubble-out: #4f46e5; --bubble-out-ink: #fff;
+    --bubble-in: #1f232c; --bubble-out: var(--brand); --bubble-out-ink: #fff;
     --warn-bg: #2b2112; --warn-ink: #fbbf24;
     --shadow: 0 10px 40px rgba(0, 0, 0, .5);
   }
@@ -898,7 +903,7 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .via-setting h4 { margin: 0 0 4px; }
 .radio-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line, #eee); cursor: pointer; }
 .radio-row:last-child { border-bottom: 0; }
-.radio-row input { accent-color: var(--accent, #4f46e5); width: 18px; height: 18px; margin: 0; }
+.radio-row input { accent-color: var(--accent, #059669); width: 18px; height: 18px; margin: 0; }
 .radio-row .dot { flex: none; }
 .auto-set { display: grid; gap: 6px; margin: 10px 0; }
 .auto-label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; margin-top: 4px; }
@@ -1067,3 +1072,9 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .bg-tile > span { width: 100%; aspect-ratio: 4 / 5; border-radius: 10px; display: grid; place-items: center; color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--ios-sep); background-size: cover; }
 .bg-tile.on > span { box-shadow: 0 0 0 2px var(--ios-card, var(--bg)), 0 0 0 4px var(--accent); }
 .bg-tile.on small { color: var(--accent); font-weight: 600; }
+.accent-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px 8px; }
+.accent-tile { display: grid; gap: 5px; justify-items: center; font-size: 12px; color: var(--ink-2); }
+.accent-tile > span { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; color: #fff; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); transition: transform .15s var(--ease-out); }
+.accent-tile.on > span { box-shadow: 0 0 0 2px var(--ios-card, var(--bg)), 0 0 0 4px var(--accent); transform: scale(1.05); }
+.accent-tile.on small { color: var(--accent); font-weight: 600; }
+.swatch.auto { display: grid; place-items: center; color: #fff; }
