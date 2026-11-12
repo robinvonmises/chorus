@@ -76,11 +76,12 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
     ctx.translator = new Translator(hub, ctx.ai);
     ctx.planner?.stop();
-    ctx.planner = new Planner(hub, (title, body, chatId) => { if (!appVisible(ctx)) void push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }); },
+    ctx.planner = new Planner(hub, (title, body, chatId) => { void push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }, undefined, visibleEndpoints(ctx)); },
       (p) => sendMaybeTranslated(hub, ctx.ai!, p.chatId, p.text, p.replyTo ?? null, !!p.translate));
     hub.subscribe((e) => broadcast(ctx, e));
-    // Push nur, wenn die App gerade nirgends offen und sichtbar ist. Sonst zeigt die App selbst einen dezenten Hinweis.
-    hub.subscribe((e) => { if (e.type !== 'notify') return; if (appVisible(ctx)) console.log('[push] übersprungen: App ist offen'); else push.notify(store, e.chat, e.message); });
+    // Push an jedes Gerät, auf dem Chorus gerade nicht offen und sichtbar ist. Das offene Gerät zeigt selbst einen dezenten Hinweis.
+    // Früher reichte ein offenes Gerät (z. B. der Desktop), um die Push-Nachricht an alle Geräte zu unterdrücken.
+    hub.subscribe((e) => { if (e.type === 'notify') push.notify(store, e.chat, e.message, visibleEndpoints(ctx)); });
     await hub.startAll();
     if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
       await hub.addAccount('demo', 'Demo', {});
@@ -1015,11 +1016,16 @@ app.put('/api/chats/:id/via', async (req) => {
  *  Ein eingefrorenes iPhone meldet sich nicht ab, die Verbindung wirkt aber noch offen.
  *  Deshalb gilt eine App nur als sichtbar, solange die letzte Meldung frisch ist, sonst kommt die Push-Benachrichtigung. */
 const visibleSince = new WeakMap<object, number>();
+/** Push-Abo (Endpoint) des Geräts hinter einer Verbindung, damit nur dieses Gerät keine Push-Nachricht bekommt. */
+const socketEndpoint = new WeakMap<object, string>();
 const VISIBLE_FRESH_MS = 45_000;
-function appVisible(c: Ctx) {
-  const now = Date.now();
-  for (const ws of c.sockets) { const t = visibleSince.get(ws); if (ws.readyState === 1 && t && now - t < VISIBLE_FRESH_MS) return true; }
-  return false;
+function visibleEndpoints(c: Ctx) {
+  const now = Date.now(), out = new Set<string>();
+  for (const ws of c.sockets) {
+    const t = visibleSince.get(ws), ep = socketEndpoint.get(ws);
+    if (ws.readyState === 1 && t && now - t < VISIBLE_FRESH_MS && ep) out.add(ep);
+  }
+  return out;
 }
 function broadcast(c: Ctx, e: unknown) {
   const s = JSON.stringify(e);
@@ -1034,7 +1040,10 @@ app.register(async (f) => {
     socket.on('message', (d) => {
       try {
         const m = JSON.parse(String(d));
-        if (m?.type === 'visibility') { if (m.visible) visibleSince.set(socket, Date.now()); else visibleSince.delete(socket); }
+        if (m?.type === 'visibility') {
+          if (typeof m.endpoint === 'string' && m.endpoint.length < 2000) socketEndpoint.set(socket, m.endpoint);
+          if (m.visible) visibleSince.set(socket, Date.now()); else visibleSince.delete(socket);
+        }
       } catch { /* ignorieren */ }
     });
     // Tote Verbindungen (Handy eingefroren, Netz weg) erkennen und schließen: wer auf zwei Pings nicht antwortet, fliegt raus

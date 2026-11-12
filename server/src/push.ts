@@ -32,20 +32,22 @@ export class Push {
   remove(store: Store, endpoint: string) { store.setSetting('pushSubs', this.subs(store).filter((x) => x.endpoint !== endpoint)); }
   preview(store: Store): boolean { return store.getSetting('pushPreview', true); }
 
-  async send(store: Store, payload: Record<string, unknown>, only?: string) {
-    let ok = 0, gone = 0, fail = 0;
+  /** skip: Geräte, auf denen Chorus gerade offen und sichtbar ist. Die bekommen nichts, alle anderen schon. */
+  async send(store: Store, payload: Record<string, unknown>, only?: string, skip?: Set<string>) {
+    let ok = 0, gone = 0, fail = 0, open = 0;
     for (const s of this.subs(store)) {
       if (only && s.endpoint !== only) continue;
+      if (skip?.has(s.endpoint)) { open++; continue; }
       try { await webpush.sendNotification(s, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'high' }); ok++; }
       catch (e: any) {
         if (e?.statusCode === 404 || e?.statusCode === 410) { gone++; this.remove(store, s.endpoint); } // abgemeldet/abgelaufen
         else { fail++; console.warn('[push] Fehler', host(s.endpoint), e?.statusCode ?? '', e?.body ?? e?.message ?? e); }
       }
     }
-    console.log(`[push] gesendet ${ok}${gone ? `, ${gone} abgelaufene Abos entfernt` : ''}${fail ? `, ${fail} fehlgeschlagen` : ''}`);
+    console.log(`[push] gesendet ${ok}${open ? `, ${open} übersprungen (App dort offen)` : ''}${gone ? `, ${gone} abgelaufene Abos entfernt` : ''}${fail ? `, ${fail} fehlgeschlagen` : ''}`);
   }
 
-  notify(store: Store, chat: Chat, m: Message) {
+  notify(store: Store, chat: Chat, m: Message, skip?: Set<string>) {
     if (!this.subs(store).length) { console.log('[push] übersprungen: keine Geräte angemeldet'); return; }
     const full = this.preview(store);
     const lang = uiLang(store);
@@ -54,6 +56,6 @@ export class Push {
       title: full ? chat.title : 'Chorus',
       body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : localize('Neue Nachricht', lang),
       chatId: chat.id, tag: chat.id,
-    });
+    }, undefined, skip);
   }
 }
