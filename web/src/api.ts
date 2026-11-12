@@ -319,10 +319,14 @@ export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online:
     }
   };
   // Dem Server sagen, ob die App gerade sichtbar ist: dann kommt keine Push-Benachrichtigung
-  const sendVisibility = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', visible: document.visibilityState === 'visible' })); };
-  const onVis = () => { sendVisibility(); wake(); };
+  // Mit dem eigenen Push-Abo, damit der Server nur diesem Gerät die Push-Nachricht spart und die anderen sie trotzdem bekommen
+  let endpoint: string | undefined;
+  const loadEndpoint = () => navigator.serviceWorker?.ready.then((r) => r.pushManager?.getSubscription()).then((s) => { endpoint = s?.endpoint; }).catch(() => {});
+  void loadEndpoint();
+  const sendVisibility = () => { if (ws?.readyState === 1) ws.send(JSON.stringify({ type: 'visibility', visible: document.visibilityState === 'visible', endpoint })); };
+  const onVis = () => { sendVisibility(); wake(); if (document.visibilityState === 'visible') void loadEndpoint().then(sendVisibility); };
   // Solange die App offen ist, regelmäßig „sichtbar“ melden; bleibt das aus (App eingefroren), schickt der Server wieder Push
-  const beat = setInterval(() => { if (document.visibilityState === 'visible') sendVisibility(); }, 20_000);
+  const beat = setInterval(() => { if (document.visibilityState === 'visible') void loadEndpoint().then(sendVisibility); }, 20_000);
   document.addEventListener('visibilitychange', onVis);
   window.addEventListener('pagehide', sendVisibility);
   window.addEventListener('pageshow', wake);
