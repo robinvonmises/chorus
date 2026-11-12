@@ -42,6 +42,7 @@
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
 html, body { overflow: hidden; }
+html { background: var(--bg); }
 body {
   font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background: var(--bg); color: var(--ink);
@@ -266,6 +267,7 @@ button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: poi
 .emoji-tabs button.on { opacity: 1; background: var(--bg-3); }
 .emoji-title { font-size: 12px; font-weight: 600; color: var(--ink-3); padding: 8px 10px 0; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); padding: 6px; max-height: 260px; overflow-y: auto; }
+.msg-menu .emoji-picker { width: 100%; max-width: none; } /* im Reaktionsmenü die volle Breite nutzen */
 .emoji-grid button { font-size: 24px; padding: 4px; border-radius: 8px; }
 @media (hover: hover) { .emoji-grid button:hover { background: var(--bg-3); } }
 

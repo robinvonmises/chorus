@@ -7,6 +7,22 @@ import { T } from './i18n';
 applyBubbles();
 applyChatBg();
 
+// iOS-Statusleiste: Farbe beim Wechsel Hell/Dunkel nachziehen. Das Meta-Tag wird ersetzt statt geändert,
+// weil iOS eine bloße Änderung in der Web-App oft übersieht. Farbe = Hintergrund der Kopfleiste (--bg).
+const syncThemeColor = () => {
+  const c = getComputedStyle(document.body).backgroundColor;
+  const old = document.querySelector('meta[name="theme-color"]');
+  if (!c || old?.getAttribute('content') === c) return;
+  const m = document.createElement('meta');
+  m.name = 'theme-color';
+  m.content = c;
+  if (old) old.replaceWith(m); else document.head.appendChild(m);
+};
+const darkMq = window.matchMedia?.('(prefers-color-scheme: dark)');
+darkMq?.addEventListener?.('change', () => requestAnimationFrame(syncThemeColor));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') requestAnimationFrame(syncThemeColor); });
+requestAnimationFrame(syncThemeColor);
+
 // iOS verkleinert beim Einblenden der Tastatur nicht die Seite, sondern schiebt sie hoch.
 // Wir passen die App deshalb an den sichtbaren Bereich an, damit nichts verrutscht und keine Lücke entsteht.
 const vv = window.visualViewport;

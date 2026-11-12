@@ -254,6 +254,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         <ImageEditor file={files[editIdx]} onCancel={() => setEditIdx(null)}
           onDone={(nf) => { setFiles((fs) => fs.map((x, j) => (j === editIdx ? nf : x))); setEditIdx(null); }} />
       )}
+      {emoji && <div className="att-menu-bg" onClick={() => setEmoji(false)} />}
       {emoji && <div className="composer-emoji"><EmojiPicker onPick={insertEmoji} /></div>}
       {attMenu && <>
         <div className="att-menu-bg" onClick={() => setAttMenu(false)} />
