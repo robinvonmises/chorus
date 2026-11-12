@@ -117,7 +117,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
     switch (shown) {
       case 'accounts': return <AccountsPage accounts={accounts} sync={sync} lastSync={lastSync} onSync={() => void runSync()} onOpen={(id) => go(`acc:${id}`)} onAdd={onAdd} />;
       case 'me': return <div className="ios-card pad"><MyProfile server={server} onChanged={onProfileChanged} /></div>;
-      case 'ai': return <div className="ios-card pad"><AiSettingsSection /></div>;
+      case 'ai': return <AiSettingsSection />;
       case 'push': return <div className="ios-card pad"><PushSection /></div>;
       case 'look': return <div className="ios-card pad"><BubbleSection nets={[...new Set(accounts.map((a) => a.network))]} /></div>;
       case 'backup': return <div className="ios-card pad"><BackupSection /></div>;

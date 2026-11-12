@@ -621,6 +621,7 @@ function needAi(req: FastifyRequest, chatId: string) {
 app.get('/api/ai/settings', async (req) => A(req).publicSettings());
 app.put('/api/ai/settings', async (req) => A(req).update(req.body as any));
 app.get('/api/ai/voices', async (req) => A(req).voices());
+app.get('/api/ai/openai-models', async (req) => A(req).openaiModels());
 app.post('/api/chats/:id/ai', async (req) => {
   const id = (req.params as any).id;
   const on = !!(req.body as any)?.on;
@@ -683,7 +684,7 @@ app.put('/api/chats/:id/translate', async (req) => {
   if (!c) throw new AiError(404, 'Chat nicht gefunden');
   const b = (req.body ?? {}) as { on?: boolean; out?: boolean; lang?: string | null; langName?: string | null };
   const on = !!b.on;
-  if (on && !A(req).publicSettings().features.text) throw new AiError(400, 'Für die Übersetzung bitte zuerst in den Einstellungen einen Claude-Schlüssel eintragen.');
+  if (on && !A(req).publicSettings().features.text) throw new AiError(400, 'Für die Übersetzung bitte zuerst in den Einstellungen einen KI-Schlüssel (Claude oder ChatGPT) eintragen.');
   if (on && !c.aiEnabled) h.setChatAi(id, true);
   const t: NonNullable<Chat['translate']> = { ...(c.translate ?? {}), on, ...(typeof b.out === 'boolean' ? { out: b.out } : {}) };
   // Zurück auf automatisch: die von Hand gewählte Sprache gilt nicht mehr, bis wieder etwas erkannt ist
@@ -707,7 +708,7 @@ app.put('/api/chats/:id/autopilot', async (req) => {
   const id = (req.params as any).id;
   const c = needAi(req, id);
   if (c.kind === 'channel') throw new AiError(400, 'In Kanälen gibt es keinen Autobot.');
-  if (!A(req).publicSettings().features.text) throw new AiError(400, 'Bitte zuerst einen Claude-Schlüssel eintragen.');
+  if (!A(req).publicSettings().features.text) throw new AiError(400, 'Bitte zuerst einen KI-Schlüssel (Claude oder ChatGPT) eintragen.');
   const b = (req.body ?? {}) as { on?: boolean; max?: number; note?: string; mark?: boolean; reset?: boolean; trigger?: string; only?: string[]; rule?: string; style?: string };
   const cur = c.autopilot ?? { on: false, max: 5, used: 0, note: '', mark: true };
   const max = Math.max(1, Math.min(50, Math.round(Number(b.max ?? cur.max) || 5)));
@@ -937,7 +938,7 @@ app.post('/api/search/ai', async (req) => {
   const h = H(req), ai = A(req);
   const question = String((req.body as any)?.question ?? '').trim().slice(0, 500);
   if (question.length < 3) throw new AiError(400, 'Bitte eine Frage eingeben.');
-  if (!ai.publicSettings().features.text) throw new AiError(400, 'Für die KI-Suche bitte zuerst einen Claude-Schlüssel eintragen.');
+  if (!ai.publicSettings().features.text) throw new AiError(400, 'Für die KI-Suche bitte zuerst einen KI-Schlüssel (Claude oder ChatGPT) eintragen.');
   const all = h.store.getSetting('aiSearchAll', false);
   const allowed = h.store.listChats().filter((c) => all || c.aiEnabled);
   if (!allowed.length) throw new AiError(400, 'Die KI darf noch in keinem Chat suchen. Schalte die KI in einzelnen Chats ein oder erlaube die Suche in allen Chats.');
