@@ -23,10 +23,10 @@ const STATE_TEXT: Record<Account['status']['state'], string> = {
   connected: 'Verbunden', connecting: 'Verbinde …', disconnected: 'Getrennt', need_input: 'Anmeldung offen', qr: 'QR-Code scannen', error: 'Fehler',
 };
 
-type Page = 'me' | 'ai' | 'push' | 'look' | 'backup' | 'storage' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
+type Page = 'me' | 'accounts' | 'ai' | 'push' | 'look' | 'backup' | 'storage' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
 
 const TITLES: Record<string, string> = {
-  me: 'Mein Profil', ai: 'KI-Assistent', push: 'Benachrichtigungen', look: 'Darstellung', backup: 'Sicherung', storage: 'Speicherorte',
+  me: 'Mein Profil', accounts: 'Messenger', ai: 'KI-Assistent', push: 'Benachrichtigungen', look: 'Darstellung', backup: 'Sicherung', storage: 'Speicherorte',
   security: 'Sicherheit', profiles: 'Profile', server: 'Server', about: 'Über Chorus',
 };
 
@@ -60,13 +60,17 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
   const storeVal = [st?.immich.enabled && 'Immich', st?.nextcloud.enabled && 'Nextcloud'].filter(Boolean).join(', ');
   const [pw, setPw] = useState({ a: '', b: '', msg: '' });
   const [page, setPage] = useState<Page | null>(null);
-  const [sync, setSync] = useState<'' | 'läuft …' | 'Fertig' | 'Fehlgeschlagen'>('');
-  const runSync = async () => { if (sync === 'läuft …') return; setSync('läuft …'); try { await onReload(); setSync('Fertig'); } catch { setSync('Fehlgeschlagen'); } };
+  const [sync, setSync] = useState<'idle' | 'busy' | 'fail'>('idle');
+  const [lastSync, setLastSync] = useState(() => Number(localStorage.getItem('inbox:lastSync')) || 0);
+  const runSync = async () => {
+    if (sync === 'busy') return; setSync('busy');
+    try { await onReload(); const t = Date.now(); localStorage.setItem('inbox:lastSync', String(t)); setLastSync(t); setSync('idle'); } catch { setSync('fail'); }
+  };
   const [last, setLast] = useState<Page | null>(null);
   const anim = useExit(!!page, 320);
   const shown = page ?? last;
   const go = (p: Page) => { setLast(p); setPage(p); };
-  const back = () => setPage(null);
+  const back = () => { if (shown?.startsWith('acc:')) go('accounts'); else setPage(null); };
 
   // Vom linken Rand nach rechts wischen = zurück (wie unter iOS)
   const pageRef = useRef<HTMLDivElement>(null);
@@ -111,6 +115,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
     if (!shown) return null;
     if (acc) return <AccountPage acc={acc} onBack={back} />;
     switch (shown) {
+      case 'accounts': return <AccountsPage accounts={accounts} sync={sync} lastSync={lastSync} onSync={() => void runSync()} onOpen={(id) => go(`acc:${id}`)} onAdd={onAdd} />;
       case 'me': return <div className="ios-card pad"><MyProfile server={server} onChanged={onProfileChanged} /></div>;
       case 'ai': return <div className="ios-card pad"><AiSettingsSection /></div>;
       case 'push': return <div className="ios-card pad"><PushSection /></div>;
@@ -119,7 +124,17 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
       case 'storage': return <div className="ios-card pad"><StorageSection /></div>;
       case 'profiles': return <div className="ios-card pad"><ProfilesSection key={`${me.name}:${me.avatar}`} server={server} onRenamed={onProfileChanged} /></div>;
       case 'server': return <div className="ios-card pad"><AdminSection /></div>;
-      case 'about': return <div className="ios-card pad"><p className="muted">Chorus {server.version}. Deine Daten liegen verschlüsselt auf deinem eigenen Server.</p></div>;
+      case 'about': return (
+        <>
+          <div className="ios-hero"><img src="/icon.svg" alt="" width={72} height={72} style={{ borderRadius: 16 }} /><h3>Chorus</h3><small className="muted">Version {server.version}</small></div>
+          <div className="ios-card pad"><p className="muted">Deine Messenger in einer App. Deine Daten liegen verschlüsselt auf deinem eigenen Server.</p></div>
+          <div className="ios-card">
+            <a className="ios-row" href="https://github.com/robinvonmises/chorus" target="_blank" rel="noreferrer"><span className="ios-row-main"><span className="ios-row-text"><span className="ios-title">Quellcode auf GitHub</span></span><Icon name="chevron" size={18} /></span></a>
+            <a className="ios-row" href={`https://github.com/robinvonmises/chorus/releases`} target="_blank" rel="noreferrer"><span className="ios-row-main"><span className="ios-row-text"><span className="ios-title">Neuigkeiten</span></span><Icon name="chevron" size={18} /></span></a>
+          </div>
+          <p className="ios-foot" style={{ marginTop: -14 }}>Freie Software unter der AGPL-3.0.</p>
+        </>
+      );
       case 'security': return (
         <>
           <p className="ios-caption">Zwei-Faktor</p>
@@ -164,23 +179,21 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
               </button>
             </div>
 
-            <p className="ios-caption">Messenger</p>
             <div className="ios-card">
-              {accounts.map((a) => (
-                <Row key={a.id} tile={<Tile color={NETWORKS[a.network].color} letter={NETWORKS[a.network].short} />}
-                  title={a.label} sub={a.status.self && a.status.state === 'connected' ? a.status.self : undefined}
-                  value={<span className={`state ${a.status.state}`}>{STATE_TEXT[a.status.state]}</span>} onClick={() => go(`acc:${a.id}`)} />
-              ))}
-              <Row tile={<Tile color="#34c759" icon="plus" />} title="Messenger hinzufügen" onClick={onAdd} />
-              <Row tile={<Tile color="#007aff" icon="refresh" />} title="Jetzt abgleichen" sub="Holt verpasste Nachrichten von allen Messengern" value={sync || undefined} chevron={false} onClick={() => void runSync()} />
+              <Row tile={<Tile color="#34c759" icon="chat" />} title="Messenger"
+                sub={accounts.length ? [...new Set(accounts.map((a) => NETWORKS[a.network].name))].join(', ') : 'Noch keiner verbunden'}
+                value={accounts.length ? <AccountsBadge accounts={accounts} /> : undefined} onClick={() => go('accounts')} />
             </div>
 
             <div className="ios-card">
               <Row tile={<Tile color="#af52de" icon="sparkle" />} title="KI-Assistent" onClick={() => go('ai')} />
               <Row tile={<Tile color="#ff3b30" icon="bell" />} title="Benachrichtigungen" value={pushOn ? 'Push an' : undefined} onClick={() => go('push')} />
               <Row tile={<Tile color="#007aff" icon="palette" />} title="Darstellung" value={bubbleMode} onClick={() => go('look')} />
+            </div>
+
+            <div className="ios-card">
               <Row tile={<Tile color="#30b0c7" icon="cloud" />} title="Sicherung" onClick={() => go('backup')} />
-              <Row tile={<Tile color="#34c759" icon="download" />} title="Speicherorte" sub="Immich, Nextcloud" value={storeVal || undefined} onClick={() => go('storage')} />
+              <Row tile={<Tile color="#ff9f0a" icon="folder" />} title="Speicherorte" sub="Immich, Nextcloud" value={storeVal || undefined} onClick={() => go('storage')} />
             </div>
 
             <div className="ios-card">
@@ -209,7 +222,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
           <div ref={pageRef} className={`ios-layer ios-page${anim.closing ? ' out' : ''}`}
             onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}>
             <header className="ios-head">
-              <button className="ios-back" onClick={back}><Icon name="back" size={22} /><span>Zurück</span></button>
+              <button className="ios-back" onClick={back}><Icon name="back" size={22} /><span>{shown?.startsWith('acc:') ? 'Messenger' : 'Zurück'}</span></button>
               <h2>{title}</h2>
               <button className="icon-btn" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
             </header>
@@ -218,6 +231,59 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
         )}
       </div>
     </div>
+  );
+}
+
+/** Kurzstatus aller Messenger für die Hauptliste */
+function AccountsBadge({ accounts }: { accounts: Account[] }) {
+  const bad = accounts.filter((a) => a.status.state !== 'connected').length;
+  if (!bad) return <span className="state connected">{accounts.length === 1 ? 'Verbunden' : `${accounts.length} verbunden`}</span>;
+  return <span className="state error">{bad === 1 ? '1 braucht dich' : `${bad} brauchen dich`}</span>;
+}
+
+function ago(t: number): string {
+  if (!t) return 'noch nie';
+  const s = Math.round((Date.now() - t) / 1000);
+  if (s < 60) return 'gerade eben';
+  const m = Math.round(s / 60); if (m < 60) return `vor ${m} Min.`;
+  const h = Math.round(m / 60); if (h < 24) return `vor ${h} Std.`;
+  return new Date(t).toLocaleDateString();
+}
+
+/** Messenger-Übersicht: Status, Abgleich, Konten */
+function AccountsPage({ accounts, sync, lastSync, onSync, onOpen, onAdd }: {
+  accounts: Account[]; sync: 'idle' | 'busy' | 'fail'; lastSync: number; onSync: () => void; onOpen: (id: string) => void; onAdd: () => void;
+}) {
+  const [, tick] = useState(0);
+  useEffect(() => { const t = setInterval(() => tick((x) => x + 1), 30_000); return () => clearInterval(t); }, []);
+  const bad = accounts.filter((a) => a.status.state !== 'connected');
+  const ok = accounts.length > 0 && !bad.length;
+  return (
+    <>
+      <div className="ios-card sync-card">
+        <span className={`sync-dot${ok ? ' ok' : accounts.length ? ' warn' : ''}`}><Icon name={ok ? 'check' : 'alert'} size={18} /></span>
+        <span className="sync-text">
+          <b>{!accounts.length ? 'Noch kein Messenger verbunden' : ok ? 'Alles verbunden' : bad.length === 1 ? `${bad[0].label} braucht dich` : `${bad.length} Messenger brauchen dich`}</b>
+          <small>{sync === 'busy' ? 'Gleiche ab …' : sync === 'fail' ? 'Abgleich fehlgeschlagen' : `Abgeglichen ${ago(lastSync)}`}</small>
+        </span>
+        {accounts.length > 0 && (
+          <button className={`btn sync-btn${sync === 'busy' ? ' busy' : ''}`} onClick={onSync} disabled={sync === 'busy'} title="Holt verpasste Nachrichten von allen Messengern">
+            <Icon name="refresh" size={16} /><span>Abgleichen</span>
+          </button>
+        )}
+      </div>
+      <p className="ios-foot" style={{ marginTop: -18 }}>Chorus empfängt laufend. Abgleichen holt zusätzlich alles nach, was unterwegs verpasst wurde.</p>
+
+      <p className="ios-caption">Verbunden</p>
+      <div className="ios-card">
+        {accounts.map((a) => (
+          <Row key={a.id} tile={<Tile color={NETWORKS[a.network].color} letter={NETWORKS[a.network].short} />}
+            title={a.label} sub={a.status.self && a.status.state === 'connected' ? a.status.self : NETWORKS[a.network].name}
+            value={<span className={`state ${a.status.state}`}>{STATE_TEXT[a.status.state]}</span>} onClick={() => onOpen(a.id)} />
+        ))}
+        <Row tile={<Tile color="#34c759" icon="plus" />} title="Messenger hinzufügen" onClick={onAdd} />
+      </div>
+    </>
   );
 }
 

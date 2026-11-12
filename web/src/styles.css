@@ -1019,3 +1019,13 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .lightbox-actions { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(env(safe-area-inset-bottom) + 14px); display: flex; gap: 14px; z-index: 1; }
 .lightbox-actions .icon-btn { width: 48px; height: 48px; background: rgba(255,255,255,.14); color: #fff; backdrop-filter: blur(8px); }
 .lightbox-actions:empty { display: none; }
+
+/* Einstellungen → Messenger: Statuskarte mit Abgleich-Knopf */
+.sync-card { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.sync-dot { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: var(--ink-3); }
+.sync-dot.ok { background: #34c759; } .sync-dot.warn { background: #ff9500; }
+.sync-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.sync-text small { color: var(--ink-3); font-size: 13px; }
+.sync-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 7px 12px; font-size: 14px; }
+.sync-btn.busy svg { animation: spin 1s linear infinite; }
+a.ios-row { text-decoration: none; }
