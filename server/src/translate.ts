@@ -71,7 +71,7 @@ export class Translator {
         // Leere Zeichenkette = geprüft, keine Übersetzung nötig (z. B. schon Deutsch)
         const upd = store.patchMessage(m.id, { translation: r.translation ?? '', translationFrom: r.translation ? r.langName || null : null });
         if (upd) this.hub.emit({ type: 'message', message: upd });
-        if (r.lang && r.lang !== 'de' && r.langName) {
+        if (r.lang && r.lang !== this.ai.lang && r.langName) {
           const map = m.fromMe ? mine : theirs;
           const e = map.get(r.lang) ?? { lang: r.lang, langName: r.langName, n: 0 }; e.n++; map.set(r.lang, e);
         }

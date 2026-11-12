@@ -1,3 +1,4 @@
+import { localize, uiLang } from './hub.js';
 import { randomUUID } from 'node:crypto';
 import type { Hub } from './hub.js';
 
@@ -57,7 +58,8 @@ export class Planner {
           this.remove(it.id);
           const chat = this.hub.store.getChat(it.chatId);
           this.hub.emit({ type: 'reminder', item: it, chat });
-          this.notify(`⏰ ${chat?.title ?? 'Erinnerung'}`, it.note ? `${it.note}: ${it.text}` : it.text || 'Erinnerung', it.chatId);
+          const rem = localize('Erinnerung', uiLang(this.hub.store));
+          this.notify(`⏰ ${chat?.title ?? rem}`, it.note ? `${it.note}: ${it.text}` : it.text || rem, it.chatId);
         } else {
           try {
             if (!this.sendFn) throw new Error('Senden nicht bereit');

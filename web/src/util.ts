@@ -1,17 +1,18 @@
 import type { Network } from './api';
+import { T, locale } from './i18n';
 
 export const NETWORKS: Record<Network, { name: string; short: string; color: string }> = {
   telegram: { name: 'Telegram', short: 'T', color: 'var(--net-telegram)' },
   signal: { name: 'Signal', short: 'S', color: 'var(--net-signal)' },
   whatsapp: { name: 'WhatsApp', short: 'W', color: 'var(--net-whatsapp)' },
-  email: { name: 'E-Mail', short: '@', color: 'var(--net-email)' },
+  email: { name: T('E-Mail'), short: '@', color: 'var(--net-email)' },
   demo: { name: 'Demo', short: 'D', color: 'var(--net-demo)' },
 };
 
-const dayFmt = new Intl.DateTimeFormat('de-DE', { weekday: 'short' });
-const dateFmt = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
-const timeFmt = new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' });
-const longDay = new Intl.DateTimeFormat('de-DE', { weekday: 'long', day: 'numeric', month: 'long' });
+const dayFmt = new Intl.DateTimeFormat(locale, { weekday: 'short' });
+const dateFmt = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', year: '2-digit' });
+const timeFmt = new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit' });
+const longDay = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long' });
 
 export function listTime(ts: number): string {
   if (!ts) return '';
@@ -24,9 +25,9 @@ export function listTime(ts: number): string {
 export const msgTime = (ts: number) => timeFmt.format(new Date(ts));
 export function dayLabel(ts: number): string {
   const d = new Date(ts), now = new Date();
-  if (d.toDateString() === now.toDateString()) return 'Heute';
+  if (d.toDateString() === now.toDateString()) return T('Heute');
   const y = new Date(now); y.setDate(now.getDate() - 1);
-  if (d.toDateString() === y.toDateString()) return 'Gestern';
+  if (d.toDateString() === y.toDateString()) return T('Gestern');
   return longDay.format(d);
 }
 
@@ -47,7 +48,7 @@ export function fileSize(n: number): string {
   if (!n) return '';
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
+  return `${(n / 1024 / 1024).toFixed(1).replace('.', T(','))} MB`;
 }
 
 export function duration(sec?: number): string {
@@ -60,13 +61,13 @@ export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'
 
 export const EMOJI_GROUPS: [string, string][] = [
   ['Smileys', '😀😃😄😁😆😅🤣😂🙂🙃😉😊😇🥰😍🤩😘😗😚😙😋😛😜🤪😝🤑🤗🤭🤫🤔🤐🤨😐😑😶😏😒🙄😬😮‍💨🤥😌😔😪🤤😴😷🤒🤕🤢🤮🥵🥶🥴😵🤯🤠🥳🥸😎🤓🧐😕😟🙁😮😯😲😳🥺😦😧😨😰😥😢😭😱😖😣😞😓😩😫🥱😤😡😠🤬😈👿💀💩🤡👻👽🤖'],
-  ['Gesten', '👋🤚🖐✋🖖👌🤌🤏✌🤞🤟🤘🤙👈👉👆👇☝👍👎✊👊🤛🤜👏🙌👐🤲🤝🙏✍💪🦾🧠👀👁👅👄'],
-  ['Herzen', '❤️🧡💛💚💙💜🖤🤍🤎💔❣💕💞💓💗💖💘💝💟'],
-  ['Natur', '🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🦆🦅🦉🐴🦄🐝🦋🐌🐞🐢🐍🐙🐠🐬🐳🌵🌲🌳🌴🌱🌿🍀🍁🍂🌷🌹🌺🌸🌼🌻🌞🌝🌚⭐🌟✨⚡🔥🌈☀️⛅☁️🌧⛄❄️💧🌊'],
-  ['Essen', '🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍒🍑🥭🍍🥥🥝🍅🥑🥦🥕🌽🥔🥐🍞🥨🧀🥚🍳🥓🍔🍟🍕🌭🥪🌮🌯🥗🍝🍜🍣🍤🍦🍩🍪🎂🍰🧁🍫🍬🍭☕🍵🍺🍻🥂🍷🥃🍸🍹🧃'],
-  ['Aktivität', '⚽🏀🏈⚾🎾🏐🏉🎱🏓🏸🥅⛳🏹🎣🥊🎽🛹⛸🎿🏂🏋🤸🚴🏊🧘🎯🎮🎲🧩🎨🎬🎤🎧🎼🎹🥁🎷🎺🎸🎉🎊🎁🏆🥇'],
-  ['Dinge', '📱💻⌨🖥🖨🖱💾📷📸📹🎥📞☎📺📻⏰⌛💡🔦🕯💸💵💶💳💎🔧🔨🛠🔑🗝🚪🛏🛋🚿🛁🧸🎈📦📫✉📝📌📎✂🗓📅📈📉📊🔒🔓🚗🚕🚌🚲✈🚀⛵🏠🏡🏢🏥🏖⛰'],
-  ['Symbole', '✅☑✔❌❎➕➖➗❓❔❗❕‼⁉💯🔴🟠🟡🟢🔵🟣⚫⚪🟥🟩🟦⬆⬇⬅➡↩↪🔁🔄🆗🆕🆒🆓ℹ🚫⛔⚠🔞♻💤'],
+  [T('Gesten'), '👋🤚🖐✋🖖👌🤌🤏✌🤞🤟🤘🤙👈👉👆👇☝👍👎✊👊🤛🤜👏🙌👐🤲🤝🙏✍💪🦾🧠👀👁👅👄'],
+  [T('Herzen'), '❤️🧡💛💚💙💜🖤🤍🤎💔❣💕💞💓💗💖💘💝💟'],
+  [T('Natur'), '🐶🐱🐭🐹🐰🦊🐻🐼🐨🐯🦁🐮🐷🐸🐵🐔🐧🐦🦆🦅🦉🐴🦄🐝🦋🐌🐞🐢🐍🐙🐠🐬🐳🌵🌲🌳🌴🌱🌿🍀🍁🍂🌷🌹🌺🌸🌼🌻🌞🌝🌚⭐🌟✨⚡🔥🌈☀️⛅☁️🌧⛄❄️💧🌊'],
+  [T('Essen'), '🍏🍎🍐🍊🍋🍌🍉🍇🍓🫐🍒🍑🥭🍍🥥🥝🍅🥑🥦🥕🌽🥔🥐🍞🥨🧀🥚🍳🥓🍔🍟🍕🌭🥪🌮🌯🥗🍝🍜🍣🍤🍦🍩🍪🎂🍰🧁🍫🍬🍭☕🍵🍺🍻🥂🍷🥃🍸🍹🧃'],
+  [T('Aktivität'), '⚽🏀🏈⚾🎾🏐🏉🎱🏓🏸🥅⛳🏹🎣🥊🎽🛹⛸🎿🏂🏋🤸🚴🏊🧘🎯🎮🎲🧩🎨🎬🎤🎧🎼🎹🥁🎷🎺🎸🎉🎊🎁🏆🥇'],
+  [T('Dinge'), '📱💻⌨🖥🖨🖱💾📷📸📹🎥📞☎📺📻⏰⌛💡🔦🕯💸💵💶💳💎🔧🔨🛠🔑🗝🚪🛏🛋🚿🛁🧸🎈📦📫✉📝📌📎✂🗓📅📈📉📊🔒🔓🚗🚕🚌🚲✈🚀⛵🏠🏡🏢🏥🏖⛰'],
+  [T('Symbole'), '✅☑✔❌❎➕➖➗❓❔❗❕‼⁉💯🔴🟠🟡🟢🔵🟣⚫⚪🟥🟩🟦⬆⬇⬅➡↩↪🔁🔄🆗🆕🆒🆓ℹ🚫⛔⚠🔞♻💤'],
 ];
 
 export function splitEmoji(s: string): string[] {

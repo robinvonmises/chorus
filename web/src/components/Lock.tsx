@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { api, type PublicProfile, type ServerState } from '../api';
 import { deriveKey, keyStore, lastProfile, newSalt, trustStore } from '../keys';
 import { Avatar } from './Rail';
+import { T } from '../i18n';
 
 const ITER = 600_000;
 type Mode = 'pick' | 'setup' | 'unlock' | 'recover';
@@ -46,13 +47,13 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr('');
-    if (mode === 'setup' && first && !name.trim()) return setErr('Wie heißt du? Der Name erscheint bei der Anmeldung.');
-    if (needInvite && !invite.trim()) return setErr('Bitte den Einladungscode eingeben, den du bekommen hast.');
+    if (mode === 'setup' && first && !name.trim()) return setErr(T('Wie heißt du? Der Name erscheint bei der Anmeldung.'));
+    if (needInvite && !invite.trim()) return setErr(T('Bitte den Einladungscode eingeben, den du bekommen hast.'));
     if (mode === 'setup' || mode === 'recover') {
-      if (pw.length < 8) return setErr('Bitte mindestens 8 Zeichen.');
-      if (pw !== pw2) return setErr('Die beiden Passwörter stimmen nicht überein.');
+      if (pw.length < 8) return setErr(T('Bitte mindestens 8 Zeichen.'));
+      if (pw !== pw2) return setErr(T('Die beiden Passwörter stimmen nicht überein.'));
     }
-    if (needOtp && !/^\d{6}$/.test(otp.replace(/\s/g, ''))) return setErr('Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.');
+    if (needOtp && !/^\d{6}$/.test(otp.replace(/\s/g, ''))) return setErr(T('Bitte den 6-stelligen Code aus deiner Authenticator-App eingeben.'));
     setBusy(true);
     try {
       if (mode === 'setup') {
@@ -90,15 +91,15 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
       <div className="lock">
         <div className="lock-card">
           <Logo />
-          <h1>Fast fertig</h1>
-          <p>Das ist dein <b>Wiederherstellungscode</b>. Falls du dein Passwort vergisst, ist er der einzige Weg zurück an deine Daten. Schreib ihn auf oder speichere ihn im Passwort-Manager.</p>
+          <h1>{T('Fast fertig')}</h1>
+          <p>{T('Das ist dein')}{' '}<b>{T('Wiederherstellungscode')}</b>{T('. Falls du dein Passwort vergisst, ist er der einzige Weg zurück an deine Daten. Schreib ihn auf oder speichere ihn im Passwort-Manager.')}</p>
           <div className="recovery-code">{recovery}</div>
           <div className="row gap">
-            <button type="button" className="btn ghost" onClick={() => navigator.clipboard?.writeText(recovery)}>Kopieren</button>
-            <button type="button" className="btn ghost" onClick={() => window.print()}>Drucken</button>
+            <button type="button" className="btn ghost" onClick={() => navigator.clipboard?.writeText(recovery)}>{T('Kopieren')}</button>
+            <button type="button" className="btn ghost" onClick={() => window.print()}>{T('Drucken')}</button>
           </div>
-          <label className="check"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> Ich habe den Code sicher aufbewahrt</label>
-          <button className="btn primary wide" disabled={!saved} onClick={onDone}>Weiter</button>
+          <label className="check"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} /> {T('Ich habe den Code sicher aufbewahrt')}</label>
+          <button className="btn primary wide" disabled={!saved} onClick={onDone}>{T('Weiter')}</button>
         </div>
       </div>
     );
@@ -109,13 +110,13 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
       <div className="lock">
         <div className="lock-card">
           <Logo />
-          <h1>Wer bist du?</h1>
+          <h1>{T('Wer bist du?')}</h1>
           <div className="profile-pick">
             {profiles.map((p) => (
               <button key={p.id} className="profile-btn" onClick={() => choose(p)}>
                 <Avatar name={p.name} size={56} src={p.avatar} />
                 <span>{p.name}</span>
-                {!p.initialized && <small>Einladung</small>}
+                {!p.initialized && <small>{T('Einladung')}</small>}
               </button>
             ))}
           </div>
@@ -125,8 +126,8 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
   }
 
   const switcher = profiles.length > 1 && profile && (
-    <button type="button" className="profile-current" onClick={backToPick} title="Anderes Profil wählen">
-      <Avatar name={profile.name} size={36} src={profile.avatar} /><span><b>{profile.name}</b><small>Profil wechseln</small></span>
+    <button type="button" className="profile-current" onClick={backToPick} title={T('Anderes Profil wählen')}>
+      <Avatar name={profile.name} size={36} src={profile.avatar} /><span><b>{profile.name}</b><small>{T('Profil wechseln')}</small></span>
     </button>
   );
 
@@ -135,39 +136,39 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
       <form className="lock-card" onSubmit={submit}>
         <Logo />
         {mode === 'setup' && first && <>
-          <h1>Willkommen bei Chorus</h1>
-          <p>Lege dein Profil an. Mit deinem Passwort werden deine Chats und Zugangsdaten verschlüsselt. Ohne dieses Passwort kann niemand sie lesen, auch nicht der Server.</p>
-          <input className="input" placeholder="Dein Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus autoComplete="nickname" />
+          <h1>{T('Willkommen bei Chorus')}</h1>
+          <p>{T('Lege dein Profil an. Mit deinem Passwort werden deine Chats und Zugangsdaten verschlüsselt. Ohne dieses Passwort kann niemand sie lesen, auch nicht der Server.')}</p>
+          <input className="input" placeholder={T('Dein Name')} value={name} onChange={(e) => setName(e.target.value)} autoFocus autoComplete="nickname" />
         </>}
         {mode === 'setup' && !first && profile && <>
           {switcher}
-          <h1>Hallo {profile.name}!</h1>
-          <p>Lege dein eigenes Passwort fest. Damit werden deine Chats verschlüsselt, nur du kannst sie lesen.</p>
+          <h1>{T('Hallo')}{' '}{profile.name}!</h1>
+          <p>{T('Lege dein eigenes Passwort fest. Damit werden deine Chats verschlüsselt, nur du kannst sie lesen.')}</p>
           {needInvite && <input className="input otp-input" placeholder="Einladungscode" value={invite} onChange={(e) => setInvite(e.target.value.toUpperCase())} autoComplete="off" autoCapitalize="characters" />}
         </>}
         {mode === 'unlock' && <>
           {switcher}
-          <h1>{profiles.length > 1 && profile ? `Hallo ${profile.name}` : 'Entsperren'}</h1>
-          <p>{useSaved ? 'Gib den Code aus deiner Authenticator-App ein.' : needOtp ? 'Gib dein Passwort und den Code aus deiner Authenticator-App ein.' : 'Gib dein Passwort ein.'}</p>
+          <h1>{profiles.length > 1 && profile ? T('Hallo {0}', profile.name) : T('Entsperren')}</h1>
+          <p>{useSaved ? T('Gib den Code aus deiner Authenticator-App ein.') : needOtp ? T('Gib dein Passwort und den Code aus deiner Authenticator-App ein.') : T('Gib dein Passwort ein.')}</p>
         </>}
         {mode === 'recover' && <>
           {switcher}
-          <h1>Passwort vergessen</h1>
-          <p>Gib deinen Wiederherstellungscode ein und lege ein neues Passwort fest.{profile?.totp ? ' Die Zwei-Faktor-Anmeldung wird dabei ausgeschaltet. Richte sie danach neu ein.' : ''}</p>
+          <h1>{T('Passwort vergessen')}</h1>
+          <p>{T('Gib deinen Wiederherstellungscode ein und lege ein neues Passwort fest.')}{profile?.totp ? T(' Die Zwei-Faktor-Anmeldung wird dabei ausgeschaltet. Richte sie danach neu ein.') : ''}</p>
           <input className="input" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX-XXXX" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
         </>}
         {profile && <input type="text" name="username" autoComplete="username" value={profile.name} readOnly hidden />}
-        {!(mode === 'unlock' && useSaved) && <input className="input" type="password" placeholder={mode === 'unlock' ? 'Passwort' : 'Neues Passwort'} value={pw}
+        {!(mode === 'unlock' && useSaved) && <input className="input" type="password" placeholder={mode === 'unlock' ? T('Passwort') : T('Neues Passwort')} value={pw}
           onChange={(e) => setPw(e.target.value)} autoFocus={mode === 'unlock' || (mode === 'setup' && !first && !needInvite)} autoComplete={mode === 'unlock' ? 'current-password' : 'new-password'} />}
-        {(mode === 'setup' || mode === 'recover') && <input className="input" type="password" placeholder="Passwort wiederholen" value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" />}
-        {needOtp && <input className="input otp-input" inputMode="numeric" pattern="[0-9 ]*" maxLength={7} placeholder="Code (6 Ziffern)"
+        {(mode === 'setup' || mode === 'recover') && <input className="input" type="password" placeholder={T('Passwort wiederholen')} value={pw2} onChange={(e) => setPw2(e.target.value)} autoComplete="new-password" />}
+        {needOtp && <input className="input otp-input" inputMode="numeric" pattern="[0-9 ]*" maxLength={7} placeholder={T('Code (6 Ziffern)')}
           value={otp} onChange={(e) => setOtp(e.target.value)} autoComplete="one-time-code" autoFocus={useSaved} />}
-        {!(mode === 'unlock' && useSaved) && <label className="check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> {needOtp ? 'Diesem Gerät 30 Tage vertrauen' : 'Auf diesem Gerät angemeldet bleiben'}</label>}
+        {!(mode === 'unlock' && useSaved) && <label className="check"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} /> {needOtp ? T('Diesem Gerät 30 Tage vertrauen') : T('Auf diesem Gerät angemeldet bleiben')}</label>}
         {err && <div className="error">{err}</div>}
-        <button className="btn primary wide" disabled={busy}>{busy ? 'Einen Moment …' : mode === 'setup' ? (first ? 'Einrichten' : 'Passwort festlegen') : mode === 'unlock' ? 'Entsperren' : 'Zurücksetzen'}</button>
-        {mode === 'unlock' && useSaved && profile && <button type="button" className="link" onClick={async () => { await keyStore.clear(profile.id); setUseSaved(false); setErr(''); }}>Mit Passwort anmelden</button>}
-        {mode === 'unlock' && !useSaved && <button type="button" className="link" onClick={() => { setMode('recover'); setErr(''); }}>{profile?.totp ? 'Passwort oder Handy verloren?' : 'Passwort vergessen?'}</button>}
-        {mode === 'recover' && <button type="button" className="link" onClick={() => { setMode('unlock'); setErr(''); }}>Zurück</button>}
+        <button className="btn primary wide" disabled={busy}>{busy ? T('Einen Moment …') : mode === 'setup' ? (first ? 'Einrichten' : T('Passwort festlegen')) : mode === 'unlock' ? T('Entsperren') : T('Zurücksetzen')}</button>
+        {mode === 'unlock' && useSaved && profile && <button type="button" className="link" onClick={async () => { await keyStore.clear(profile.id); setUseSaved(false); setErr(''); }}>{T('Mit Passwort anmelden')}</button>}
+        {mode === 'unlock' && !useSaved && <button type="button" className="link" onClick={() => { setMode('recover'); setErr(''); }}>{profile?.totp ? T('Passwort oder Handy verloren?') : T('Passwort vergessen?')}</button>}
+        {mode === 'recover' && <button type="button" className="link" onClick={() => { setMode('unlock'); setErr(''); }}>{T('Zurück')}</button>}
       </form>
     </div>
   );

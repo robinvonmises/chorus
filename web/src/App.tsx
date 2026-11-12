@@ -17,6 +17,7 @@ import { PlayerBar } from './components/PlayerBar';
 import { usePlayer } from './player';
 import { Rail, Avatar } from './components/Rail';
 import { previewOf } from './components/Message';
+import { T } from './i18n';
 
 /**
  * Frisch geladene Liste mit der alten abgleichen: Unveränderte Einträge behalten ihr altes Objekt.
@@ -66,7 +67,7 @@ export default function App() {
       setServer(s);
       setError('');
     } catch (e: any) {
-      setError('Server nicht erreichbar. Versuche es gleich nochmal.');
+      setError(T('Server nicht erreichbar. Versuche es gleich nochmal.'));
       setTimeout(boot, 3000);
     }
     setReady(true);
@@ -162,7 +163,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     else if (e.type === 'reminder') {
       const c = e.chat;
       if (c) {
-        setBanner((b) => ({ chat: c, text: `⏰ ${e.item.note ? e.item.note + ': ' : ''}${e.item.text || 'Erinnerung'}`, n: (b?.n ?? 0) + 1, msgId: e.item.messageId ?? undefined }));
+        setBanner((b) => ({ chat: c, text: `⏰ ${e.item.note ? e.item.note + ': ' : ''}${e.item.text || T('Erinnerung')}`, n: (b?.n ?? 0) + 1, msgId: e.item.messageId ?? undefined }));
         if (bannerTimer.current) clearTimeout(bannerTimer.current);
         reminderUntil.current = Date.now() + 12000;
         bannerTimer.current = setTimeout(() => setBanner(null), 12000);
@@ -313,16 +314,16 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
     setGone((g) => new Set([...g, ...ids]));
     setActive((a) => (a && ids.includes(a) ? null : a));
     const failed: string[] = []; let err = '';
-    await Promise.all(ids.map((id) => api.deleteChat(id).catch((e: any) => { failed.push(id); err = e?.message ?? 'Fehler'; })));
+    await Promise.all(ids.map((id) => api.deleteChat(id).catch((e: any) => { failed.push(id); err = e?.message ?? T('Fehler'); })));
     setGone((g) => { const n = new Set(g); for (const id of ids) n.delete(id); return n; });
-    if (failed.length) return `Löschen fehlgeschlagen${err ? `: ${err}` : ''}`;
+    if (failed.length) return T('Löschen fehlgeschlagen{0}', err ? `: ${err}` : '');
     setChats((cs) => { const n = new Map(cs); for (const id of ids) n.delete(id); return n; });
     return '';
   }, []);
   const sortedChats = useMemo(() => [...chats.values()].filter((c) => !gone.has(c.id)).sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.lastTs - a.lastTs), [chats, gone]);
   const unreadTotal = useMemo(() => sortedChats.reduce((n, c) => n + (c.muted || c.archived ? 0 : c.unread), 0), [sortedChats]);
   useEffect(() => {
-    document.title = unreadTotal ? `(${unreadTotal}) Chorus` : 'Chorus';
+    document.title = unreadTotal ? T('({0}) Chorus', unreadTotal) : 'Chorus';
     const n = navigator as any; // setAppBadge() ohne Zahl zeigt einen Punkt, deshalb bei 0 ausdrücklich löschen
     (unreadTotal ? n.setAppBadge?.(unreadTotal) : n.clearAppBadge?.())?.catch?.(() => {});
   }, [unreadTotal]);
@@ -358,7 +359,7 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         onAdd={() => setPanel('add')} onSettings={() => setPanel('settings')} onNew={() => setPanel('new')} online={online} problems={problems}
         onFixAccount={() => setPanel('settings')} previewOf={previewOf}
         onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })} onRemove={removeChats}
-        onOpenMessage={openAt} onGallery={() => setGallery({ title: 'Medien, Dateien & Links' })}
+        onOpenMessage={openAt} onGallery={() => setGallery({ title: T('Medien, Dateien & Links') })}
       />
       <main className="pane-chat">
         {chat ? (
@@ -371,9 +372,9 @@ function Main({ server, onLocked, onRefresh }: { server: ServerState; onLocked: 
         ) : (
           <div className="empty-chat">
             <img src="/icon.svg" width={72} alt="" />
-            <h2>Chorus</h2>
-            <p>Wähle links einen Chat aus.</p>
-            {!accounts.length && <button className="btn primary" onClick={() => setPanel('add')}>Messenger verbinden</button>}
+            <h2>{T('Chorus')}</h2>
+            <p>{T('Wähle links einen Chat aus.')}</p>
+            {!accounts.length && <button className="btn primary" onClick={() => setPanel('add')}>{T('Messenger verbinden')}</button>}
           </div>
         )}
       </main>

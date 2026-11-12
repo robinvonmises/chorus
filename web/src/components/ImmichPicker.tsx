@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, type ImmichAlbum, type ImmichAsset } from '../api';
 import { Icon } from './Icon';
+import { T } from '../i18n';
 
 /** Fotos und Videos aus Immich zum Anhängen auswählen: neueste zuerst, Alben, Suche */
 export function ImmichPicker({ onClose, onPick }: { onClose: () => void; onPick: (files: File[]) => void }) {
@@ -25,11 +26,11 @@ export function ImmichPicker({ onClose, onPick }: { onClose: () => void; onPick:
       const r = await api.immichAssets({ page, album: album?.id, q: query || undefined });
       if (g !== gen.current) return;
       setItems((x) => (reset ? r.items : [...x, ...r.items])); setNext(r.next);
-    } catch (e: any) { if (g === gen.current) setErr(e.message ?? 'Fehler'); }
+    } catch (e: any) { if (g === gen.current) setErr(e.message ?? T('Fehler')); }
     finally { if (g === gen.current) setLoading(false); }
   };
   useEffect(() => { if (showGrid) { setItems([]); setNext(1); void load(1, true); } }, [tab, album?.id, query]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (tab === 'albums' && !albums) api.immichAlbums().then(setAlbums, (e: any) => setErr(e.message ?? 'Fehler')); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab === 'albums' && !albums) api.immichAlbums().then(setAlbums, (e: any) => setErr(e.message ?? T('Fehler'))); }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Nachladen, sobald das Ende der Liste in Sicht kommt
   const end = useRef<HTMLDivElement>(null);
@@ -43,25 +44,25 @@ export function ImmichPicker({ onClose, onPick }: { onClose: () => void; onPick:
   const attach = async () => {
     setBusy(true); setErr('');
     try { onPick(await Promise.all(sel.map((a) => api.immichFile(a)))); onClose(); }
-    catch (e: any) { setErr(e.message ?? 'Fehler'); setBusy(false); }
+    catch (e: any) { setErr(e.message ?? T('Fehler')); setBusy(false); }
   };
 
   return (
     <div className="modal-bg nc-top" onClick={onClose}>
-      <div className="modal wide im-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Aus Immich anhängen">
+      <div className="modal wide im-sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={T('Aus Immich anhängen')}>
         <header className="modal-head">
-          {album && <button className="icon-btn" onClick={() => setAlbum(null)} aria-label="Zurück"><Icon name="back" /></button>}
+          {album && <button className="icon-btn" onClick={() => setAlbum(null)} aria-label={T('Zurück')}><Icon name="back" /></button>}
           <h2>{album ? album.name : 'Immich'}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Schließen"><Icon name="close" /></button>
+          <button className="icon-btn" onClick={onClose} aria-label={T('Schließen')}><Icon name="close" /></button>
         </header>
         <div className="modal-body">
           {!album && <div className="seg">
-            <button className={tab === 'recent' ? 'on' : ''} onClick={() => setTab('recent')}>Fotos</button>
-            <button className={tab === 'albums' ? 'on' : ''} onClick={() => setTab('albums')}>Alben</button>
+            <button className={tab === 'recent' ? 'on' : ''} onClick={() => setTab('recent')}>{T('Fotos')}</button>
+            <button className={tab === 'albums' ? 'on' : ''} onClick={() => setTab('albums')}>{T('Alben')}</button>
           </div>}
           {tab === 'recent' && !album && (
             <form className="row" onSubmit={(e) => { e.preventDefault(); setQuery(q.trim()); }}>
-              <input className="input" type="search" enterKeyHint="search" autoComplete="off" placeholder="Suchen, z. B. „Strand“ oder „Hund“" value={q}
+              <input className="input" type="search" enterKeyHint="search" autoComplete="off" placeholder={T('Suchen, z. B. „Strand“ oder „Hund“')} value={q}
                 onChange={(e) => { setQ(e.target.value); if (!e.target.value) setQuery(''); }} />
             </form>
           )}
@@ -87,16 +88,16 @@ export function ImmichPicker({ onClose, onPick }: { onClose: () => void; onPick:
                     <b>{al.name}</b><small>{al.count}</small>
                   </button>
                 ))}
-                {albums && !albums.length && <p className="muted small">Keine Alben.</p>}
+                {albums && !albums.length && <p className="muted small">{T('Keine Alben.')}</p>}
               </div>
             )}
             <div ref={end} />
-            {(loading || (tab === 'albums' && !album && !albums && !err)) && <p className="muted small">Lädt …</p>}
-            {showGrid && !loading && !items.length && !err && <p className="muted small">{query ? 'Nichts gefunden.' : 'Keine Fotos.'}</p>}
+            {(loading || (tab === 'albums' && !album && !albums && !err)) && <p className="muted small">{T('Lädt …')}</p>}
+            {showGrid && !loading && !items.length && !err && <p className="muted small">{query ? T('Nichts gefunden.') : T('Keine Fotos.')}</p>}
           </div>
           {err && <p className="muted small">{err}</p>}
           <button className="btn primary" disabled={busy || !sel.length} onClick={() => void attach()}>
-            <Icon name="attach" size={18} />{busy ? 'Wird geladen …' : sel.length > 1 ? `${sel.length} anhängen` : 'Anhängen'}
+            <Icon name="attach" size={18} />{busy ? T('Wird geladen …') : sel.length > 1 ? T('{0} anhängen', sel.length) : T('Anhängen')}
           </button>
         </div>
       </div>

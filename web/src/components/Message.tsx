@@ -8,13 +8,14 @@ import { whenLabel } from './WhenPicker';
 import { Icon } from './Icon';
 import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
+import { T, lang, locale } from '../i18n';
 
 export function previewOf(m: Message): string {
-  if (m.deleted) return 'Nachricht gelöscht';
+  if (m.deleted) return T('Nachricht gelöscht');
   if (m.text) return m.text;
   const a = m.attachments[0];
   if (!a) return '';
-  return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
+  return { image: '📷 ' + T('Foto'), video: '🎬 ' + T('Video'), audio: '🎵 Audio', voice: '🎤 ' + T('Sprachnachricht'), file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
 export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
@@ -67,11 +68,11 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
         {showName && group && !m.fromMe && <div className="sender" style={{ color: `hsl(${hue(m.senderName)} 50% 42%)` }}>{m.senderName}</div>}
         {replied !== undefined && m.replyToRemoteId && (
           <button className="quote" onClick={() => onJump(m.replyToRemoteId!)}>
-            <b>{replied ? (replied.fromMe ? 'Du' : replied.senderName) : 'Nachricht'}</b>
-            <span>{replied ? previewOf(replied) : 'Ältere Nachricht'}</span>
+            <b>{replied ? (replied.fromMe ? T('Du') : replied.senderName) : T('Nachricht')}</b>
+            <span>{replied ? previewOf(replied) : T('Ältere Nachricht')}</span>
           </button>
         )}
-        {m.deleted ? <i>Diese Nachricht wurde gelöscht.</i> : <>
+        {m.deleted ? <i>{T('Diese Nachricht wurde gelöscht.')}</i> : <>
           {mosaic && <Mosaic tiles={tiles} lead={m} />}
           {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
@@ -80,28 +81,28 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
             // Eigene, übersetzt gesendete Nachricht: darunter steht das deutsche Original. Sonst die deutsche Übersetzung.
             const orig = m.fromMe && !m.translationFrom;
             const from = m.translationFrom ? adjLang(m.translationFrom) : trLang;
-            return <div className={`translation ${orig ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{orig ? <><small>Original</small>{m.translation}</> : <>{from && <small>Aus dem {from}</small>}{m.translation}</>}</span></div>;
+            return <div className={`translation ${orig ? 'orig' : ''}`}><Icon name="globe" size={13} /> <span>{orig ? <><small>{T('Original')}</small>{m.translation}</> : <>{from && <small>{T('Aus dem')}{' '}{from}</small>}{m.translation}</>}</span></div>;
           })()}
         </>}
         <span className="meta">
-          {reminder && <span className="remind-tag" title="Erinnerung">⏰ {whenLabel(reminder)}</span>}
-          {m.edited && !m.deleted && <span>bearbeitet</span>}
+          {reminder && <span className="remind-tag" title={T('Erinnerung')}>⏰ {whenLabel(reminder)}</span>}
+          {m.edited && !m.deleted && <span>{T('bearbeitet')}</span>}
           <span>{msgTime(last.ts)}</span>
           {last.fromMe && (last.status === 'failed'
-            ? <button className="st failed" title="Nicht gesendet – tippen für „Erneut senden“" aria-label="Nicht gesendet, Optionen" onClick={(e) => { e.stopPropagation(); onAction(last, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>
+            ? <button className="st failed" title={T('Nicht gesendet – tippen für „Erneut senden“')} aria-label={T('Nicht gesendet, Optionen')} onClick={(e) => { e.stopPropagation(); onAction(last, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>
             : <StatusIcon s={last.status} />)}
         </span>
       </div>
       {!m.deleted && (
         <div className="hover-actions">
-          <button className="icon-btn small" title="Reagieren" onClick={(e) => onAction(m, { x: e.clientX, y: e.clientY })}><Icon name="smile" size={18} /></button>
-          <button className="icon-btn small" title="Mehr" onClick={(e) => onAction(m, { x: e.clientX, y: e.clientY })}><Icon name="more" size={18} /></button>
+          <button className="icon-btn small" title={T("Reagieren")} onClick={(e) => onAction(m, { x: e.clientX, y: e.clientY })}><Icon name="smile" size={18} /></button>
+          <button className="icon-btn small" title={T('Mehr')} onClick={(e) => onAction(m, { x: e.clientX, y: e.clientY })}><Icon name="more" size={18} /></button>
         </div>
       )}
       {groups.size > 0 && (
         <div className="reactions">
           {[...groups].map(([emoji, g]) => (
-            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? 'Reaktion entfernen' : 'Auch reagieren'}>
+            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? T('Reaktion entfernen') : T('Auch reagieren')}>
               {emoji}{g.n > 1 && <span>{g.n}</span>}
             </button>
           ))}
@@ -119,14 +120,14 @@ function Transcript({ m, onTranscribe }: { m: Message; onTranscribe?: (m: Messag
   if (!onTranscribe || m.status === 'pending') return null;
   return (
     <button className="transcribe-btn" disabled={busy} onClick={async () => { setBusy(true); await onTranscribe(m); setBusy(false); }}>
-      {busy ? <><span className="spinner" /> Wird transkribiert …</> : <><Icon name="file" size={14} /> Transkribieren</>}
+      {busy ? <><span className="spinner" /> {T('Wird transkribiert …')}</> : <><Icon name="file" size={14} /> {T('Transkribieren')}</>}
     </button>
   );
 }
 
 function StatusIcon({ s }: { s: Message['status'] }) {
   if (s === 'pending') return <Icon name="clock" size={14} className="st" />;
-  if (s === 'failed') return <span className="st failed" title="Nicht gesendet"><Icon name="alert" size={14} /></span>;
+  if (s === 'failed') return <span className="st failed" title={T('Nicht gesendet')}><Icon name="alert" size={14} /></span>;
   if (s === 'read') return <Icon name="checks" size={16} className="st read" />;
   if (s === 'delivered') return <Icon name="checks" size={16} className="st" />;
   return <Icon name="check" size={14} className="st" />;
@@ -185,7 +186,7 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
   const url = attachmentUrl(m, i);
   const [failed, setFailed] = useState(false);
   const pending = m.status === 'pending';
-  if (failed) return <FileCard m={m} a={a} i={i} note="Vorschau nicht verfügbar" />;
+  if (failed) return <FileCard m={m} a={a} i={i} note={T('Vorschau nicht verfügbar')} />;
   if (a.kind === 'image' || a.kind === 'sticker') {
     // Größe bekannt: Breite und Seitenverhältnis fest vorgeben, damit beim Laden nichts springt
     const sized = a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined;
@@ -218,10 +219,10 @@ function VoicePlayer({ m, i, url, dur, voice, name }: { m: Message; i: number; u
   const mine = p.track?.key === key;
   const total = mine ? p.total || dur || 0 : dur ?? 0;
   const pos = mine ? p.pos : 0;
-  const start = () => url && player.play({ key, url, chatId: m.chatId, sender: m.fromMe ? 'Du' : m.senderName, voice, dur });
+  const start = () => url && player.play({ key, url, chatId: m.chatId, sender: m.fromMe ? T('Du') : m.senderName, voice, dur });
   return (
     <div className="voice">
-      <button className="voice-play" onClick={start} disabled={!url} aria-label={mine && p.playing ? 'Pause' : 'Abspielen'}><Icon name={mine && p.playing ? 'pause' : 'play'} size={18} /></button>
+      <button className="voice-play" onClick={start} disabled={!url} aria-label={mine && p.playing ? T('Pause') : T('Abspielen')}><Icon name={mine && p.playing ? 'pause' : 'play'} size={18} /></button>
       <div className="voice-track" onClick={(e) => {
         if (!mine || !total) return start();
         const r = (e.currentTarget as HTMLElement).getBoundingClientRect();

@@ -3,7 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Store } from './db.js';
 import type { Chat, Message } from './types.js';
-import { previewText } from './hub.js';
+import { localize, previewText, uiLang } from './hub.js';
 
 const host = (u: string) => { try { return new URL(u).host; } catch { return '?'; } };
 
@@ -48,10 +48,11 @@ export class Push {
   notify(store: Store, chat: Chat, m: Message) {
     if (!this.subs(store).length) { console.log('[push] übersprungen: keine Geräte angemeldet'); return; }
     const full = this.preview(store);
-    const text = previewText(m);
+    const lang = uiLang(store);
+    const text = localize(previewText(m), lang);
     void this.send(store, {
       title: full ? chat.title : 'Chorus',
-      body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : 'Neue Nachricht',
+      body: full ? (chat.kind === 'direct' ? text : `${m.senderName}: ${text}`) : localize('Neue Nachricht', lang),
       chatId: chat.id, tag: chat.id,
     });
   }

@@ -13,6 +13,7 @@ import { NextcloudBrowser } from './NextcloudBrowser';
 import { ImmichPicker } from './ImmichPicker';
 import { useAi } from '../aiState';
 import { WhenPicker, whenLabel } from './WhenPicker';
+import { T, lang, locale } from '../i18n';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
@@ -23,7 +24,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
   // Live-Übersetzung: eigene Nachrichten in der Sprache des Chatpartners senden (pro Nachricht abschaltbar)
   const tr = chat.translate;
-  const canTr = !!(tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName);
+  const canTr = !!(tr?.on && tr.out !== false && tr.lang && tr.lang !== lang && tr.langName);
   // Übersetzung an, aber noch keine Sprache bekannt: Hinweis zum Wählen
   const trUnknown = !!(tr?.on && tr.out !== false && !tr.lang);
   const [noTr, setNoTr] = useState(false);
@@ -77,7 +78,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const keepKeyboard = (e: React.SyntheticEvent) => { if (document.activeElement === ta.current) e.preventDefault(); };
   const send = async () => {
     const t = text.trim();
-    if (disabled) return onError('Messenger ist gerade nicht verbunden.');
+    if (disabled) return onError(T('Messenger ist gerade nicht verbunden.'));
     if (editing) {
       if (!t) return;
       setText(''); onSent();
@@ -123,7 +124,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
     try {
       await api.plan({ kind: 'send', chatId: chat.id, at, text: t, replyTo: replyTo?.remoteId ?? null, translate: canTr && !noTr });
       setText(''); setNoTr(false); onSent();
-      onInfo?.(`Wird ${whenLabel(at)} gesendet`);
+      onInfo?.(T('Wird {0} gesendet', whenLabel(at)));
     } catch (e: any) { onError(e.message); }
   };
   const sendPress = useRef<number | null>(null);
@@ -134,7 +135,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const sendAsVoice = async () => {
     const t = text.trim();
     if (!t || speaking) return;
-    if (disabled) return onError('Messenger ist gerade nicht verbunden.');
+    if (disabled) return onError(T('Messenger ist gerade nicht verbunden.'));
     setSpeaking(true);
     try { await api.ai.voice(chat.id, t, replyTo?.remoteId); setText(''); onSent(); }
     catch (e: any) { onError(e.message); }
@@ -147,7 +148,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   };
 
   const startRec = async () => {
-    if (disabled) return onError('Messenger ist gerade nicht verbunden.');
+    if (disabled) return onError(T('Messenger ist gerade nicht verbunden.'));
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
       const mime = ['audio/ogg;codecs=opus', 'audio/webm;codecs=opus', 'audio/mp4'].find((m) => MediaRecorder.isTypeSupported(m)) ?? '';
@@ -163,7 +164,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         const blob = new Blob(chunks.current, { type: r.mimeType || 'audio/webm' });
         const ext = blob.type.includes('ogg') ? 'ogg' : blob.type.includes('mp4') ? 'm4a' : 'webm';
         // Blase sofort zeigen, nicht erst nach dem Senden
-        const oid = outbox.add({ chatId: chat.id, name: 'Sprachnachricht', kind: 'voice', duration: Math.round(secs), url: null });
+        const oid = outbox.add({ chatId: chat.id, name: T('Sprachnachricht'), kind: 'voice', duration: Math.round(secs), url: null });
         onSent();
         try {
           await api.upload(chat.id, blob, `sprachnachricht.${ext}`, { voice: true, duration: Math.round(secs), replyTo: replyTo?.remoteId,
@@ -175,7 +176,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
       recorder.current = r;
       setRec({ start, secs: 0 });
     } catch {
-      onError('Kein Zugriff aufs Mikrofon. Bitte im Browser erlauben (nur über HTTPS möglich).');
+      onError(T('Kein Zugriff aufs Mikrofon. Bitte im Browser erlauben (nur über HTTPS möglich).'));
     }
   };
   useEffect(() => {
@@ -201,46 +202,46 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
 
   return (
     <footer className="composer-wrap">
-      {when && <WhenPicker title="Später senden" confirm="Planen" hint={`„${text.trim().slice(0, 80)}${text.trim().length > 80 ? '…' : ''}“ wird automatisch gesendet${canTr && !noTr ? `, übersetzt auf ${tr!.langName}` : ''}.`}
+      {when && <WhenPicker title={T('Später senden')} confirm={T('Planen')} hint={T('„{0}{1}“ wird automatisch gesendet{2}.', text.trim().slice(0, 80), text.trim().length > 80 ? '…' : '', canTr && !noTr ? T(', übersetzt auf {0}', tr!.langName) : '')}
         onPick={schedule} onClose={() => setWhen(false)} />}
       {canTr && !editing && (
         <div className="tr-chip">
           <Icon name="globe" size={15} />
-          <span>{noTr ? "Ohne Übersetzung senden" : `Antwort wird auf ${tr!.langName} übersetzt`}</span>
-          <button className="link-btn" onClick={() => setNoTr((v) => !v)}>{noTr ? "Übersetzen" : "Original"}</button>
+          <span>{noTr ? T('Ohne Übersetzung senden') : T('Antwort wird auf {0} übersetzt', tr!.langName)}</span>
+          <button className="link-btn" onClick={() => setNoTr((v) => !v)}>{noTr ? T('Übersetzen') : "Original"}</button>
         </div>
       )}
       {trUnknown && !editing && (
         <div className="tr-chip">
           <Icon name="globe" size={15} />
-          <span>Sprache noch unbekannt</span>
-          {onPickLang && <button className="link-btn" onClick={onPickLang}>Sprache wählen</button>}
+          <span>{T('Sprache noch unbekannt')}</span>
+          {onPickLang && <button className="link-btn" onClick={onPickLang}>{T('Sprache wählen')}</button>}
         </div>
       )}
       {(replyTo || editing) && (
         <div className="composer-context">
           <Icon name={editing ? 'edit' : 'reply'} size={18} />
-          <div><b>{editing ? 'Nachricht bearbeiten' : replyTo!.fromMe ? 'Antwort an dich' : `Antwort an ${replyTo!.senderName}`}</b><span>{previewOf((editing ?? replyTo)!)}</span></div>
-          <button className="icon-btn small" onClick={() => { onCancel(); if (editing) setText(''); }} aria-label="Abbrechen"><Icon name="close" size={18} /></button>
+          <div><b>{editing ? T('Nachricht bearbeiten') : replyTo!.fromMe ? T('Antwort an dich') : T('Antwort an {0}', replyTo!.senderName)}</b><span>{previewOf((editing ?? replyTo)!)}</span></div>
+          <button className="icon-btn small" onClick={() => { onCancel(); if (editing) setText(''); }} aria-label={T('Abbrechen')}><Icon name="close" size={18} /></button>
         </div>
       )}
       {files.length > 0 && (
         <div className="composer-files">
           {files.map((f, i) => isVideo(f) ? (
             <span key={i} className="file-thumb">
-              <button className={`file-thumb-img ${vEdits.has(f) ? 'edited' : ''}`} onClick={() => setEditIdx(i)} aria-label="Video bearbeiten"><VideoThumb file={f} /><span className="file-thumb-edit"><Icon name={vEdits.has(f) ? 'check' : 'scissors'} size={13} /></span></button>
-              <button className="file-thumb-x" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label="Entfernen"><Icon name="close" size={12} /></button>
+              <button className={`file-thumb-img ${vEdits.has(f) ? 'edited' : ''}`} onClick={() => setEditIdx(i)} aria-label={T('Video bearbeiten')}><VideoThumb file={f} /><span className="file-thumb-edit"><Icon name={vEdits.has(f) ? 'check' : 'scissors'} size={13} /></span></button>
+              <button className="file-thumb-x" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label={T('Entfernen')}><Icon name="close" size={12} /></button>
             </span>
           ) : f.type.startsWith('image/') && !/svg|gif/.test(f.type) ? (
             <span key={i} className="file-thumb">
-              <button className="file-thumb-img" onClick={() => setEditIdx(i)} aria-label="Bild bearbeiten"><Thumb file={f} /><span className="file-thumb-edit"><Icon name="pen" size={13} /></span></button>
-              <button className="file-thumb-x" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label="Entfernen"><Icon name="close" size={12} /></button>
+              <button className="file-thumb-img" onClick={() => setEditIdx(i)} aria-label={T('Bild bearbeiten')}><Thumb file={f} /><span className="file-thumb-edit"><Icon name="pen" size={13} /></span></button>
+              <button className="file-thumb-x" onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label={T('Entfernen')}><Icon name="close" size={12} /></button>
             </span>
           ) : (
             <span key={i} className="file-chip">
               {f.type.startsWith('image/') ? <Thumb file={f} /> : <Icon name="file" size={18} />}
               <span>{f.name}</span>
-              <button onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label="Entfernen"><Icon name="close" size={14} /></button>
+              <button onClick={() => setFiles((fs) => fs.filter((_, j) => j !== i))} aria-label={T('Entfernen')}><Icon name="close" size={14} /></button>
             </span>
           ))}
         </div>
@@ -257,9 +258,9 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
       {attMenu && <>
         <div className="att-menu-bg" onClick={() => setAttMenu(false)} />
         <div className="att-menu menu-list" role="menu">
-          <button onClick={() => { setAttMenu(false); fileIn.current?.click(); }}><Icon name="attach" size={18} />Fotos und Dateien vom Gerät</button>
-          {storage?.immich.enabled && <button onClick={() => { setAttMenu(false); setImPick(true); }}><Icon name="photos" size={18} />Aus Immich</button>}
-          {storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />Aus Nextcloud</button>}
+          <button onClick={() => { setAttMenu(false); fileIn.current?.click(); }}><Icon name="attach" size={18} />{T('Fotos und Dateien vom Gerät')}</button>
+          {storage?.immich.enabled && <button onClick={() => { setAttMenu(false); setImPick(true); }}><Icon name="photos" size={18} />{T('Aus Immich')}</button>}
+          {storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />{T('Aus Nextcloud')}</button>}
         </div>
       </>}
       {imPick && <ImmichPicker onClose={() => setImPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
@@ -268,32 +269,32 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
         <div className="composer recording">
           <button className="icon-btn" onClick={() => stopRec(true)} aria-label="Verwerfen"><Icon name="trash" /></button>
           <span className="rec-dot" /> <span className="rec-time">{duration(rec.secs)}</span>
-          <span className="rec-hint">Aufnahme läuft …</span>
-          <button className="send-btn" onClick={() => stopRec(false)} aria-label="Sprachnachricht senden"><Icon name="send" /></button>
+          <span className="rec-hint">{T('Aufnahme läuft …')}</span>
+          <button className="send-btn" onClick={() => stopRec(false)} aria-label={T('Sprachnachricht senden')}><Icon name="send" /></button>
         </div>
       ) : (
         <div className={`composer ${text.trim() && !tools ? 'compact' : ''}`}>
-          <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label="Mehr Funktionen"><Icon name="plus" /></button>
-          {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label="KI-Assistent" title="KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen"><Icon name="robot" /></button>}
-          {!editing && <button className={`icon-btn tool ${attMenu ? 'on' : ''}`} onClick={() => { if (storage?.immich.enabled || storage?.nextcloud.enabled) setAttMenu((v) => !v); else fileIn.current?.click(); }} aria-label="Anhängen"><Icon name="attach" /></button>}
+          <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label={T('Mehr Funktionen')}><Icon name="plus" /></button>
+          {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>}
+          {!editing && <button className={`icon-btn tool ${attMenu ? 'on' : ''}`} onClick={() => { if (storage?.immich.enabled || storage?.nextcloud.enabled) setAttMenu((v) => !v); else fileIn.current?.click(); }} aria-label={T('Anhängen')}><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
-          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? 'Nicht verbunden' : placeholder ?? 'Nachricht'} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
+          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? T('Nicht verbunden') : placeholder ?? T('Nachricht')} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
           {ai?.features.voice && !editing && !files.length && text.trim() && (
-            <button className="icon-btn tool speak-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={sendAsVoice} disabled={speaking} title="Als Sprachnachricht in deiner Stimme senden" aria-label="Als Sprachnachricht senden">
+            <button className="icon-btn tool speak-btn" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={sendAsVoice} disabled={speaking} title={T('Als Sprachnachricht in deiner Stimme senden')} aria-label={T('Als Sprachnachricht senden')}>
               {speaking ? <span className="spinner" /> : <Icon name="speak" />}
             </button>
           )}
           {hasContent || editing ? (
             <>
-            {!editing && !files.length && <button className="icon-btn tool" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setWhen(true)} title="Später senden" aria-label="Später senden"><Icon name="clock" /></button>}
+            {!editing && !files.length && <button className="icon-btn tool" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setWhen(true)} title={T('Später senden')} aria-label={T('Später senden')}><Icon name="clock" /></button>}
             <button className="send-btn" onPointerDown={(e) => { keepKeyboard(e); if (!files.length) pressStart(); }} onPointerUp={pressEnd} onPointerLeave={pressEnd} onMouseDown={keepKeyboard}
               onContextMenu={(e) => { if (!editing && !files.length) { e.preventDefault(); setWhen(true); } }}
-              onClick={() => { if (sendPress.current === -1) { sendPress.current = null; return; } if (isTouch() && document.activeElement === ta.current) ta.current?.focus(); send(); }} aria-label="Senden" title="Senden (gedrückt halten: später senden)"><Icon name={editing ? 'check' : 'send'} /></button>
+              onClick={() => { if (sendPress.current === -1) { sendPress.current = null; return; } if (isTouch() && document.activeElement === ta.current) ta.current?.focus(); send(); }} aria-label={T('Senden')} title={T('Senden (gedrückt halten: später senden)')}><Icon name={editing ? 'check' : 'send'} /></button>
             </>
           ) : (
-            <button className="send-btn mic" onClick={startRec} aria-label="Sprachnachricht aufnehmen"><Icon name="mic" /></button>
+            <button className="send-btn mic" onClick={startRec} aria-label={T('Sprachnachricht aufnehmen')}><Icon name="mic" /></button>
           )}
         </div>
       )}

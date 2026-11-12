@@ -195,7 +195,8 @@ function authed(req: FastifyRequest): Ctx | null {
 }
 const C = (req: FastifyRequest) => authed(req)!;
 const H = (req: FastifyRequest) => C(req).hub!;
-const A = (req: FastifyRequest) => C(req).ai!;
+/** KI des Profils; merkt sich nebenbei die Oberflächensprache (für Hintergrundaufgaben wie Übersetzung und Autobot) */
+const A = (req: FastifyRequest) => { const ai = C(req).ai!; ai.noteLang(req.headers['x-chorus-lang']); return ai; };
 function profileFrom(id: unknown): Ctx {
   const p = registry.get(typeof id === 'string' ? id : null);
   if (!p) throw Object.assign(new Error('Profil nicht gefunden'), { statusCode: 404 });
@@ -493,19 +494,19 @@ function splitBotMark(text: string): { text: string; bot: boolean } {
   return rest && rest !== text.trim() ? { text: rest, bot: true } : { text, bot: false };
 }
 /** Sprache, in die eigene Nachrichten in diesem Chat übersetzt werden, oder null */
-function outLang(h: Hub, id: string): string | null {
+function outLang(h: Hub, id: string, mine: string): string | null {
   const chat = h.store.getChat(id);
   // Bei zusammengeführten Kontakten gilt die Übersetzung des ganzen Kontakts
   const src = chat?.translate?.on ? chat : chat?.link ? h.store.linkedIds(chat.link).map((x) => h.store.getChat(x)).find((c) => c?.translate?.on) : chat;
   const tr = src?.translate;
-  return tr?.on && tr.out !== false && tr.lang && tr.lang !== 'de' && tr.langName && src?.aiEnabled ? tr.langName : null;
+  return tr?.on && tr.out !== false && tr.lang && tr.lang !== mine && tr.langName && src?.aiEnabled ? tr.langName : null;
 }
 async function sendMaybeTranslated(h: Hub, ai: Ai, id: string, raw: string, replyTo: string | null, translate: boolean) {
   const chat = h.store.getChat(id);
   const { text, bot } = splitBotMark(raw);
   const tg = chat?.network === 'telegram';
   const out = (t: string) => (bot && tg ? `${t} – 🤖` : t);
-  const langName = translate ? outLang(h, id) : null;
+  const langName = translate ? outLang(h, id, ai.lang) : null;
   let m: Message | null;
   if (langName) {
     const t = await ai.translateOut(id, text, langName);
@@ -536,7 +537,7 @@ app.post('/api/chats/:id/upload', async (req) => {
   // Bildunterschrift mit Live-Übersetzung: übersetzt senden, das deutsche Original darunter zeigen
   const id = (req.params as any).id, h = H(req);
   const orig = val('caption')?.trim() || undefined;
-  const langName = orig && val('translate') === '1' ? outLang(h, id) : null;
+  const langName = orig && val('translate') === '1' ? outLang(h, id, A(req).lang) : null;
   const caption = langName ? await A(req).translateOut(id, orig!, langName) : orig;
   const r = await h.sendFile(id, {
     data, name, mime,

@@ -4,6 +4,7 @@ import { attachmentUrl, type Message } from '../api';
 import { fileSize } from '../util';
 import { useStorage } from '../storageState';
 import { openSaveAs } from './NextcloudBrowser';
+import { T } from '../i18n';
 
 /** Als Web-App vom Home-Bildschirm: ohne Browserleiste gibt es nach einem Datei-Link keinen Weg zurück */
 export const standalone = matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone === true;
@@ -81,23 +82,23 @@ function Viewer({ m, i, close }: Req & { close: () => void }) {
   }, [url]);
   const download = () => { const l = document.createElement('a'); l.href = attachmentUrl(m, i, true); l.download = a.name; l.click(); };
   const share = async () => {
-    try { if (!(await sh.share())) { if (standalone) flash('Teilen ist hier nicht möglich'); else download(); } }
-    catch (e: any) { flash(e?.message ?? 'Teilen fehlgeschlagen'); }
+    try { if (!(await sh.share())) { if (standalone) flash(T('Teilen ist hier nicht möglich')); else download(); } }
+    catch (e: any) { flash(e?.message ?? T('Teilen fehlgeschlagen')); }
   };
   return (
     <div className="fileview">
       <div className="fileview-bar">
-        <button className="icon-btn" onClick={close} aria-label="Zurück zum Chat" title="Zurück zum Chat"><Icon name="close" /></button>
+        <button className="icon-btn" onClick={close} aria-label={T('Zurück zum Chat')} title={T('Zurück zum Chat')}><Icon name="close" /></button>
         <div className="fileview-title"><b>{a.name}</b><small>{fileSize(a.size)}</small></div>
       </div>
       <div className="fileview-body">
         {pdf ? <iframe src={url} title={a.name} />
-          : text ? <pre className="fileview-text">{body ?? 'Wird geladen …'}</pre>
-          : <div className="fileview-info"><span className="att-file-icon big"><Icon name="file" size={40} /></span><b>{a.name}</b><small>{a.mime || 'Datei'} · {fileSize(a.size)}</small><small className="muted">Für diese Datei gibt es keine Vorschau. Über „Teilen“ kannst du sie in einer anderen App öffnen oder in Dateien sichern.</small></div>}
+          : text ? <pre className="fileview-text">{body ?? T('Wird geladen …')}</pre>
+          : <div className="fileview-info"><span className="att-file-icon big"><Icon name="file" size={40} /></span><b>{a.name}</b><small>{a.mime || T('Datei')} · {fileSize(a.size)}</small><small className="muted">{T('Für diese Datei gibt es keine Vorschau. Über „Teilen“ kannst du sie in einer anderen App öffnen oder in Dateien sichern.')}</small></div>}
       </div>
       <div className="fileview-actions">
-        {(sh.can || !standalone) && <button className="btn" onClick={share} disabled={!sh.ready}><Icon name="share" size={18} />{sh.ready ? (sh.can ? 'Teilen / Sichern' : 'Herunterladen') : 'Wird geladen …'}</button>}
-        {storage?.nextcloud.enabled && <button className="btn" onClick={() => openSaveAs(m, i)}><Icon name="folder" size={18} />In Nextcloud speichern …</button>}
+        {(sh.can || !standalone) && <button className="btn" onClick={share} disabled={!sh.ready}><Icon name="share" size={18} />{sh.ready ? (sh.can ? T('Teilen / Sichern') : 'Herunterladen') : T('Wird geladen …')}</button>}
+        {storage?.nextcloud.enabled && <button className="btn" onClick={() => openSaveAs(m, i)}><Icon name="folder" size={18} />{T('In Nextcloud speichern …')}</button>}
       </div>
       {note && <div className="toast">{note}</div>}
     </div>

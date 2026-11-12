@@ -1,9 +1,10 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { api, type Account, type Chat, type Message, type Network } from '../api';
+import { api, serverText, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
 import { NETWORKS, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
+import { T } from '../i18n';
 
 export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
@@ -78,7 +79,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     const s = q.trim(); if (s.length < 3 || aiBusy) return;
     setAiBusy(true);
     try { const r = await api.aiSearch(s); setAiRes({ q: s, ...r }); }
-    catch (e: any) { setAiRes({ q: s, answer: e.message ?? 'Fehler', messages: [], scope: '' }); }
+    catch (e: any) { setAiRes({ q: s, answer: e.message ?? T('Fehler'), messages: [], scope: '' }); }
     finally { setAiBusy(false); }
   };
 
@@ -90,11 +91,11 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     if (what === 'delete') {
       const mail = ids.every((id) => chats.find((c) => c.id === id)?.network === 'email');
       const n = ids.length;
-      if (!confirm(mail ? (n > 1 ? `${n} E-Mail-Unterhaltungen in den Papierkorb verschieben?` : 'Diese E-Mail-Unterhaltung in den Papierkorb verschieben?')
-        : (n > 1 ? `${n} Chats löschen?` : 'Chat löschen?') + ' Er verschwindet aus Chorus, auf dem Handy bleibt er erhalten.')) return false;
+      if (!confirm(mail ? (n > 1 ? T('{0} E-Mail-Unterhaltungen in den Papierkorb verschieben?', n) : T('Diese E-Mail-Unterhaltung in den Papierkorb verschieben?'))
+        : (n > 1 ? T('{0} Chats löschen?', n) : T('Chat löschen?')) + T(' Er verschwindet aus Chorus, auf dem Handy bleibt er erhalten.'))) return false;
       setSel(null);
       // Sofort weg, der Rest läuft im Hintergrund; bei Fehler kommt der Chat zurück
-      void onRemove(ids).then((err) => flash(err || (n > 1 ? `${n} gelöscht` : 'Gelöscht')));
+      void onRemove(ids).then((err) => flash(err || (n > 1 ? T('{0} gelöscht', n) : T('Gelöscht'))));
       return true;
     }
     const out: Chat[] = [];
@@ -104,12 +105,12 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
         if (what === 'read') { await api.markRead(id); const c = chats.find((x) => x.id === id); if (c) out.push({ ...c, unread: 0 }); }
         else if (what === 'unread') out.push(await api.markUnread(id));
         else out.push(await api.patchChat(id, what === 'archive' || what === 'unarchive' ? { archived: what === 'archive' } : what === 'mute' || what === 'unmute' ? { muted: what === 'mute' } : { pinned: what === 'pin' }));
-      } catch (e: any) { err = e?.message ?? 'Fehler'; }
+      } catch (e: any) { err = e?.message ?? T('Fehler'); }
     }));
     onChats(out);
     if (err) { flash(err); return; }
-    if (what === 'archive') flash(ids.length > 1 ? `${ids.length} Chats archiviert` : 'Archiviert');
-    if (what === 'unarchive') flash(ids.length > 1 ? `${ids.length} Chats zurückgeholt` : 'Aus dem Archiv geholt');
+    if (what === 'archive') flash(ids.length > 1 ? T('{0} Chats archiviert', ids.length) : T('Archiviert'));
+    if (what === 'unarchive') flash(ids.length > 1 ? T('{0} Chats zurückgeholt', ids.length) : T('Aus dem Archiv geholt'));
   };
 
   // Ausgewählte Absender-Zeilen stehen für alle ihre Betreffe
@@ -163,48 +164,48 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     <section className="pane-list">
       {sel ? (
         <header className="list-head select-head">
-          <button className="icon-btn" onClick={done} aria-label="Fertig"><Icon name="close" /></button>
-          <h1>{sel.size ? `${sel.size} ausgewählt` : 'Auswählen'}</h1>
-          <button className="btn small ghost" onClick={() => setSel(allSel ? new Set() : new Set(shown.map((c) => c.id)))}>{allSel ? 'Keine' : 'Alle'}</button>
+          <button className="icon-btn" onClick={done} aria-label={T('Fertig')}><Icon name="close" /></button>
+          <h1>{sel.size ? T('{0} ausgewählt', sel.size) : T('Auswählen')}</h1>
+          <button className="btn small ghost" onClick={() => setSel(allSel ? new Set() : new Set(shown.map((c) => c.id)))}>{allSel ? 'Keine' : T('Alle')}</button>
         </header>
       ) : (
         <header className="list-head" ref={headRef}>
           {sender && !q ? (
-            <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1>
-              <button className="icon-btn" onClick={() => void act(senderIds, 'archive')} title="Alle archivieren" aria-label="Alle archivieren"><Icon name="archive" /></button>
-              <button className="icon-btn" onClick={() => void act(senderIds, 'delete')} title="Alle löschen" aria-label="Alle löschen"><Icon name="trash" /></button></>
+            <><button className="icon-btn" onClick={() => setSender(null)} aria-label={T('Zurück')}><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} {T('Betreffe')}</small></h1>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'archive')} title={T('Alle archivieren')} aria-label={T('Alle archivieren')}><Icon name="archive" /></button>
+              <button className="icon-btn" onClick={() => void act(senderIds, 'delete')} title={T('Alle löschen')} aria-label={T('Alle löschen')}><Icon name="trash" /></button></>
           ) : filter.archived ? (
-            <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label="Zurück"><Icon name="back" /></button><h1>Archiv</h1></>
-          ) : <h1>Chats</h1>}
+            <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label={T('Zurück')}><Icon name="back" /></button><h1>{T('Archiv')}</h1></>
+          ) : <h1>{T('Chats')}</h1>}
           {!(sender && !q) && <div className="row">
-            <button className="icon-btn" onClick={onGallery} title="Medien, Dateien und Links" aria-label="Galerie"><Icon name="gallery" /></button>
-            <button className={`icon-btn ${filterActive ? 'on' : ''} ${filterActive && !showFilters ? 'badge' : ''}`} onClick={toggleFilters} title={showFilters ? 'Filter ausblenden' : 'Filter einblenden'} aria-label="Filter" aria-pressed={showFilters}><Icon name="filter" /></button>
-            <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
-            {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={`Archiv (${archivedCount})`} aria-label="Archiv"><Icon name="archive" /></button>}
-            <button className={`btn small primary new-btn ${newCompact ? 'compact' : ''}`} onClick={onNew} title="Neue Nachricht" aria-label="Neue Nachricht"><Icon name="edit" size={16} /><span className="new-btn-label">Neue Nachricht</span></button>
-            <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
+            <button className="icon-btn" onClick={onGallery} title={T('Medien, Dateien und Links')} aria-label={T('Galerie')}><Icon name="gallery" /></button>
+            <button className={`icon-btn ${filterActive ? 'on' : ''} ${filterActive && !showFilters ? 'badge' : ''}`} onClick={toggleFilters} title={showFilters ? T('Filter ausblenden') : T('Filter einblenden')} aria-label="Filter" aria-pressed={showFilters}><Icon name="filter" /></button>
+            <button className="icon-btn" onClick={() => setSel(new Set())} title={T('Auswählen')} aria-label={T('Auswählen')}><Icon name="select" /></button>
+            {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={T('Archiv ({0})', archivedCount)} aria-label={T('Archiv')}><Icon name="archive" /></button>}
+            <button className={`btn small primary new-btn ${newCompact ? 'compact' : ''}`} onClick={onNew} title={T('Neue Nachricht')} aria-label={T('Neue Nachricht')}><Icon name="edit" size={16} /><span className="new-btn-label">{T('Neue Nachricht')}</span></button>
+            <button className="icon-btn mobile-only" onClick={onSettings} title={T('Einstellungen')} aria-label={T('Einstellungen')}><Icon name="settings" /></button>
           </div>}
         </header>
       )}
       <div className="search">
         <Icon name="search" size={18} />
-        <input placeholder="Suchen" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder={T('Suchen')} value={q} onChange={(e) => setQ(e.target.value)} />
         {q && <button className="icon-btn small" onClick={() => setQ('')}><Icon name="close" size={16} /></button>}
       </div>
       {showFilters && <div className="filters" role="toolbar" aria-label="Filter">
-        <button className={`pill ${!filter.unread && !filter.nets.length ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: false, nets: [] })}>Alle</button>
-        <button className={`pill ${filter.unread ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: !filter.unread })}>Ungelesen</button>
+        <button className={`pill ${!filter.unread && !filter.nets.length ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: false, nets: [] })}>{T('Alle')}</button>
+        <button className={`pill ${filter.unread ? 'on' : ''}`} onClick={() => setFilter({ ...filter, unread: !filter.unread })}>{T('Ungelesen')}</button>
         {nets.map((n) => (
           <button key={n} className={`pill ${filter.nets.includes(n) ? 'on' : ''}`} onClick={() => toggleNet(n)} aria-pressed={filter.nets.includes(n)}>
             <span className="dot" style={{ background: NETWORKS[n].color }} />{NETWORKS[n].name}
           </button>
         ))}
       </div>}
-      {!online && <div className="banner warn">Keine Verbindung zum Server. Chorus versucht es weiter …</div>}
+      {!online && <div className="banner warn">{T('Keine Verbindung zum Server. Chorus versucht es weiter …')}</div>}
       {problems.map((a) => (
         <button key={a.id} className="banner warn clickable" onClick={onFixAccount}>
           <Icon name="alert" size={18} />
-          <span><b>{NETWORKS[a.network].name}</b>: {a.status.state === 'qr' || a.status.state === 'need_input' ? 'Anmeldung nicht abgeschlossen' : a.status.message || 'nicht verbunden'}. Tippen zum Beheben.</span>
+          <span><b>{NETWORKS[a.network].name}</b>: {a.status.state === 'qr' || a.status.state === 'need_input' ? T('Anmeldung nicht abgeschlossen') : (a.status.message && serverText(a.status.message)) || T('nicht verbunden')}{T('. Tippen zum Beheben.')}</span>
         </button>
       ))}
       <ul className="chats" ref={listRef}>
@@ -213,26 +214,26 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           <li className="search-results">
             {q.trim().length >= 3 && (
               <button className="ai-ask" onClick={askAi} disabled={aiBusy}>
-                <Icon name="sparkle" size={18} /><span>{aiBusy ? 'KI sucht …' : <>KI fragen: <b>„{q.trim()}“</b></>}</span>
+                <Icon name="sparkle" size={18} /><span>{aiBusy ? T('KI sucht …') : <>{T('KI fragen:')}{' '}<b>„{q.trim()}“</b></>}</span>
               </button>
             )}
             {aiRes && (
               <div className="ai-answer">
                 <p>{aiRes.answer}</p>
                 {aiRes.messages.map((m) => <HitRow key={m.id} m={m} chat={byId.get(m.chatId)} onOpen={onOpenMessage} />)}
-                {aiRes.scope === 'ai' && <small className="muted">Gesucht in Chats mit eingeschalteter KI. In den KI-Einstellungen kannst du die Suche für alle Chats erlauben.</small>}
+                {aiRes.scope === 'ai' && <small className="muted">{T('Gesucht in Chats mit eingeschalteter KI. In den KI-Einstellungen kannst du die Suche für alle Chats erlauben.')}</small>}
               </div>
             )}
-            {hits.length > 0 && <h4 className="results-head">Nachrichten</h4>}
+            {hits.length > 0 && <h4 className="results-head">{T('Nachrichten')}</h4>}
             {hits.map((m) => <HitRow key={m.id} m={m} chat={byId.get(m.chatId)} q={q.trim()} onOpen={onOpenMessage} />)}
           </li>
         )}
         {!shown.length && !hits.length && (
           <li className="list-empty">
-            {accounts.length ? (q ? 'Nichts gefunden.' : filter.archived ? 'Das Archiv ist leer.' : 'Keine Chats in dieser Ansicht.') : (
+            {accounts.length ? (q ? T('Nichts gefunden.') : filter.archived ? T('Das Archiv ist leer.') : T('Keine Chats in dieser Ansicht.')) : (
               <>
-                <p>Noch kein Messenger verbunden.</p>
-                <button className="btn primary" onClick={onAdd}>Jetzt verbinden</button>
+                <p>{T('Noch kein Messenger verbunden.')}</p>
+                <button className="btn primary" onClick={onAdd}>{T('Jetzt verbinden')}</button>
               </>
             )}
           </li>
@@ -248,17 +249,17 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             const allPinned = selChats.length > 0 && selChats.every((c) => c.pinned);
             const run = async (w: Parameters<typeof act>[1]) => { if ((await act(selIds, w)) !== false) done(); };
             return <>
-              <button disabled={dis} onClick={() => run(anyUnread ? 'read' : 'unread')}><Icon name={anyUnread ? 'checks' : 'dot'} size={20} />{anyUnread ? 'Gelesen' : 'Ungelesen'}</button>
-              <button disabled={dis} onClick={() => run(allArchived ? 'unarchive' : 'archive')}><Icon name="archive" size={20} />{allArchived ? 'Zurückholen' : 'Archivieren'}</button>
-              <button disabled={dis} onClick={() => run(allMuted ? 'unmute' : 'mute')}><Icon name={allMuted ? 'bell' : 'belloff'} size={20} />{allMuted ? 'Ton an' : 'Stumm'}</button>
-              <button disabled={dis} onClick={() => run(allPinned ? 'unpin' : 'pin')}><Icon name="pin" size={20} />{allPinned ? 'Lösen' : 'Anheften'}</button>
-              {selChats.length > 0 && <button onClick={() => run('delete')}><Icon name="trash" size={20} />Löschen</button>}
+              <button disabled={dis} onClick={() => run(anyUnread ? 'read' : 'unread')}><Icon name={anyUnread ? 'checks' : 'dot'} size={20} />{anyUnread ? T('Gelesen') : T('Ungelesen')}</button>
+              <button disabled={dis} onClick={() => run(allArchived ? 'unarchive' : 'archive')}><Icon name="archive" size={20} />{allArchived ? T('Zurückholen') : 'Archivieren'}</button>
+              <button disabled={dis} onClick={() => run(allMuted ? 'unmute' : 'mute')}><Icon name={allMuted ? 'bell' : 'belloff'} size={20} />{allMuted ? T('Ton an') : T('Stumm')}</button>
+              <button disabled={dis} onClick={() => run(allPinned ? 'unpin' : 'pin')}><Icon name="pin" size={20} />{allPinned ? T('Lösen') : 'Anheften'}</button>
+              {selChats.length > 0 && <button onClick={() => run('delete')}><Icon name="trash" size={20} />{T('Löschen')}</button>}
             </>;
           })()}
         </div>
       )}
       {toast && <div className="toast">{toast}</div>}
-      {accounts.length > 0 && !sel && <button className="fab mobile-only" onClick={onNew} aria-label="Neue Nachricht"><Icon name="edit" /></button>}
+      {accounts.length > 0 && !sel && <button className="fab mobile-only" onClick={onNew} aria-label={T('Neue Nachricht')}><Icon name="edit" /></button>}
     </section>
   );
 }
@@ -275,7 +276,7 @@ function HitRow({ m, chat, q, onOpen }: { m: Message; chat?: Chat; q?: string; o
       <Avatar name={chat?.title ?? '?'} src={chat?.avatar} size={40} />
       <span className="chat-main">
         <span className="chat-top"><span className="chat-title">{chat?.title ?? 'Chat'}</span><span className="chat-time">{dayLabel(m.ts)}</span></span>
-        <span className="chat-bottom"><span className="chat-preview">{m.fromMe ? 'Du: ' : chat?.kind !== 'direct' ? `${m.senderName}: ` : ''}{parts.map((p, j) => (j % 2 ? <mark key={j}>{p}</mark> : p))}</span></span>
+        <span className="chat-bottom"><span className="chat-preview">{m.fromMe ? T('Du: ') : chat?.kind !== 'direct' ? `${m.senderName}: ` : ''}{parts.map((p, j) => (j % 2 ? <mark key={j}>{p}</mark> : p))}</span></span>
       </span>
     </button>
   );
@@ -288,9 +289,9 @@ const ChatListItem = memo(function ChatListItem({ c, active, selecting, selected
   return (
     <li>
       <SwipeRow disabled={selecting}
-        left={{ icon: 'trash', label: 'Löschen', color: 'var(--danger)', run: () => onAct(c.id, 'delete') }}
-        right={{ icon: 'archive', label: c.archived ? 'Zurückholen' : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}
-        far={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? 'Gelesen' : 'Ungelesen', color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}>
+        left={{ icon: 'trash', label: T('Löschen'), color: 'var(--danger)', run: () => onAct(c.id, 'delete') }}
+        right={{ icon: 'archive', label: c.archived ? T('Zurückholen') : 'Archivieren', color: 'var(--ink-2)', run: () => onAct(c.id, c.archived ? 'unarchive' : 'archive') }}
+        far={{ icon: c.unread ? 'checks' : 'dot', label: c.unread ? T('Gelesen') : T('Ungelesen'), color: 'var(--accent)', run: () => onAct(c.id, c.unread ? 'read' : 'unread') }}>
         <ChatRow c={c} active={active} selecting={selecting} selected={selected} onClick={() => onClick(c.id)} onLong={() => onLong(c.id)} />
       </SwipeRow>
     </li>
@@ -317,8 +318,8 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">
-          <span className="chat-preview">{c.lastText || ' '}</span>
-          {c.autopilot?.on && <span title="Autobot an">🤖</span>}
+          <span className="chat-preview">{(c.lastText && T(c.lastText)) || ' '}</span>
+          {c.autopilot?.on && <span title={T('Autobot an')}>🤖</span>}
           {c.pinned && <Icon name="pin" size={14} className="muted-icon" />}
           {c.muted && <Icon name="belloff" size={14} className="muted-icon" />}
           {c.unread > 0 && <span className={`badge ${c.muted ? 'muted' : ''}`}>{c.unread > 99 ? '99+' : c.unread}</span>}
