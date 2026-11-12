@@ -119,7 +119,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
       case 'me': return <div className="ios-card pad"><MyProfile server={server} onChanged={onProfileChanged} /></div>;
       case 'ai': return <AiSettingsSection />;
       case 'push': return <div className="ios-card pad"><PushSection /></div>;
-      case 'look': return <div className="ios-card pad"><BubbleSection nets={[...new Set(accounts.map((a) => a.network))]} /></div>;
+      case 'look': return <BubbleSection nets={[...new Set(accounts.map((a) => a.network))]} />;
       case 'backup': return <div className="ios-card pad"><BackupSection /></div>;
       case 'storage': return <div className="ios-card pad"><StorageSection /></div>;
       case 'profiles': return <div className="ios-card pad"><ProfilesSection key={`${me.name}:${me.avatar}`} server={server} onRenamed={onProfileChanged} /></div>;
@@ -278,7 +278,7 @@ function AccountsPage({ accounts, sync, lastSync, onSync, onOpen, onAdd }: {
       <div className="ios-card">
         {accounts.map((a) => (
           <Row key={a.id} tile={<Tile color={NETWORKS[a.network].color} letter={NETWORKS[a.network].short} />}
-            title={a.label} sub={a.status.self && a.status.state === 'connected' ? a.status.self : NETWORKS[a.network].name}
+            title={a.label} sub={a.status.self && a.status.state === 'connected' ? a.status.self : a.label !== NETWORKS[a.network].name ? NETWORKS[a.network].name : undefined}
             value={<span className={`state ${a.status.state}`}>{STATE_TEXT[a.status.state]}</span>} onClick={() => onOpen(a.id)} />
         ))}
         <Row tile={<Tile color="#34c759" icon="plus" />} title="Messenger hinzufügen" onClick={onAdd} />

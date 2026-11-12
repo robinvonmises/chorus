@@ -116,7 +116,7 @@ export function AiSettingsSection() {
             )}
           </label>
         )}
-        <button className="link-btn" onClick={() => setAdv(!adv)}>{adv ? 'Weniger' : 'Erweitert: eigener Dienst (Ollama, LM Studio, OpenRouter …)'}</button>
+        <button className="link-btn" style={{ justifySelf: 'start', textAlign: 'left' }} onClick={() => setAdv(!adv)}>{adv ? 'Eigenen Dienst ausblenden' : 'Eigener Dienst (Ollama, LM Studio …)'}</button>
         {adv && (
           <div className="stack" style={{ gap: 6 }}>
             <div className="row">
