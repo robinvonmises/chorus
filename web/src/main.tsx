@@ -2,8 +2,9 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
-import { applyBubbles } from './bubbles';
+import { applyBubbles, applyChatBg } from './bubbles';
 applyBubbles();
+applyChatBg();
 
 // iOS verkleinert beim Einblenden der Tastatur nicht die Seite, sondern schiebt sie hoch.
 // Wir passen die App deshalb an den sichtbaren Bereich an, damit nichts verrutscht und keine Lücke entsteht.
