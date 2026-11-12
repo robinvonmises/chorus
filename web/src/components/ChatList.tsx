@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
 import { NETWORKS, dayLabel, listTime } from '../util';
@@ -133,6 +133,32 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
 
   const listRef = useRef<HTMLUListElement>(null);
 
+  // „Neue Nachricht“ zeigt Text, solange er in den Listenkopf passt; sonst nur das Symbol.
+  const headRef = useRef<HTMLElement>(null);
+  const [newCompact, setNewCompact] = useState(false);
+  const labelW = useRef(0);
+  useLayoutEffect(() => {
+    const h = headRef.current;
+    const row = h?.querySelector<HTMLElement>(':scope > .row');
+    if (!h || !row) return;
+    const check = () => {
+      const label = row.querySelector<HTMLElement>('.new-btn-label');
+      if (!label) return;
+      const cs = getComputedStyle(h);
+      let used = row.scrollWidth;
+      for (const el of Array.from(h.children) as HTMLElement[]) if (el !== row) used += el.offsetWidth;
+      const free = h.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - used;
+      setNewCompact((c) => {
+        if (!c) { if (label.offsetWidth) labelW.current = label.offsetWidth; return free < 8; }
+        return free - labelW.current - 8 < 8;
+      });
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(h); ro.observe(row);
+    return () => ro.disconnect();
+  });
+
   return (
     <section className="pane-list">
       {sel ? (
@@ -142,7 +168,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           <button className="btn small ghost" onClick={() => setSel(allSel ? new Set() : new Set(shown.map((c) => c.id)))}>{allSel ? 'Keine' : 'Alle'}</button>
         </header>
       ) : (
-        <header className="list-head">
+        <header className="list-head" ref={headRef}>
           {sender && !q ? (
             <><button className="icon-btn" onClick={() => setSender(null)} aria-label="Zurück"><Icon name="back" /></button><h1 className="sender-head">{senderName}<small>{shown.length} Betreffe</small></h1>
               <button className="icon-btn" onClick={() => void act(senderIds, 'archive')} title="Alle archivieren" aria-label="Alle archivieren"><Icon name="archive" /></button>
@@ -155,7 +181,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             <button className={`icon-btn ${filterActive ? 'on' : ''} ${filterActive && !showFilters ? 'badge' : ''}`} onClick={toggleFilters} title={showFilters ? 'Filter ausblenden' : 'Filter einblenden'} aria-label="Filter" aria-pressed={showFilters}><Icon name="filter" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title="Auswählen" aria-label="Auswählen"><Icon name="select" /></button>
             {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={`Archiv (${archivedCount})`} aria-label="Archiv"><Icon name="archive" /></button>}
-            <button className="btn small primary new-btn" onClick={onNew} title="Neue Nachricht"><Icon name="edit" size={16} /> Neue Nachricht</button>
+            <button className={`btn small primary new-btn ${newCompact ? 'compact' : ''}`} onClick={onNew} title="Neue Nachricht" aria-label="Neue Nachricht"><Icon name="edit" size={16} /><span className="new-btn-label">Neue Nachricht</span></button>
             <button className="icon-btn mobile-only" onClick={onSettings} title="Einstellungen" aria-label="Einstellungen"><Icon name="settings" /></button>
           </div>}
         </header>

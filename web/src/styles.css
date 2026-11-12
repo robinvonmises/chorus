@@ -423,7 +423,9 @@ button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: poi
 @media (max-width: 480px) { .player-time { display: none; } .player-info { max-width: 40%; } }
 /* ---------- Neue Nachricht ---------- */
 .pane-list { position: relative; }
-.new-btn { white-space: nowrap; }
+.new-btn { white-space: nowrap; flex-shrink: 0; }
+.new-btn.compact { padding: 6px 8px; }
+.new-btn.compact .new-btn-label { display: none; }
 .fab { position: absolute; right: 18px; bottom: calc(18px + var(--safe-b)); width: 56px; height: 56px; border-radius: 18px; background: var(--accent); color: var(--accent-ink); box-shadow: var(--shadow); place-items: center; z-index: 5; }
 .newchat { display: flex; flex-direction: column; gap: 10px; min-height: 50vh; }
 .newchat .search { margin: 0; }
