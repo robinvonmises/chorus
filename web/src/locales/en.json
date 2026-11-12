@@ -292,7 +292,7 @@
  "Export zu groß (über 4 GB). Bitte einzelne Chats exportieren.": "Export too large (over 4 GB). Please export individual chats.",
  "Farbe je Messenger": "Color per messenger",
  "Farbe {0}": "Color {0}",
- "Farben je Dienst": "Per-service colors",
+ "Farben je Dienst": "By messenger",
  "Fast fertig": "Almost done",
  "Fehler": "Error",
  "Fehler {0}": "Error {0}",

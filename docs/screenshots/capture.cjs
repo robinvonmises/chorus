@@ -41,11 +41,11 @@ const messages = [
   msg('m7', false, 2 * min, 'Look at this sunset 😍', { attachments: [{ fileId: 'f2', name: 'sunset.jpg', mime: 'image/jpeg', size: 11000, kind: 'image', width: 960, height: 640 }] }),
 ];
 const server = {
-  version: '0.1.0', networks: ['telegram', 'signal', 'whatsapp'], authed: true,
+  version: '0.5.0', networks: ['telegram', 'signal', 'whatsapp'], authed: true,
   profiles: [{ id: 'p1', name: 'Alex', initialized: true, invite: false, totp: true, avatar: null, kdf: null }],
   profile: { id: 'p1', name: 'Alex', admin: true, comfort: true, totp: true, avatar: null },
 };
-const ai = { model: 'claude', models: [], hasAnthropicKey: true, hasElevenKey: true, voiceId: 'v', voiceName: 'Alex', features: { text: true, transcribe: true, voice: true } };
+const ai = { provider: 'anthropic', hasOpenaiKey: false, openaiModel: 'gpt-5-mini', openaiBase: '', model: 'claude', models: [], hasAnthropicKey: true, hasElevenKey: true, voiceId: 'v', voiceName: 'Alex', features: { text: true, transcribe: true, voice: true } };
 
 async function mock(page, dark) {
   await page.emulateMedia({ colorScheme: dark ? 'dark' : 'light' });
@@ -59,6 +59,8 @@ async function mock(page, dark) {
     if (p === '/api/chats/mia/messages') return json(u.searchParams.has('before') ? [] : messages);
     if (/\/messages$/.test(p)) return json([]);
     if (p === '/api/ai' || p === '/api/ai/settings') return json(ai);
+    if (p === '/api/storage') return json({ immich: { enabled: false }, nextcloud: { enabled: false } });
+    if (p === '/api/planned' || p === '/api/ai/voices' || /\/(planned|linked|media|participants)$/.test(p)) return json([]);
     if (p === '/api/attachment' || /attachments/.test(p)) {
       const m = u.searchParams.get('m') || p.split('/')[3];
       if (m === 'm4') return r.fulfill({ contentType: 'image/jpeg', body: img('sea.jpg') });
@@ -97,9 +99,9 @@ async function mock(page, dark) {
     await mp.screenshot({ path: join(OUT, `mobile-chat${sfx}.png`) });
     if (!dark) {
       await mp.goBack().catch(() => {});
-      await mp.locator('button[aria-label="Zurück"]').first().click().catch(() => {});
+      await mp.goto(BASE); await mp.waitForSelector('.chat-item');
       await mp.waitForTimeout(500);
-      await mp.locator('button[aria-label="Einstellungen"]').first().click();
+      await mp.locator('button[aria-label="Settings"]:visible').first().click();
       await mp.waitForTimeout(900);
       await mp.screenshot({ path: join(OUT, 'mobile-settings.png') });
     }

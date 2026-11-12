@@ -5,7 +5,7 @@
 <h1 align="center">Chorus</h1>
 
 <p align="center">
-  <b>Signal, WhatsApp and Telegram in one calm, self-hosted inbox.</b><br />
+  <b>Signal, WhatsApp, Telegram and email in one calm, self-hosted inbox.</b><br />
   End-to-end on your own server · encrypted at rest · installable as an app on your phone
 </p>
 
@@ -35,49 +35,49 @@
 
 ## Why Chorus?
 
-Most of us juggle three messengers. Chorus puts every chat into one inbox that runs on **your** hardware: a Raspberry Pi, a NAS, a small VPS or a Proxmox container. You open it in any browser or install it on your phone's home screen like a native app. Your messages never pass through a third-party service.
+Most of us juggle three messengers and an inbox. Chorus puts every chat into one inbox that runs on **your** hardware: a Raspberry Pi, a NAS, a small VPS or a Proxmox container. You open it in any browser or install it on your phone's home screen like a native app. Your messages never pass through a third-party service.
 
-The interface is deliberately quiet and iOS-like: soft colours, smooth motion and nothing that blinks for attention.
-
-> The user interface is currently in **German**. An English translation is on the roadmap. Contributions are welcome.
+The interface is deliberately quiet and iOS-like: soft colours, smooth motion and nothing that blinks for attention. It speaks **English and German** (automatic by device language, switchable under Settings → Language).
 
 ## Features
 
 ### Messaging
-- **One inbox** for Signal, WhatsApp and Telegram, filterable by messenger (combine several) or "unread"
-- Replies, reactions, editing, deleting, read receipts, pinned and muted chats, drafts per chat
-- **Swipe gestures** on the phone: left to archive, right to mark as read/unread. Long-press for multi-select, pull down to refresh
+- **One inbox** for Signal, WhatsApp, Telegram and **email** (IMAP/SMTP: each sender becomes a contact, each subject a chat), filterable by messenger (combine several) or "unread"
+- Replies, reactions, editing, deleting, forwarding (also across messengers), read receipts, pinned and muted chats, drafts per chat
+- **Swipe gestures** on the phone: left to delete, right to archive, far right for read/unread. Long-press for multi-select
 - **Archive** that stays quiet: archived chats don't count towards the badge and don't notify
 - **Contact profiles** with your own alias, picture and notes; number, status and members come from the messenger
-- Profile pictures are fetched automatically and gently, without hitting rate limits
-- **Merge contacts** across messengers: the same person on Signal and WhatsApp becomes one chat with a shared history; pick in the contact profile which messenger you reply through (or let Chorus use the one they last wrote on)
+- **Merge contacts** across messengers: the same person on Signal and WhatsApp becomes one chat with a shared history; pick which messenger you reply through (or let Chorus use the one they last wrote on)
 - **Send later**: hold the send button and pick a time; scheduled messages wait in the chat until they go out
 - **Reminders** on any message ("remind me tomorrow morning"), with a notification that jumps right back to it
+- Failed messages show why they failed, with **Resend** and **Delete**
 - **Search across all messengers**: messages, transcripts and file names, with a jump to the hit in the chat
 - **Gallery** of all photos, videos, files, links and voice messages, per chat or across all chats
-- **Save to Immich or Nextcloud** (optional): link your own Immich (API key with `asset.upload`) and/or Nextcloud (app password, WebDAV) under Settings → Storage. Photos and videos go to Immich with one tap in the full-screen view, files to Nextcloud with a folder browser ("save as", new folder) and you can attach files from Nextcloud or photos from your Immich library (recent, albums, smart search) when sending; the server uploads the original, credentials stay encrypted on the server
 
 ### Media
 - Send photos, videos, voice messages and files (drag & drop or paste on the desktop)
+- Several photos in a row appear as a **mosaic**; the full-screen viewer swipes through the album, double-tap zooms
 - **Image editor** before sending: crop with fixed ratios, rotate, flip, pen, highlighter, arrows, shapes, text, pixelate, select and move, undo/redo
 - **Video editor**: trim with a thumbnail timeline and crop to 1:1, 4:3, 16:9 or 9:16 (cut on the server with ffmpeg)
-- Instant upload bubbles with progress, so you never wonder whether something is happening
-- Full-screen viewer with swipe-to-close, voice messages at 1.5×/2× with a mini player that keeps playing while you switch chats
+- In-app **file preview** (PDF, text) with share/save
+- Voice messages at 1.5×/2× with a mini player that keeps playing while you switch chats
+- **Save to Immich or Nextcloud** (optional): photos and videos go to Immich with one tap, files to Nextcloud with a folder browser; attach photos from your Immich library (recent, albums, smart search) or files from Nextcloud. The server uploads the original, credentials stay encrypted on the server
 
 ### AI assistant (optional, per chat, opt-in)
-Bring your own [Anthropic](https://console.anthropic.com) and [ElevenLabs](https://elevenlabs.io) keys:
+Bring your own key for **Claude** ([Anthropic](https://console.anthropic.com)) or **ChatGPT** ([OpenAI](https://platform.openai.com)), or point Chorus at any **OpenAI-compatible** service such as Ollama, LM Studio or OpenRouter, even locally without a key. Voice features use [ElevenLabs](https://elevenlabs.io).
 - **Summarise** a chat: what it's about, what's agreed, what's still open
-- **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**. Everything the AI wrote is marked with a 🤖 reaction (on Telegram, which does not allow it as a reaction, with a 🤖 at the end)
-- **Suggested replies**, optionally with a direction ("politely decline")
+- **Reply suggestions** as chips above the input field, and on request with a direction ("politely decline")
+- **Write for me**: type or dictate "tell her I'm at the gym and will call later" and send it as text or as a voice message **in your own (cloned) voice**. Everything the AI wrote can be marked with 🤖
 - **Transcribe** voice messages
-- **Live translation** per chat: foreign messages get a German translation under the bubble (with the source language), and what you write in German goes out in their language (can be switched off per chat or per message)
+- **Live translation** per chat: foreign messages get a translation into your language under the bubble, and what you write goes out in theirs (switchable per chat or per message)
 - **Ask your chats**: "When did Lisa want to come over?" gets an answer with the messages it is based on
-- **Autobot**: Claude answers on your behalf up to a limit you set, in groups you choose what it answers (questions to everyone, only mentions and replies to you, or everything), from whom, under which condition and in which style (like you, short, or creative). Answers are marked with a 🤖 reaction
+- **Autobot**: the AI answers on your behalf up to a limit you set; in groups you choose what it answers, from whom, under which condition and in which style
 
-Nothing is sent to an AI provider unless you enable AI for that chat and press a button.
+Nothing is sent to an AI provider unless you allow AI for that chat. You can revoke it at any time.
 
 ### Everyday comfort
-- Installable **PWA** with Web Push notifications, light and dark mode, bubble colours per messenger
+- Installable **PWA** with Web Push notifications, light and dark mode
+- **Appearance**: bubble colours per messenger or one colour everywhere (palette or any custom colour), **chat backgrounds** (presets or your own photo), optional iMessage-style send animation
 - **Multiple profiles** for family and friends, each with its own password, 2FA, messengers and AI keys. Each profile is encrypted separately, so even the admin can't read other people's chats
 - **Export** of your history as HTML or ZIP, automatic saving of media
 - Admin area: server health, recent warnings, reconnect messengers, restart
@@ -128,6 +128,7 @@ docker compose build && docker run --rm -p 8080:8080 -e DEMO=1 chorus-chorus
 | --- | --- | --- |
 | **Signal** | Scan a QR code (Signal → Settings → Linked devices → +) | Runs as a linked device via [signal-cli](https://github.com/AsamK/signal-cli). Signal doesn't transfer old history, so you see everything from the moment of linking. |
 | **WhatsApp** | Scan a QR code or enter a pairing code | Uses the unofficial [Baileys](https://github.com/WhiskeySockets/Baileys) library. **Unofficial clients violate WhatsApp's terms of service and accounts can be banned.** Bans are rare for normal personal use and mostly hit accounts that send bulk or automated messages or are brand new, but they can't be ruled out. Chorus shows this warning and asks for confirmation before linking. Use at your own risk and open WhatsApp on your phone at least every 14 days. |
+| **Email** | Address and (app) password; IMAP/SMTP servers are detected for common providers | Gmail, iCloud and Yahoo need an app password. Newsletters are hidden by default. |
 | **Telegram** | Create an app at [my.telegram.org/apps](https://my.telegram.org/apps), enter `api_id` and `api_hash`, then log in by QR code or phone number | Uses [GramJS](https://github.com/gram-js/gramjs). |
 
 ## Configuration
@@ -152,7 +153,8 @@ Browser / PWA (React 19, Vite)  ──HTTPS/WebSocket──▶  Chorus server (N
                                                         ├─ WhatsApp  → Baileys
                                                         ├─ Telegram  → GramJS
                                                         ├─ Vault     → SQLCipher + AES-GCM files
-                                                        └─ AI        → Anthropic API, ElevenLabs (optional)
+                                                        ├─ Email     → IMAP/SMTP (ImapFlow, Nodemailer)
+                                                        └─ AI        → Anthropic or OpenAI-compatible API, ElevenLabs (optional)
 ```
 
 ## Development
@@ -162,6 +164,8 @@ cd server && npm install && DEMO=1 PORT=8099 npm run dev
 cd web && npm install && npm run dev        # http://localhost:5173
 cd server && npm test
 ```
+
+Translations live in `web/src/locales/` (the German source text is the key). To add a language, copy `en.json`, translate the values and register it in `web/src/i18n.ts`.
 
 The README screenshots use sample data: `node docs/screenshots/capture.cjs http://localhost:8099` (needs Playwright).
 
