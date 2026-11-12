@@ -32,7 +32,7 @@ import { toOggOpusTimed, toMp3, editVideo, parseVideoEdit } from './audio.js';
 import { exportZip, slug } from './export.js';
 import * as totp from './totp.js';
 
-const VERSION = '0.4.1';
+const VERSION = '0.5.0';
 const PORT = Number(process.env.PORT ?? 8080);
 const HOST = process.env.HOST ?? '0.0.0.0';
 const require_ = createRequire(import.meta.url);
