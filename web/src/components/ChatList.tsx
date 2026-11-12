@@ -5,6 +5,7 @@ import { NETWORKS, askMailDelete, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { T } from '../i18n';
+import { reducedMotion, useFx } from '../effects';
 
 export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
@@ -160,8 +161,21 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     return () => ro.disconnect();
   });
 
+  // Gelesen-Moment: fällt die Zahl ungelesener Chats auf 0, schwingt das Logo einmal aus
+  const zeroOn = useFx('inboxZero');
+  const unreadTotal = useMemo(() => chats.reduce((n, c) => n + (!c.archived && !c.muted && c.unread > 0 ? 1 : 0), 0), [chats]);
+  const prevUnread = useRef(unreadTotal);
+  const [zero, setZero] = useState(0);
+  useEffect(() => {
+    const before = prevUnread.current; prevUnread.current = unreadTotal;
+    if (!zeroOn || before === 0 || unreadTotal > 0 || reducedMotion()) return;
+    setZero(Date.now());
+  }, [unreadTotal, zeroOn]);
+  useEffect(() => { if (!zero) return; const t = window.setTimeout(() => setZero(0), 2200); return () => clearTimeout(t); }, [zero]);
+
   return (
     <section className="pane-list">
+      {zero > 0 && <div key={zero} className="fx-zero" aria-hidden="true"><img src="/icon.svg?v=3" alt="" width={56} height={56} /><span>{T('Alles gelesen')}</span></div>}
       {sel ? (
         <header className="list-head select-head">
           <button className="icon-btn" onClick={done} aria-label={T('Fertig')}><Icon name="close" /></button>
