@@ -3,32 +3,35 @@ import type { Network } from '../api';
 import { NETWORKS } from '../util';
 import { sendAnimEnabled, setSendAnim } from '../sendAnim';
 import {
-  BUBBLE_DEFAULTS, BUBBLE_PALETTE, CHAT_BACKGROUNDS, chatBgCss, customBgImage, ink, loadBubbles, loadChatBg, saveBubbles, saveChatBg, setCustomBg,
+  ACCENTS, BUBBLE_DEFAULTS, BUBBLE_PALETTE, bubbleHex, loadAccent, saveAccent, CHAT_BACKGROUNDS, chatBgCss, customBgImage, ink, loadBubbles, loadChatBg, saveBubbles, saveChatBg, setCustomBg,
   type BubbleSettings,
 } from '../bubbles';
 import { Icon } from './Icon';
 import { T } from '../i18n';
 
 /** Eine Farbzeile: Tippen klappt die Auswahl auf (Palette + eigene Farbe) */
-function ColorRow({ label, color, open, onToggle, onPick }: { label: string; color: string; open: boolean; onToggle: () => void; onPick: (c: string) => void }) {
-  const custom = !BUBBLE_PALETTE.includes(color);
+function ColorRow({ label, color, open, onToggle, onPick, auto }: { label: string; color: string; open: boolean; onToggle: () => void; onPick: (c: string) => void; auto?: boolean }) {
+  const isAuto = color === 'accent';
+  const custom = !isAuto && !BUBBLE_PALETTE.includes(color);
+  const hex = bubbleHex(color);
   return (
     <div className={`color-row${open ? ' open' : ''}`}>
       <button className="ios-row" onClick={onToggle} aria-expanded={open}>
         <span className="ios-row-main">
-          <span className="ios-row-text"><span className="ios-title">{label}</span></span>
-          <span className="color-dot" style={{ background: color }} />
+          <span className="ios-row-text"><span className="ios-title">{label}</span>{isAuto && <small>{T('Wie die App-Farbe')}</small>}</span>
+          <span className="color-dot" style={{ background: hex }} />
           <Icon name="chevron" size={18} />
         </span>
       </button>
       {open && (
         <div className="swatches pick">
+          {auto && <button className={`swatch auto ${isAuto ? 'on' : ''}`} style={{ background: 'var(--brand)' }} aria-label={T('Wie die App-Farbe')} title={T('Wie die App-Farbe')} onClick={() => onPick('accent')}><Icon name="sparkle" size={14} /></button>}
           {BUBBLE_PALETTE.map((c) => (
             <button key={c} className={`swatch ${color === c ? 'on' : ''}`} style={{ background: c }} aria-label={c} onClick={() => onPick(c)} />
           ))}
           <label className={`swatch custom ${custom ? 'on' : ''}`} style={custom ? { background: color } : undefined} title={T('Eigene Farbe')}>
             {!custom && <Icon name="plus" size={14} />}
-            <input type="color" value={color} onChange={(e) => onPick(e.target.value)} />
+            <input type="color" value={hex} onChange={(e) => onPick(e.target.value)} />
           </label>
         </div>
       )}
@@ -49,13 +52,26 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
   const list: Network[] = nets.length ? nets : ['signal', 'whatsapp', 'telegram'];
   const pickBg = (id: string) => { setBg(id); saveChatBg(id); };
   const previewNet = list[0];
-  const outColor = b.mode === 'network' ? b.colors[previewNet] : b.single;
+  const [accent, setAccent] = useState(loadAccent);
+  const outColor = b.mode === 'network' ? b.colors[previewNet] : bubbleHex(b.single);
 
   return (<>
     <div className="look-preview" style={{ background: chatBgCss(bg) || undefined }}>
       <span className="day"><span>{T('Heute')}</span></span>
       <span className="pv in">{T('Hast du heute Abend Zeit? 🍕')}</span>
       <span className="pv out" style={{ background: outColor, color: ink(outColor) }}>{T('Klar, um acht bei dir?')}</span>
+    </div>
+
+    <p className="ios-caption">{T('App-Farbe')}</p>
+    <div className="ios-card pad">
+      <div className="accent-grid">
+        {ACCENTS.map((a) => (
+          <button key={a.id} className={`accent-tile${accent.id === a.id ? ' on' : ''}`} onClick={() => { saveAccent(a.id); setAccent(a); }} aria-pressed={accent.id === a.id}>
+            <span style={{ background: `linear-gradient(135deg, ${a.dark}, ${a.brand})` }}>{accent.id === a.id && <Icon name="check" size={16} />}</span><small>{a.name}</small>
+          </button>
+        ))}
+      </div>
+      <small className="muted">{T('Für Knöpfe, Markierungen und deine Sprechblasen. Gilt für dieses Gerät.')}</small>
     </div>
 
     <p className="ios-caption">{T('Meine Sprechblasen')}</p>
@@ -68,7 +84,7 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
       </label>
       {b.mode === 'network'
         ? list.map((n) => <ColorRow key={n} label={NETWORKS[n].name} color={b.colors[n]} open={open === n} onToggle={() => setOpen(open === n ? null : n)} onPick={(c) => set({ ...b, colors: { ...b.colors, [n]: c } })} />)
-        : <ColorRow label={T('Alle Chats')} color={b.single} open={open === 'single'} onToggle={() => setOpen(open === 'single' ? null : 'single')} onPick={(c) => set({ ...b, single: c })} />}
+        : <ColorRow auto label={T('Alle Chats')} color={b.single} open={open === 'single'} onToggle={() => setOpen(open === 'single' ? null : 'single')} onPick={(c) => set({ ...b, single: c })} />}
     </div>
     <p className="ios-foot"><button className="link-btn" onClick={() => set({ ...b, colors: BUBBLE_DEFAULTS.colors, single: BUBBLE_DEFAULTS.single })}>{T('Standardfarben')}</button> {T('· Helle Farben bekommen automatisch dunkle Schrift.')}</p>
 

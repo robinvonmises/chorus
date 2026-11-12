@@ -2,8 +2,9 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
-import { applyBubbles, applyChatBg } from './bubbles';
+import { applyAccent, applyBubbles, applyChatBg } from './bubbles';
 import { T } from './i18n';
+applyAccent();
 applyBubbles();
 applyChatBg();
 

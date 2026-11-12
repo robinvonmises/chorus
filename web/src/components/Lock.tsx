@@ -175,5 +175,5 @@ export function Lock({ state, savedKey, onDone }: { state: ServerState; savedKey
 }
 
 export function Logo() {
-  return <img src="/icon.svg" alt="" className="logo" width={56} height={56} />;
+  return <img src="/icon.svg?v=3" alt="" className="logo" width={56} height={56} />;
 }
