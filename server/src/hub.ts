@@ -541,10 +541,13 @@ const PREVIEW_EN: Record<string, string> = {
 /** Kurztexte des Servers für Benachrichtigungen in die Sprache des Profils bringen */
 export function localize(text: string, lang: 'en' | 'de'): string { return lang === 'en' ? PREVIEW_EN[text] ?? text : text; }
 
+const ATT_ICON = { image: '📷', video: '🎬', audio: '🎵', voice: '🎤', file: '📎', sticker: '' } as const;
+
 export function previewText(m: Message): string {
   if (m.deleted) return 'Nachricht gelöscht';
-  if (m.text) return m.text.slice(0, 200);
   const a = m.attachments[0];
+  // Text mit Anhang (z. B. Video mit Bildunterschrift): Symbol davor, damit man den Anhang in Liste und Push sieht
+  if (m.text) return (a && a.kind !== 'sticker' ? ATT_ICON[a.kind] + ' ' : '') + m.text.slice(0, 200);
   if (!a) return '';
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }

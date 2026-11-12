@@ -38,12 +38,28 @@ self.addEventListener('push', (e) => {
     const ios = /iPhone|iPad|iPod/.test(self.navigator.userAgent);
     const open = d.chatId && cs.some((c) => c.visibilityState === 'visible' && c.focused && decodeURIComponent((c.url.split('#chat=')[1] || '').split('&')[0]) === d.chatId);
     if (open && !ios) return;
-    return self.registration.showNotification(d.title || 'Chorus', {
-      body: d.body || '', tag: d.tag || d.chatId || undefined, renotify: true,
+    // Vorschaubild: selbst laden (mit Anmelde-Cookie) und als data:-URL übergeben. iOS kann keine Bilder in Benachrichtigungen.
+    const img = d.image && !ios ? loadImage(d.image) : Promise.resolve(undefined);
+    return img.then((image) => self.registration.showNotification(d.title || 'Chorus', {
+      body: d.body || '', tag: d.tag || d.chatId || undefined, renotify: true, image,
       data: { chatId: d.chatId || null }, icon: '/icon-192.png?v=2', badge: '/icon-192.png?v=2',
-    });
+    }));
   }));
 });
+function loadImage(url) {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 5000);
+  return fetch(url, { credentials: 'include', signal: ctl.signal })
+    .then((r) => (r.ok && /^image\//.test(r.headers.get('content-type') || '') ? r.arrayBuffer() : null))
+    .then((buf) => {
+      if (!buf || buf.byteLength > 1500000) return undefined;
+      const b = new Uint8Array(buf); let s = '';
+      for (let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+      return 'data:image/jpeg;base64,' + btoa(s);
+    })
+    .catch(() => undefined)
+    .finally(() => clearTimeout(t));
+}
 self.addEventListener('pushsubscriptionchange', (e) => {
   e.waitUntil((async () => {
     const r = await fetch('/api/push', { credentials: 'include' });
