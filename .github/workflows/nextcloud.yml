@@ -1,0 +1,51 @@
+name: Nextcloud-Spiegel
+
+# Spiegelt nach jedem Push auf main den Code nach Nextcloud (Backup, falls GitHub ausfällt).
+# Benötigte Repository-Secrets:
+#   NEXTCLOUD_URL           z. B. https://cloud.example.org  (ohne /remote.php)
+#   NEXTCLOUD_USER          Nextcloud-Benutzername
+#   NEXTCLOUD_APP_PASSWORD  App-Passwort (Einstellungen → Sicherheit → Geräte & Sitzungen)
+# Optional als Repository-Variable: NEXTCLOUD_DIR (Standard: Claude/Projekte/Chorus)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: nextcloud-mirror
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    env:
+      NC_URL: ${{ secrets.NEXTCLOUD_URL }}
+      NC_USER: ${{ secrets.NEXTCLOUD_USER }}
+      NC_PASS: ${{ secrets.NEXTCLOUD_APP_PASSWORD }}
+      NC_DIR: ${{ vars.NEXTCLOUD_DIR || 'Claude/Projekte/Chorus' }}
+    steps:
+      - name: Secrets vorhanden?
+        id: cfg
+        run: |
+          if [ -z "$NC_URL" ] || [ -z "$NC_USER" ] || [ -z "$NC_PASS" ]; then
+            echo "Nextcloud-Secrets fehlen, Spiegel wird übersprungen."
+            echo "skip=1" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.cfg.outputs.skip != '1'
+      - name: rclone installieren
+        if: steps.cfg.outputs.skip != '1'
+        run: curl -fsSL https://rclone.org/install.sh | sudo bash >/dev/null
+      - name: Nach Nextcloud spiegeln
+        if: steps.cfg.outputs.skip != '1'
+        run: |
+          export RCLONE_CONFIG_NC_TYPE=webdav
+          export RCLONE_CONFIG_NC_VENDOR=nextcloud
+          export RCLONE_CONFIG_NC_URL="${NC_URL%/}/remote.php/dav/files/$NC_USER"
+          export RCLONE_CONFIG_NC_USER="$NC_USER"
+          export RCLONE_CONFIG_NC_PASS="$(rclone obscure "$NC_PASS")"
+          rclone sync . "nc:$NC_DIR" \
+            --exclude '.git/**' --exclude '**/node_modules/**' --exclude '**/dist/**' \
+            --exclude '**/.env*' --exclude '**/data/**' \
+            --checksum --stats-one-line -v
