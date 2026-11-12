@@ -73,6 +73,7 @@ export interface Planned {
 export type MediaKind = 'media' | 'files' | 'voice' | 'links';
 
 export interface AiSettings {
+  provider: 'anthropic' | 'openai'; hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
   model: string; models: { id: string; label: string }[]; hasAnthropicKey: boolean; hasElevenKey: boolean;
   voiceId: string; voiceName: string; features: { text: boolean; transcribe: boolean; voice: boolean };
 }
@@ -233,6 +234,7 @@ export const api = {
     settings: () => req<AiSettings>('GET', '/api/ai/settings'),
     save: (patch: Record<string, string | null>) => req<AiSettings>('PUT', '/api/ai/settings', patch),
     voices: () => req<Voice[]>('GET', '/api/ai/voices'),
+    openaiModels: () => req<string[]>('GET', '/api/ai/openai-models'),
     setChat: (id: string, on: boolean) => req<Chat>('POST', `/api/chats/${enc(id)}/ai`, { on }),
     summary: (id: string) => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/summary`, {}),
     quick: (id: string) => req<{ key: string | null; suggestions: string[] }>('POST', `/api/chats/${enc(id)}/ai/quick`, {}),

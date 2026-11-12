@@ -29,7 +29,7 @@ export function AiPanel({ chat, replyTo, onClose, onUse, onError }: {
       <div className="ai-panel">
         <div className="ai-head"><span className="ai-title"><Icon name="robot" size={18} /> KI-Assistent</span><CloseBtn onClose={onClose} /></div>
         <div className="ai-empty">
-          <p>Die KI schreibt Nachrichten für dich, fasst Chats zusammen und kann selbst antworten. Dafür braucht es einen Claude-Schlüssel.</p>
+          <p>Die KI schreibt Nachrichten für dich, fasst Chats zusammen und kann selbst antworten. Dafür braucht es einen Schlüssel für Claude oder ChatGPT.</p>
           <button className="btn primary" onClick={openSettings}><Icon name="settings" size={18} /> KI einrichten</button>
         </div>
       </div>

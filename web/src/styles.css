@@ -1029,3 +1029,11 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .sync-btn { flex: none; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 7px 12px; font-size: 14px; }
 .sync-btn.busy svg { animation: spin 1s linear infinite; }
 a.ios-row { text-decoration: none; }
+
+/* Einstellungen → KI */
+.ai-status { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.ai-status .sync-dot.ok { background: #af52de; }
+.ai-msg { margin: -12px 16px 18px; font-size: 13px; color: var(--accent); }
+.ios-icon.sm { width: 22px; height: 22px; border-radius: 6px; } .ios-icon.sm b { font-size: 12px; }
+.key-saved { display: flex; align-items: center; gap: 10px; }
+.key-ok { flex: 1; display: inline-flex; align-items: center; gap: 6px; color: var(--ok); font-weight: 600; }

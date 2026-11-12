@@ -4,8 +4,14 @@ import type { Message } from './types.js';
 
 /** KI-Einstellungen, verschlüsselt im Tresor (Tabelle settings) */
 export interface AiSettings {
+  /** Welcher Anbieter die Textaufgaben übernimmt */
+  provider: 'anthropic' | 'openai';
   anthropicKey: string;
   model: string;
+  openaiKey: string;
+  openaiModel: string;
+  /** Leer = api.openai.com; sonst ein OpenAI-kompatibler Dienst (Ollama, LM Studio, OpenRouter …) */
+  openaiBase: string;
   elevenKey: string;
   voiceId: string;
   voiceName: string;
@@ -13,7 +19,7 @@ export interface AiSettings {
   ttsModel: string;
 }
 const DEFAULTS: AiSettings = {
-  anthropicKey: '', model: 'claude-opus-5-5', elevenKey: '', voiceId: '', voiceName: '',
+  provider: 'anthropic', anthropicKey: '', model: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5-mini', openaiBase: '', elevenKey: '', voiceId: '', voiceName: '',
   sttModel: 'scribe_v1', ttsModel: 'eleven_multilingual_v2',
 };
 export const AI_MODELS = [
@@ -24,7 +30,8 @@ export const AI_MODELS = [
 
 /** Öffentliche Sicht: Schlüssel werden nie an den Browser zurückgegeben */
 export interface AiPublicSettings {
-  model: string; models: typeof AI_MODELS; hasAnthropicKey: boolean; hasElevenKey: boolean;
+  provider: AiSettings['provider']; model: string; models: typeof AI_MODELS; hasAnthropicKey: boolean; hasElevenKey: boolean;
+  hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
   voiceId: string; voiceName: string; features: { text: boolean; transcribe: boolean; voice: boolean };
 }
 
@@ -44,11 +51,15 @@ export class Ai {
   publicSettings(): AiPublicSettings {
     const s = this.settings;
     return {
-      model: s.model, models: AI_MODELS, hasAnthropicKey: !!s.anthropicKey, hasElevenKey: !!s.elevenKey,
+      provider: s.provider, model: s.model, models: AI_MODELS, hasAnthropicKey: !!s.anthropicKey, hasElevenKey: !!s.elevenKey,
+      hasOpenaiKey: !!s.openaiKey, openaiModel: s.openaiModel, openaiBase: s.openaiBase,
       voiceId: s.voiceId, voiceName: s.voiceName,
-      features: { text: !!s.anthropicKey, transcribe: !!s.elevenKey, voice: !!s.elevenKey && !!s.voiceId },
+      features: { text: this.textReady(s), transcribe: !!s.elevenKey, voice: !!s.elevenKey && !!s.voiceId },
     };
   }
+
+  /** Textaufgaben möglich? OpenAI-kompatible lokale Dienste (eigene Adresse) brauchen keinen Schlüssel */
+  private textReady(s: AiSettings) { return s.provider === 'openai' ? !!(s.openaiKey || s.openaiBase) : !!s.anthropicKey; }
 
   /** Leere Zeichenkette bei Schlüsseln = unverändert lassen, null = löschen */
   update(patch: Partial<Record<keyof AiSettings, string | null>>) {
@@ -57,9 +68,13 @@ export class Ai {
     for (const k of Object.keys(DEFAULTS) as (keyof AiSettings)[]) {
       if (!(k in patch)) continue;
       const v = patch[k];
-      if ((k === 'anthropicKey' || k === 'elevenKey') && v === '') continue;
-      next[k] = v == null ? DEFAULTS[k] : String(v).trim();
+      if ((k === 'anthropicKey' || k === 'elevenKey' || k === 'openaiKey') && v === '') continue;
+      (next as any)[k] = v == null ? DEFAULTS[k] : String(v).trim();
     }
+    if (next.provider !== 'openai') next.provider = 'anthropic';
+    next.openaiBase = next.openaiBase.replace(/\/+$/, '');
+    if (next.openaiBase && !/^https?:\/\//i.test(next.openaiBase)) throw new AiError(400, 'Die Adresse muss mit http:// oder https:// beginnen.');
+    if (!next.openaiModel) next.openaiModel = DEFAULTS.openaiModel;
     if (!AI_MODELS.some((m) => m.id === next.model)) next.model = DEFAULTS.model;
     this.store.setSetting('ai', next);
     return this.publicSettings();
@@ -72,8 +87,9 @@ export class Ai {
     return new Anthropic({ apiKey: key, maxRetries: 2, timeout: 120_000 });
   }
 
-  private async ask(system: string, user: string, opts: { maxTokens: number; schema?: Record<string, unknown>; model?: string }): Promise<string> {
+  private async ask(system: string, user: string, opts: { maxTokens: number; schema?: Record<string, unknown>; model?: string; fast?: boolean }): Promise<string> {
     const s = this.settings;
+    if (s.provider === 'openai') return this.askOpenai(s, `${SYSTEM}\n\n${system}`, user, opts);
     try {
       const r = await this.client().beta.messages.create({
         model: opts.model ?? s.model,
@@ -97,6 +113,63 @@ export class Ai {
       if (e instanceof Anthropic.APIError) throw new AiError(502, `Claude ist gerade nicht erreichbar (${e.status ?? 'Netzwerk'}).`);
       throw e;
     }
+  }
+
+  // ---------- OpenAI (ChatGPT) oder OpenAI-kompatibel ----------
+  private openaiUrl(s: AiSettings, path: string) { return `${s.openaiBase || 'https://api.openai.com/v1'}${path}`; }
+
+  private async openaiFetch(s: AiSettings, path: string, init: RequestInit): Promise<Response> {
+    if (!s.openaiKey && !s.openaiBase) throw new AiError(400, 'Bitte zuerst in den Einstellungen einen OpenAI-API-Schlüssel eintragen.');
+    let r: Response;
+    try {
+      r = await fetch(this.openaiUrl(s, path), { ...init, headers: { 'content-type': 'application/json', ...(s.openaiKey ? { authorization: `Bearer ${s.openaiKey}` } : {}), ...(init.headers ?? {}) }, signal: AbortSignal.timeout(120_000) });
+    } catch { throw new AiError(502, s.openaiBase ? `${s.openaiBase} ist nicht erreichbar.` : 'OpenAI ist gerade nicht erreichbar.'); }
+    if (r.ok) return r;
+    const body = await r.text().catch(() => '');
+    let detail = body.slice(0, 200);
+    try { detail = JSON.parse(body)?.error?.message ?? detail; } catch { /* Rohtext */ }
+    if (r.status === 401) throw new AiError(400, 'Der OpenAI-API-Schlüssel ist ungültig.');
+    if (r.status === 429) throw new AiError(429, `Zu viele KI-Anfragen oder kein Guthaben: ${detail}`);
+    if (r.status === 404) throw new AiError(400, `Modell nicht gefunden: ${detail}`);
+    const err = new AiError(r.status === 400 ? 400 : 502, `OpenAI meldet einen Fehler (${r.status}): ${detail}`);
+    (err as any).raw = r.status;
+    throw err;
+  }
+
+  private async askOpenai(s: AiSettings, system: string, user: string, opts: { maxTokens: number; schema?: Record<string, unknown> }): Promise<string> {
+    const model = s.openaiModel;
+    // GPT-5/o-Modelle denken vor der Antwort: wenig Denken reicht für Chataufgaben, Budget großzügiger
+    const reasoning = !s.openaiBase && /^(gpt-5|o\d)/.test(model);
+    const body: Record<string, unknown> = {
+      model,
+      messages: [{ role: 'system', content: system + (opts.schema ? '\n\nAntworte ausschließlich mit JSON nach diesem Schema: ' + JSON.stringify(opts.schema) : '') }, { role: 'user', content: user }],
+      ...(reasoning ? { reasoning_effort: 'low', max_completion_tokens: opts.maxTokens * 4 } : { max_tokens: opts.maxTokens }),
+    };
+    const withSchema = opts.schema ? { ...body, response_format: { type: 'json_schema', json_schema: { name: 'antwort', schema: opts.schema, strict: false } } } : body;
+    let r: Response;
+    try { r = await this.openaiFetch(s, '/chat/completions', { method: 'POST', body: JSON.stringify(withSchema) }); }
+    catch (e) {
+      // Manche kompatiblen Dienste kennen response_format nicht: ohne erneut versuchen
+      if (!opts.schema || (e as any).raw !== 400) throw e;
+      r = await this.openaiFetch(s, '/chat/completions', { method: 'POST', body: JSON.stringify(body) });
+    }
+    const j = (await r.json()) as { choices?: { message?: { content?: string | null; refusal?: string | null }; finish_reason?: string }[] };
+    const c = j.choices?.[0];
+    if (c?.message?.refusal) throw new AiError(422, 'Die KI hat diese Anfrage abgelehnt.');
+    let text = (c?.message?.content ?? '').trim();
+    if (opts.schema) text = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    if (!text) throw new AiError(502, c?.finish_reason === 'length' ? 'Antwort war zu lang, bitte erneut versuchen.' : 'Die KI hat keine Antwort geliefert.');
+    return text;
+  }
+
+  /** Verfügbare Chat-Modelle des OpenAI-Kontos bzw. des kompatiblen Dienstes */
+  async openaiModels(): Promise<string[]> {
+    const s = this.settings;
+    const r = await this.openaiFetch(s, '/models', { method: 'GET' });
+    const j = (await r.json()) as { data?: { id: string }[] };
+    const ids = (j.data ?? []).map((m) => m.id);
+    const chat = s.openaiBase ? ids : ids.filter((id) => /^(gpt-|o\d|chatgpt-)/.test(id) && !/(audio|realtime|tts|transcribe|image|search|embedding|instruct|codex)/.test(id));
+    return chat.sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
   }
 
   private transcript(chatId: string, limit: number): { text: string; count: number } {
@@ -164,7 +237,7 @@ Jede Antwort höchstens etwa 12 Wörter. Die drei sollen sich in der Richtung un
 Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.
 Braucht die neueste Nachricht keine Antwort (z. B. nur ein Emoji, "ok", ein Danke, eine Werbe- oder Systemnachricht), gib eine leere Liste zurück.`,
       t.text,
-      { maxTokens: 600, model: 'claude-haiku-5-5', schema: { type: 'object', properties: { suggestions: { type: 'array', items: { type: 'string' } } }, required: ['suggestions'], additionalProperties: false } });
+      { maxTokens: 600, model: 'claude-haiku-5-5', fast: true, schema: { type: 'object', properties: { suggestions: { type: 'array', items: { type: 'string' } } }, required: ['suggestions'], additionalProperties: false } });
     try {
       return (JSON.parse(raw).suggestions as unknown[]).map(String).map((s) => s.trim()).filter(Boolean).slice(0, 3);
     } catch { throw new AiError(502, 'Die Vorschläge konnten nicht gelesen werden.'); }
