@@ -19,6 +19,7 @@ import { Rail, Avatar } from './components/Rail';
 import { previewOf } from './components/Message';
 import { T } from './i18n';
 import { clearSnapshot, readSnapshot, writeSnapshot, type Snapshot } from './snapshot';
+import { setTyping } from './effects';
 
 /**
  * Frisch geladene Liste mit der alten abgleichen: Unveränderte Einträge behalten ihr altes Objekt.
@@ -178,7 +179,9 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
         return new Map(ms).set(e.message.chatId, next);
       });
       if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
-    } else if (e.type === 'message_removed') {
+      if (!e.message.fromMe && Date.now() - e.message.ts < 60_000) setTyping(e.message.chatId, false);
+    } else if (e.type === 'typing') setTyping(e.chatId, e.on);
+    else if (e.type === 'message_removed') {
       setMessages((ms) => { const list = ms.get(e.chatId); return list ? new Map(ms).set(e.chatId, list.filter((m) => m.id !== e.id)) : ms; });
     } else if (e.type === 'planned') setPlanned(e.items);
     else if (e.type === 'reminder') {

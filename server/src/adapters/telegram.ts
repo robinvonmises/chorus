@@ -208,6 +208,11 @@ export class TelegramAdapter implements Adapter {
       for (const id of u.messages) this.ev.messageUpdate(chat, String(id), { deleted: true, text: '' });
     } else if (u instanceof Api.UpdateDeleteMessages) {
       for (const id of u.messages) this.ev.messageUpdate('*', String(id), { deleted: true, text: '' });
+    } else if (u instanceof Api.UpdateUserTyping || u instanceof Api.UpdateChatUserTyping || u instanceof Api.UpdateChannelUserTyping) {
+      // Tippt gerade: Telegram wiederholt das alle paar Sekunden, Abbruch kommt als SendMessageCancelAction
+      const peer = u instanceof Api.UpdateUserTyping ? new Api.PeerUser({ userId: u.userId })
+        : u instanceof Api.UpdateChatUserTyping ? new Api.PeerChat({ chatId: u.chatId }) : new Api.PeerChannel({ channelId: u.channelId });
+      this.ev.typing(utils.getPeerId(peer).toString(), !(u.action instanceof Api.SendMessageCancelAction));
     } else if (u instanceof Api.UpdateReadHistoryOutbox) {
       this.ev.messageUpdate(utils.getPeerId(u.peer).toString(), `<=${u.maxId}`, { status: 'read' });
     }

@@ -5,7 +5,7 @@ import { NETWORKS, askMailDelete, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { T } from '../i18n';
-import { reducedMotion, useFx } from '../effects';
+import { reducedMotion, useFx, useTyping } from '../effects';
 
 export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
@@ -343,7 +343,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       onClick={() => { if (longFired.current) { longFired.current = false; return; } onClick(); }}
       onTouchStart={start} onTouchEnd={cancel} onTouchMove={cancel} onContextMenu={(e) => { e.preventDefault(); onLong(); }}>
       {selecting && <span className={`sel-check ${selected ? 'on' : ''}`}>{selected && <Icon name="check" size={14} />}</span>}
-      <Avatar name={c.peer?.name ?? c.title} src={c.avatar} />
+      <TypingAvatar id={c.id}><Avatar name={c.peer?.name ?? c.title} src={c.avatar} /></TypingAvatar>
       <span className="chat-main">
         <span className="chat-top">
           <span className="chat-title">{c.title}</span>
@@ -420,4 +420,11 @@ function Waves({ color }: { color?: string }) {
       <svg width="800" height="12" viewBox="0 0 800 12"><path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
     </div>
   );
+}
+
+/** Lebendige Avatare: pulsierender Ring, solange jemand im Chat tippt */
+export function TypingAvatar({ id, children }: { id: string; children: React.ReactNode }) {
+  const on = useFx('typing');
+  const typing = useTyping(id);
+  return on ? <span className={`fx-typing-av${typing ? ' on' : ''}`}>{children}</span> : <>{children}</>;
 }

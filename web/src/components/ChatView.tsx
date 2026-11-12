@@ -7,6 +7,7 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 import { NETWORKS, QUICK_REACTIONS, adjLang, askMailDelete, dayLabel } from '../util';
 import { TranslateSheet } from './TranslateSheet';
 import { Avatar } from './Rail';
+import { TypingAvatar } from './ChatList';
 import { Icon } from './Icon';
 import { MessageBubble, albumable, previewOf } from './Message';
 import { Composer } from './Composer';
@@ -211,7 +212,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       <header className="chat-head">
         <button className="icon-btn back" onClick={onBack} aria-label={T('Zurück')}><Icon name="back" /></button>
         <button className="chat-head-who" onClick={() => setContact(true)} aria-label={T('Profil anzeigen')}>
-        <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
+        <TypingAvatar id={chat.id}><Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} /></TypingAvatar>
         <div className="chat-head-main">
           <b>{chat.title}</b>
           <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? `${chat.peer.name} · ` : ''}{chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && T(' · nicht verbunden')}{tr?.on && <span> · 🌐 {tr.langName ?? T('Übersetzung an')}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> {T('· 🤖 Autobot (')}{chat.autopilot.max - chat.autopilot.used} {T('übrig)')}</span>}</small>

@@ -1113,3 +1113,10 @@ html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite
 @keyframes fx-wave-amp { 0% { opacity: .35; transform: scaleY(.45); } 18% { opacity: 1; transform: scaleY(1.25); } 100% { opacity: .35; transform: scaleY(.45); } }
 @keyframes fx-wave-run { from { transform: translateX(0); } to { transform: translateX(-200px); } }
 @media (prefers-reduced-motion: reduce) { .fx-waves.go, .fx-waves.go svg { animation: none; } }
+
+/* Lebendige Avatare: Ring pulsiert, solange jemand tippt */
+.fx-typing-av { position: relative; display: grid; flex: none; border-radius: 50%; }
+.fx-typing-av::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2.5px solid var(--accent); opacity: 0; transform: scale(.9); pointer-events: none; transition: opacity .3s, transform .3s; }
+.fx-typing-av.on::after { opacity: 1; transform: scale(1); animation: fx-typing 1.4s ease-in-out infinite; }
+@keyframes fx-typing { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.08); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .fx-typing-av.on::after { animation: none; } }
