@@ -19,10 +19,12 @@ export interface AiSettings {
   ttsModel: string;
   /** Oberflächensprache des Nutzers: Sprache von Zusammenfassungen, Antworten und Übersetzungen */
   lang: 'en' | 'de';
+  /** Antwortvorschläge über dem Eingabefeld: 'off' = keine Chips und keine KI-Anfrage */
+  quickReplies: 'on' | 'off';
 }
 const DEFAULTS: AiSettings = {
   provider: 'anthropic', anthropicKey: '', model: 'claude-opus-5-5', openaiKey: '', openaiModel: 'gpt-5-mini', openaiBase: '', elevenKey: '', voiceId: '', voiceName: '',
-  sttModel: 'scribe_v1', ttsModel: 'eleven_multilingual_v2', lang: 'en',
+  sttModel: 'scribe_v1', ttsModel: 'eleven_multilingual_v2', lang: 'en', quickReplies: 'on',
 };
 /** Sprachname für die (deutschen) Anweisungen an die KI */
 const LANG_DE: Record<AiSettings['lang'], { name: string; into: string; example: string }> = {
@@ -39,7 +41,7 @@ export const AI_MODELS = [
 export interface AiPublicSettings {
   provider: AiSettings['provider']; model: string; models: typeof AI_MODELS; hasAnthropicKey: boolean; hasElevenKey: boolean;
   hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
-  voiceId: string; voiceName: string; features: { text: boolean; transcribe: boolean; voice: boolean };
+  voiceId: string; voiceName: string; quickReplies: boolean; features: { text: boolean; transcribe: boolean; voice: boolean };
 }
 
 export class AiError extends Error { constructor(public statusCode: number, msg: string) { super(msg); } }
@@ -60,7 +62,7 @@ export class Ai {
     return {
       provider: s.provider, model: s.model, models: AI_MODELS, hasAnthropicKey: !!s.anthropicKey, hasElevenKey: !!s.elevenKey,
       hasOpenaiKey: !!s.openaiKey, openaiModel: s.openaiModel, openaiBase: s.openaiBase,
-      voiceId: s.voiceId, voiceName: s.voiceName,
+      voiceId: s.voiceId, voiceName: s.voiceName, quickReplies: s.quickReplies !== 'off',
       features: { text: this.textReady(s), transcribe: !!s.elevenKey, voice: !!s.elevenKey && !!s.voiceId },
     };
   }
@@ -86,6 +88,8 @@ export class Ai {
     }
     if (next.provider !== 'openai') next.provider = 'anthropic';
     if (next.lang !== 'de') next.lang = 'en';
+    if (next.quickReplies !== 'off') next.quickReplies = 'on';
+    if (next.quickReplies === 'off') this.quickCache.clear();
     next.openaiBase = next.openaiBase.replace(/\/+$/, '');
     if (next.openaiBase && !/^https?:\/\//i.test(next.openaiBase)) throw new AiError(400, 'Die Adresse muss mit http:// oder https:// beginnen.');
     if (!next.openaiModel) next.openaiModel = DEFAULTS.openaiModel;
@@ -227,7 +231,7 @@ Erfinde keine Fakten, Termine oder Zusagen, die nicht aus dem Chat hervorgehen.`
 
   async quick(chatId: string): Promise<{ key: string | null; suggestions: string[] }> {
     const last = this.store.listMessages(chatId, undefined, 5).filter((m) => !m.deleted).at(-1);
-    if (!last || last.fromMe) return { key: null, suggestions: [] };
+    if (!last || last.fromMe || this.settings.quickReplies === 'off') return { key: null, suggestions: [] };
     const key = last.id;
     const hit = this.quickCache.get(chatId);
     if (hit?.key === key) return { key, suggestions: await hit.list };
