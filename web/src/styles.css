@@ -1097,3 +1097,10 @@ html.fx-night body::after { content: ''; position: fixed; inset: 0; z-index: 214
 html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite; }
 @keyframes fx-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 @media (prefers-reduced-motion: reduce) { html.fx-night .badge { animation: none; } }
+
+/* Reaktions-Burst */
+.fx-burst { position: fixed; z-index: 2147482000; width: 0; height: 0; pointer-events: none; }
+.fx-burst span { position: absolute; left: -10px; top: -12px; font-size: 20px; line-height: 1; will-change: transform, opacity; }
+.reaction.fx-pop { animation: fx-pop .55s cubic-bezier(.3,1.6,.5,1) .18s both; }
+@keyframes fx-pop { 0% { transform: scale(.2); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .reaction.fx-pop { animation: none; } }

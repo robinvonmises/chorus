@@ -5,12 +5,13 @@ import { useEffect, useState } from 'react';
  * (Standard: an). Bewusst nur CSS transform/opacity, keine Layout-Übergänge; bei „Bewegung reduzieren“
  * laufen keine Animationen.
  */
-export type Fx = 'inboxZero' | 'daylight' | 'night';
+export type Fx = 'inboxZero' | 'daylight' | 'night' | 'burst';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
   { id: 'inboxZero', title: 'Gelesen-Moment', hint: 'Wenn alles gelesen ist, schwingt das Chorus-Logo einmal aus' },
   { id: 'daylight', title: 'Tageszeit-Hintergrund', hint: 'Chat-Hintergrund färbt sich mit der Uhrzeit: morgens kühl, abends golden. Ersetzt den gewählten Hintergrund' },
   { id: 'night', title: 'Ruhemodus nachts', hint: 'Von 22 bis 6 Uhr wird alles leicht gedimmt und wärmer, Ungelesen-Zähler atmen langsam' },
+  { id: 'burst', title: 'Reaktions-Burst', hint: 'Beim Reagieren platzt das Emoji in kleine Teilchen und landet federnd an der Blase' },
 ];
 
 const key = (f: Fx) => `inbox:fx:${f}`;
@@ -55,4 +56,35 @@ export function daylightCss(d = new Date()): string {
 export function applyNight(d = new Date()) {
   const h = d.getHours();
   document.documentElement.classList.toggle('fx-night', fxOn('night') && (h >= 22 || h < 6));
+}
+
+/** Reaktions-Burst: Emoji-Teilchen fliegen von der Blase aus (Web Animations, nur transform/opacity) */
+const popped = new Map<string, number>();
+export const justReacted = (id: string, emoji: string) => (popped.get(`${id}|${emoji}`) ?? 0) > Date.now() - 2500;
+export function burst(messageId: string, emoji: string) {
+  if (!fxOn('burst') || reducedMotion()) return;
+  popped.set(`${messageId}|${emoji}`, Date.now());
+  const msg = document.querySelector(`.msg[data-id="${CSS.escape(messageId)}"]`);
+  const b = msg?.querySelector('.bubble');
+  if (!b || typeof (b as HTMLElement).animate !== 'function') return;
+  const r = b.getBoundingClientRect();
+  const out = msg!.classList.contains('out');
+  const layer = document.createElement('div');
+  layer.className = 'fx-burst';
+  layer.style.left = `${out ? r.right - 22 : r.left + 22}px`;
+  layer.style.top = `${r.bottom - 4}px`;
+  const n = 9;
+  for (let i = 0; i < n; i++) {
+    const s = document.createElement('span');
+    s.textContent = emoji;
+    layer.appendChild(s);
+    const a = (Math.PI * 2 * i) / n + Math.random() * 0.5;
+    const d = 34 + Math.random() * 26;
+    s.animate([
+      { transform: 'translate(0,0) scale(.3)', opacity: 1 },
+      { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d - 10}px) scale(${0.55 + Math.random() * 0.4})`, opacity: 0 },
+    ], { duration: 650, easing: 'cubic-bezier(.2,.7,.3,1)', delay: i * 12, fill: 'forwards' });
+  }
+  document.body.appendChild(layer);
+  window.setTimeout(() => layer.remove(), 900);
 }

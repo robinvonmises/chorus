@@ -9,6 +9,7 @@ import { Icon } from './Icon';
 import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
 import { T, lang, locale } from '../i18n';
+import { justReacted } from '../effects';
 
 const ATT_ICON = { image: '📷', video: '🎬', audio: '🎵', voice: '🎤', file: '📎', sticker: '' } as const;
 
@@ -61,7 +62,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   const myReaction = m.reactions.find((r) => r.fromMe)?.emoji ?? null;
 
   return (
-    <div className={`msg ${m.fromMe ? 'out' : 'in'}${showName ? ' first' : ''}${senderAvatar !== undefined ? ' with-av' : ''}`} data-remote={m.remoteId}
+    <div className={`msg ${m.fromMe ? 'out' : 'in'}${showName ? ' first' : ''}${senderAvatar !== undefined ? ' with-av' : ''}`} data-remote={m.remoteId} data-id={m.id}
       onContextMenu={(e) => { e.preventDefault(); onAction(m, { x: e.clientX, y: e.clientY }); }}
       onTouchStart={startPress} onTouchEnd={endPress} onTouchMove={endPress}
       onDoubleClick={() => !m.deleted && onReact(m, myReaction === '❤️' ? null : '❤️')}>
@@ -104,7 +105,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
       {groups.size > 0 && (
         <div className="reactions">
           {[...groups].map(([emoji, g]) => (
-            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? T('Reaktion entfernen') : T('Auch reagieren')}>
+            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}${g.mine && justReacted(m.id, emoji) ? ' fx-pop' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? T('Reaktion entfernen') : T('Auch reagieren')}>
               {emoji}{g.n > 1 && <span>{g.n}</span>}
             </button>
           ))}
