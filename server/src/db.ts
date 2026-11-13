@@ -56,6 +56,7 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
+    if (!mcols.includes('history')) this.db.exec('ALTER TABLE messages ADD COLUMN history TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
     for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
@@ -238,14 +239,17 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
-      translationFrom: r.translation_from ?? null, html: r.html ?? null,
+      translationFrom: r.translation_from ?? null, html: r.html ?? null, history: r.history ? JSON.parse(r.history) : [],
     };
   }
   /** true, wenn die Nachricht neu war */
   upsertMessage(m: Omit<Message, 'id' | 'reactions'> & { reactions?: Reaction[] }): { msg: Message; isNew: boolean } {
     const id = `${m.chatId}:${m.remoteId}`;
-    const ex = this.db.prepare('SELECT id FROM messages WHERE id=?').get(id);
+    const ex = this.db.prepare('SELECT id, text, deleted FROM messages WHERE id=?').get(id) as { id: string; text: string; deleted: number } | undefined;
     if (ex) {
+      // Behaltene gelöschte Nachricht nicht durch einen späteren Abgleich überschreiben
+      if (ex.deleted && !m.deleted) return { msg: this.getMessage(id)!, isNew: false };
+      if (m.edited) this.keepVersion(id, ex.text, m.text);
       this.db.prepare(`UPDATE messages SET text=?, edited=?, deleted=?, attachments=?, status=CASE WHEN ?='pending' THEN status ELSE ? END,
         reactions=COALESCE(?, reactions), html=COALESCE(?, html) WHERE id=?`).run(m.text, Number(m.edited), Number(m.deleted), JSON.stringify(m.attachments),
         m.status, m.status, m.reactions ? JSON.stringify(m.reactions) : null, m.html ?? null, id);
@@ -276,8 +280,21 @@ export class Store {
     this.db.prepare('UPDATE messages SET id=?, remote_id=? WHERE id=?').run(newId, newRemoteId, oldId);
     return this.getMessage(newId);
   }
+  /** Bearbeitung: bisherigen Text als frühere Fassung merken (höchstens 20) */
+  private keepVersion(id: string, oldText: string, newText: string | undefined) {
+    if (newText === undefined || !oldText || oldText === newText) return;
+    const r = this.db.prepare('SELECT history FROM messages WHERE id=?').get(id) as { history: string | null } | undefined;
+    const h = r?.history ? JSON.parse(r.history) as { text: string; ts: number }[] : [];
+    h.push({ text: oldText, ts: Date.now() });
+    this.db.prepare('UPDATE messages SET history=? WHERE id=?').run(JSON.stringify(h.slice(-20)), id);
+  }
   removeMessage(id: string) { this.db.prepare('DELETE FROM messages WHERE id=?').run(id); }
   patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
+    if (patch.edited && patch.text !== undefined) {
+      const cur = this.db.prepare('SELECT text, deleted FROM messages WHERE id=?').get(id) as { text: string; deleted: number } | undefined;
+      if (cur?.deleted) return this.getMessage(id);
+      if (cur) this.keepVersion(id, cur.text, patch.text);
+    }
     const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
       if (!map[k]) continue;
