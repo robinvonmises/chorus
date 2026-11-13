@@ -236,7 +236,7 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), ref: { m, i } }); }}>
-        {!pending && <img src={/^image\/gif/i.test(a.mime) ? url : thumbUrl(m, i)} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
+        {!pending && <img src={/^image\/gif/i.test(a.mime) ? url : thumbUrl(m, i)} alt={a.name} loading="lazy" decoding="async" onError={() => setFailed(true)} />}
       </a>
     );
   }

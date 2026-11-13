@@ -395,6 +395,19 @@ export class Store {
   deleteFile(id: string) {
     const p = join(this.filesDir, id);
     if (/^[0-9a-f-]{36}$/.test(id) && existsSync(p)) unlinkSync(p);
+    if (/^[0-9a-f-]{36}$/.test(id) && existsSync(p + '.thumb')) unlinkSync(p + '.thumb');
+  }
+  /** Vorschaubild (?thumb=1) neben der Originaldatei, damit es nach einem Server-Neustart nicht neu erzeugt werden muss */
+  readThumb(id: string): Buffer | null {
+    if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+    const p = join(this.filesDir, id + '.thumb');
+    if (!existsSync(p)) return null;
+    try { return open(this.dek, readFileSync(p)); } catch { return null; }
+  }
+  storeThumb(id: string, data: Buffer) {
+    if (!/^[0-9a-f-]{36}$/.test(id)) return;
+    const p = join(this.filesDir, id + '.thumb');
+    if (!existsSync(p)) writeFileSync(p, seal(this.dek, data));
   }
 
   close() { this.db.close(); }

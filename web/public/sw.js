@@ -1,12 +1,57 @@
 // Minimaler Service Worker: macht die App installierbar und zeigt Benachrichtigungen an.
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+self.addEventListener('activate', (e) => { e.waitUntil(self.clients.claim()); trimMedia(true); });
 // Die App-Seite selbst immer frisch vom Server holen: iOS öffnet sonst (z. B. beim Tipp auf eine Benachrichtigung)
 // eine alte, aufgehobene Startseite, deren Skripte es nach einem Update nicht mehr gibt, und zeigt nur Weiß.
 self.addEventListener('fetch', (e) => {
-  if (e.request.mode !== 'navigate' || e.request.method !== 'GET') return;
-  e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request)));
+  if (e.request.method !== 'GET') return;
+  if (e.request.mode === 'navigate') { e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request))); return; }
+  if (isMedia(e.request)) e.respondWith(fromMediaCache(e.request));
 });
+
+// Bilder im Chat (Vorschaubilder, Video-Standbilder, Profilbilder) dauerhaft auf dem Gerät aufheben.
+// iOS wirft den normalen Browser-Cache weg, wenn es die Homescreen-App im Hintergrund beendet; danach luden
+// alle Bilder beim Öffnen sichtbar neu. Diese Adressen ändern ihren Inhalt nie (neue Version = neue Adresse).
+// Alles ist abgesichert: Klappt am Cache etwas nicht, geht die Anfrage ganz normal an den Server.
+const MEDIA_CACHE = 'chorus-media-v1';
+const MEDIA_MAX = 2500;             // Einträge; Vorschaubilder sind ~50 KB → grob 100 MB
+const MEDIA_MAX_BYTES = 3000000;    // größere Einzeldateien (Originale) nicht aufheben
+function isMedia(req) {
+  if (req.headers.has('range')) return false;
+  let u;
+  try { u = new URL(req.url); } catch { return false; }
+  if (u.origin !== self.location.origin) return false;
+  if (u.pathname === '/api/attachment') return u.searchParams.get('thumb') === '1' || req.destination === 'image';
+  // Profilbilder: nur mit Versionsangabe (?v=…), sonst könnte ein altes Bild hängen bleiben
+  return /^\/api\/(chats|profiles)\/.+\/avatar$/.test(u.pathname) && u.searchParams.has('v');
+}
+async function fromMediaCache(req) {
+  let cache = null;
+  try {
+    cache = await caches.open(MEDIA_CACHE);
+    const hit = await cache.match(req.url);
+    if (hit) return hit;
+  } catch { cache = null; }
+  const res = await fetch(req);
+  try {
+    const len = Number(res.headers.get('content-length') || 0);
+    if (cache && res.status === 200 && res.type === 'basic' && /^image\//.test(res.headers.get('content-type') || '') && len <= MEDIA_MAX_BYTES) {
+      const copy = res.clone();
+      cache.put(req.url, copy).then(() => trimMedia(false)).catch(() => {});
+    }
+  } catch { /* nur nicht aufgehoben */ }
+  return res;
+}
+let trimming = false, puts = 0;
+function trimMedia(force) {
+  if (trimming || (!force && ++puts % 20)) return; // nicht bei jedem Bild durchzählen
+  trimming = true;
+  caches.open(MEDIA_CACHE).then(async (c) => {
+    const keys = await c.keys(); // älteste zuerst
+    for (let i = 0; i < keys.length - MEDIA_MAX; i++) await c.delete(keys[i]);
+  }).catch(() => {}).finally(() => { trimming = false; });
+}
+
 // Ziel einer angetippten Benachrichtigung. iOS weckt eine eingefrorene App nur langsam auf und verliert dabei
 // manchmal die Nachricht. Deshalb merkt sich der Service Worker das Ziel, und die App fragt beim Aufwachen nach.
 let pendingOpen = null;
