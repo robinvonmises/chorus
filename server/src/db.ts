@@ -55,6 +55,7 @@ export class Store {
     const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
+    if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
     for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
@@ -237,7 +238,7 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
-      translationFrom: r.translation_from ?? null,
+      translationFrom: r.translation_from ?? null, html: r.html ?? null,
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -246,13 +247,13 @@ export class Store {
     const ex = this.db.prepare('SELECT id FROM messages WHERE id=?').get(id);
     if (ex) {
       this.db.prepare(`UPDATE messages SET text=?, edited=?, deleted=?, attachments=?, status=CASE WHEN ?='pending' THEN status ELSE ? END,
-        reactions=COALESCE(?, reactions) WHERE id=?`).run(m.text, Number(m.edited), Number(m.deleted), JSON.stringify(m.attachments),
-        m.status, m.status, m.reactions ? JSON.stringify(m.reactions) : null, id);
+        reactions=COALESCE(?, reactions), html=COALESCE(?, html) WHERE id=?`).run(m.text, Number(m.edited), Number(m.deleted), JSON.stringify(m.attachments),
+        m.status, m.status, m.reactions ? JSON.stringify(m.reactions) : null, m.html ?? null, id);
     } else {
-      this.db.prepare(`INSERT INTO messages(id,chat_id,remote_id,sender_id,sender_name,from_me,ts,text,reply_to,edited,deleted,attachments,reactions,status,transcript)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, m.chatId, m.remoteId, m.senderId, m.senderName, Number(m.fromMe), m.ts, m.text,
+      this.db.prepare(`INSERT INTO messages(id,chat_id,remote_id,sender_id,sender_name,from_me,ts,text,reply_to,edited,deleted,attachments,reactions,status,transcript,html)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id, m.chatId, m.remoteId, m.senderId, m.senderName, Number(m.fromMe), m.ts, m.text,
         m.replyToRemoteId ?? null, Number(m.edited), Number(m.deleted), JSON.stringify(m.attachments), JSON.stringify(m.reactions ?? []),
-        m.status, m.transcript ?? null);
+        m.status, m.transcript ?? null, m.html ?? null);
     }
     return { msg: this.getMessage(id)!, isNew: !ex };
   }

@@ -794,6 +794,17 @@ app.get('/api/attachment', async (req, reply) => {
   const q = req.query as { m?: string; i?: string };
   return serveAttachment(req, reply, String(q.m ?? ''), String(q.i ?? '0'));
 });
+// E-Mail im Original (bereinigtes HTML); die Oberfläche zeigt es in einem iframe ohne Skripte
+app.get('/api/mailhtml', async (req, reply) => {
+  const id = String((req.query as { m?: string }).m ?? '');
+  const h = H(req);
+  const msg = h.store.getMessage(id);
+  const data = msg?.html ? h.store.readFile(msg.html) : null;
+  if (!data) return reply.code(404).send({ error: 'Nicht gefunden' });
+  return reply.header('Content-Type', 'text/html; charset=utf-8')
+    .header('Content-Security-Policy', "sandbox; script-src 'none'")
+    .header('Cache-Control', 'private, max-age=86400').send(data);
+});
 app.get('/api/messages/:id/attachments/:idx', async (req, reply) => {
   const { id, idx } = req.params as { id: string; idx: string };
   return serveAttachment(req, reply, id, idx);

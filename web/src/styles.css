@@ -158,9 +158,9 @@ input, textarea { font: inherit; color: inherit; }
 .chat-view { height: 100%; display: flex; flex-direction: column; position: relative; }
 .chat-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; padding-top: calc(10px + var(--safe-t)); background: var(--bg); border-bottom: 1px solid var(--line); z-index: 2; }
 .chat-head .back { display: none; }
-.chat-head-main { flex: 1; min-width: 0; display: grid; }
+.chat-head-main { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); }
 .chat-head-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-head-main small { color: var(--ink-3); font-size: 12px; }
+.chat-head-main small { color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-head .ai-compose { margin-right: -16px; }
 .menu-wrap { position: relative; }
 .menu { position: absolute; top: 44px; min-width: 200px; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 10; display: grid; }
@@ -1020,6 +1020,12 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .fileview-text { flex: 1; margin: 0; padding: 14px; font: 13px/1.45 ui-monospace, Menlo, monospace; white-space: pre-wrap; word-break: break-word; }
 .fileview-info { margin: auto; padding: 24px; max-width: 360px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; word-break: break-word; }
 .att-file-icon.big { width: 76px; height: 76px; border-radius: 18px; margin-bottom: 6px; }
+.fileview-pdf { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px; background: var(--bg-2, #e9e9ee); }
+.fileview-pdf canvas { display: block; max-width: 100%; height: auto; background: #fff; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+.fileview-img { margin: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
+.fileview-media { margin: auto; max-width: 100%; max-height: 100%; background: #000; }
+.fileview-info audio { width: 100%; margin-top: 8px; }
+.mail-orig { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; padding: 5px 10px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink-2); font-size: 13px; }
 .fileview-actions { display: flex; gap: 10px; padding: 10px 12px calc(env(safe-area-inset-bottom) + 10px); border-top: 1px solid var(--line); }
 .fileview-actions .btn { flex: 1; }
 
