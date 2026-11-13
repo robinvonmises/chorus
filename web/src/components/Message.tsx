@@ -1,6 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
-import { openFile } from './FileViewer';
+import { openFile, openMail } from './FileViewer';
 import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
 import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
@@ -81,6 +81,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
           {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
+          {m.html && <button className="mail-orig" onClick={() => openMail(m)}><Icon name="file" size={14} />{T('Original-E-Mail ansehen')}</button>}
           {m.translation && (() => {
             // Eigene, übersetzt gesendete Nachricht: darunter steht das deutsche Original. Sonst die deutsche Übersetzung.
             const orig = m.fromMe && !m.translationFrom;

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanMailText, htmlToText, normSubject } from './mailtext.js';
+import { cleanMailText, htmlToText, normSubject, sanitizeMailHtml, tidyPlainText } from './mailtext.js';
 
 test('Betreff ohne Re/AW/WG', () => {
   assert.equal(normSubject('AW: Re: WG: Angebot Küche'), 'Angebot Küche');
@@ -29,4 +29,23 @@ test('Eingetragene Signatur und „Von meinem iPhone gesendet“', () => {
 test('HTML ohne Gmail-Zitat', () => {
   const html = '<div dir="ltr">Hallo <b>Wayne</b>,<br>anbei die Datei.<p>Gruß&nbsp;Tom</p></div><div class="gmail_quote">On Mon wrote:<blockquote>alt</blockquote></div>';
   assert.equal(htmlToText(html), 'Hallo Wayne,\nanbei die Datei.\nGruß Tom');
+});
+
+test('Beleg-HTML: Bilder, versteckter Vorschautext und lange Links fallen weg', () => {
+  const html = '<html><head><style>p{}</style></head><body><span style="display:none;max-height:0">Vorschau</span>'
+    + '<table><tr><td><img src="https://x/logo.png" alt="Logo"></td></tr><tr><td>Receipt from Anthropic</td><td>€21.42</td></tr>'
+    + '<tr><td><a href="https://dashboard.stripe.com/receipts/invoices/CAcQARoXChVhY2N0XzFSeXJzQm51bmNzWmZzOS">Download receipt</a></td></tr></table></body></html>';
+  assert.equal(htmlToText(html), 'Receipt from Anthropic €21.42\nDownload receipt');
+});
+
+test('Klartext: Bild-Platzhalter und lange Links in Klammern entfernt', () => {
+  const t = 'Paid (invoice illustration [https://stripe-images.s3.amazonaws.com/emails/invoices_invoice_illustration.png])\nDownload receipt (https://dashboard.stripe.com/receipts/invoices/CAcQARoXChVhY2N0XzFSeXJzQm51bmNzWmZzOS)';
+  assert.equal(tidyPlainText(t), 'Paid (invoice illustration)\nDownload receipt');
+});
+
+test('HTML für die Originalansicht ohne Skripte und Event-Attribute', () => {
+  const s = sanitizeMailHtml('<p onclick="x()">Hi<script>alert(1)</script><a href="javascript:x()">a</a><img src="cid:logo@x"></p>', { 'logo@x': 'data:image/png;base64,AA' });
+  assert.ok(!/script>|onclick|javascript:/i.test(s.replace(/script-src/g, '')));
+  assert.ok(s.includes('src="data:image/png;base64,AA"'));
+  assert.ok(s.includes('Content-Security-Policy'));
 });

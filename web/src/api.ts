@@ -47,6 +47,8 @@ export interface Message {
   reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
   /** Nur live bei fehlgeschlagenem Senden: Grund */
   error?: string;
+  /** E-Mail: Original-HTML vorhanden */
+  html?: string | null;
   translation?: string | null;
   /** Sprache des Texts, wenn translation die deutsche Übersetzung ist (bei eigenen übersetzt gesendeten leer: dann ist translation das Original) */
   translationFrom?: string | null;
@@ -276,6 +278,7 @@ export interface StorageSettings {
 export interface ImmichAsset { id: string; video: boolean; name: string; taken: number; duration: string }
 export interface ImmichAlbum { id: string; name: string; count: number; cover: string | null; updated: number }
 export interface NcListing { path: string; folders: string[]; files: { name: string; size: number; mime: string; modified: number }[] }
+export const mailHtmlUrl = (m: Message) => `/api/mailhtml?m=${enc(m.id)}`;
 export const attachmentUrl = (m: Message, i: number, download = false) => `/api/attachment?m=${enc(m.id)}&i=${i}${download ? '&download=1' : ''}`;
 /** Kleine Vorschau (max. 720 px) für die Chat-Ansicht; GIFs und Sticker bleiben im Original (Animation) */
 export const thumbUrl = (m: Message, i: number) => {

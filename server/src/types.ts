@@ -134,6 +134,8 @@ export interface Message {
   translationFrom?: string | null;
   /** Nur live bei fehlgeschlagenem Senden: Grund (wird nicht gespeichert) */
   error?: string;
+  /** E-Mail: bereinigtes Original-HTML (verschlüsselt gespeichert, fileId); abrufbar über /api/messages/:id/html */
+  html?: string | null;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

@@ -5,7 +5,7 @@ import MailComposer from 'nodemailer/lib/mail-composer/index.js';
 import { simpleParser, type AddressObject, type ParsedMail } from 'mailparser';
 import type { Adapter, AdapterEvents, Attachment, OutgoingFile } from '../types.js';
 import type { AdapterFactory } from '../hub.js';
-import { cleanMailText, htmlToText, normSubject } from '../mailtext.js';
+import { cleanMailText, htmlToText, normSubject, sanitizeMailHtml, tidyPlainText } from '../mailtext.js';
 
 /**
  * E-Mail über IMAP (Empfang, IDLE) und SMTP (Senden).
@@ -178,8 +178,17 @@ export class EmailAdapter implements Adapter {
     if (!isSeen && path === 'INBOX' && !t.unseen.includes(m.uid)) t.unseen.push(m.uid);
     this.s.threads[chatRemote] = t;
 
-    const body = mail.text?.trim() ? mail.text : mail.html ? htmlToText(mail.html) : '';
+    // HTML zuerst: der Klartext-Teil von Belegen/Newslettern ist oft ein Gerüst aus [Bild-URLs] und (langen Links)
+    const fromHtml = mail.html ? htmlToText(mail.html) : '';
+    const body = fromHtml || (mail.text?.trim() ? tidyPlainText(mail.text) : '');
     let text = cleanMailText(body, this.sigs());
+    // Original-HTML für „Original ansehen“ einmalig verschlüsselt ablegen (nicht bei jedem erneuten Abruf)
+    let html: string | null = null;
+    if (mail.html && !fromMe && !this.ev.getMessage(chatRemote, remoteId)?.html) {
+      const inline: Record<string, string> = {};
+      for (const a of mail.attachments) if (a.cid && a.content && a.content.length < 300_000 && /^image\//i.test(a.contentType)) inline[a.cid] = `data:${a.contentType};base64,${a.content.toString('base64')}`;
+      html = this.ev.storeFile(Buffer.from(sanitizeMailHtml(mail.html, inline), 'utf8'));
+    }
     const atts = this.attachmentsOf(mail).map((a, i): Attachment => ({
       fileId: null, name: a.filename || `anhang-${i + 1}`, mime: a.contentType || 'application/octet-stream', size: a.size ?? a.content?.length ?? 0, kind: 'file', remoteRef: `${path}|${m.uid}|${i}`,
     }));
@@ -189,7 +198,7 @@ export class EmailAdapter implements Adapter {
     this.ev.chat({ remoteId: chatRemote, title: subj, kind: 'direct', lastTs: 0, lastText: '', peer: { id: peer, name: t.name } });
     this.ev.message({
       chatRemoteId: chatRemote, remoteId, senderId: fromMe ? 'me' : peer, senderName: fromMe ? 'Ich' : t.name, fromMe, ts, text,
-      edited: false, deleted: false, attachments: atts, status: fromMe ? 'sent' : 'received',
+      edited: false, deleted: false, attachments: atts, status: fromMe ? 'sent' : 'received', html,
     });
     // Ungelesen genau wie im Postfach (die Zentrale zählt sonst jede neu geladene Mail)
     this.ev.chat({ remoteId: chatRemote, title: subj, kind: 'direct', lastTs: 0, lastText: '', unread: t.unseen.length, peer: { id: peer, name: t.name } });
