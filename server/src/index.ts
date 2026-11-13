@@ -10,6 +10,7 @@ import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { thumbnail } from './thumbs.js';
 import { emojiCache } from './emoji.js';
+import { reSanitizeMailHtml } from './mailtext.js';
 import fastifyStatic from '@fastify/static';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -927,7 +928,7 @@ app.get('/api/mailhtml', async (req, reply) => {
   if (!data) return reply.code(404).send({ error: 'Nicht gefunden' });
   return reply.header('Content-Type', 'text/html; charset=utf-8')
     .header('Content-Security-Policy', "sandbox; script-src 'none'")
-    .header('Cache-Control', 'private, max-age=86400').send(data);
+    .header('Cache-Control', 'private, no-cache').send(reSanitizeMailHtml(data.toString('utf8')));
 });
 app.get('/api/messages/:id/attachments/:idx', async (req, reply) => {
   const { id, idx } = req.params as { id: string; idx: string };

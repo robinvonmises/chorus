@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanMailText, htmlToText, normSubject, sanitizeMailHtml, tidyPlainText } from './mailtext.js';
+import { MAIL_HEAD, cleanMailText, htmlToText, normSubject, reSanitizeMailHtml, sanitizeMailHtml, tidyPlainText } from './mailtext.js';
 
 test('Betreff ohne Re/AW/WG', () => {
   assert.equal(normSubject('AW: Re: WG: Angebot Küche'), 'Angebot Küche');
@@ -48,4 +48,15 @@ test('HTML für die Originalansicht ohne Skripte und Event-Attribute', () => {
   assert.ok(!/script>|onclick|javascript:/i.test(s.replace(/script-src/g, '')));
   assert.ok(s.includes('src="data:image/png;base64,AA"'));
   assert.ok(s.includes('Content-Security-Policy'));
+});
+
+test('Eigener Kopf landet nicht im <style> der Mail (CSS als Text)', () => {
+  const mail = '<html><head><style type="text/css">body { color: red; }</style></head><body><p>Hi</p></body></html>';
+  const s = sanitizeMailHtml(mail);
+  assert.ok(s.includes('<style type="text/css">body { color: red; }</style>'));
+  // früher gespeichert: Kopf mitten im <style>, wird beim Ausliefern repariert
+  const broken = mail.replace('<style type="text/css">', '<style type="text/css">' + MAIL_HEAD);
+  const fixed = reSanitizeMailHtml(broken);
+  assert.ok(fixed.includes('<style type="text/css">body { color: red; }</style>'));
+  assert.equal(fixed.split(MAIL_HEAD).length, 2);
 });

@@ -79,7 +79,7 @@ export function cleanMailText(raw: string, signatures: string[] = []): string {
 /** HTML in lesbaren Text (Absätze, Zeilenumbrüche, Listen, Links), ohne Stile/Skripte, Bilder und versteckte Vorschautexte */
 export function htmlToText(html: string): string {
   let s = html
-    .replace(/<(script|style|head|title)[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<(script|style|head|title)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
     .replace(/<!--[\s\S]*?-->/g, '')
     // Unsichtbare Vorschauzeilen („Preheader“) der Newsletter- und Belegmails
     .replace(/<(div|span|p|td)\b[^>]*style="[^"]*(display:\s*none|max-height:\s*0|mso-hide:\s*all)[^"]*"[^>]*>[\s\S]*?<\/\1>/gi, '')
@@ -112,6 +112,13 @@ export function tidyPlainText(t: string): string {
     .replace(/\(\s*\)/g, '');
 }
 
+/** Eigener Kopf für die Originalansicht (CSP, Links in neuem Fenster, Bilder nicht breiter als der Bildschirm) */
+export const MAIL_HEAD = '<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; frame-src \'none\'; form-action \'none\'">'
+  + '<base target="_blank"><style>html,body{margin:0;padding:0}body{padding:12px;word-wrap:break-word;-webkit-text-size-adjust:100%}img{max-width:100%;height:auto}</style>';
+
+/** Gespeichertes (schon bereinigtes) HTML für die Ausgabe: alten, evtl. falsch platzierten Kopf entfernen und neu bereinigen */
+export const reSanitizeMailHtml = (stored: string) => sanitizeMailHtml(stored.split(MAIL_HEAD).join(''));
+
 /**
  * Original-HTML für die Ansicht in einem abgeschotteten iframe: ohne Skripte, Formulare, eingebettete Fremdseiten
  * und Event-Attribute. Eingebettete Bilder (cid:) werden über `inline` als data:-URL eingesetzt.
@@ -130,9 +137,9 @@ export function sanitizeMailHtml(html: string, inline: Record<string, string> = 
     });
   // Kein vollständiges Dokument: einpacken
   if (!/<body[\s>]/i.test(s)) s = `<body>${s}</body>`;
-  const head = '<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="script-src \'none\'; object-src \'none\'; frame-src \'none\'; form-action \'none\'">'
-    + '<base target="_blank"><style>html,body{margin:0;padding:0}body{padding:12px;word-wrap:break-word;-webkit-text-size-adjust:100%}img{max-width:100%;height:auto}</style>';
-  s = /<head[\s>]/i.test(s) ? s.replace(/<head([\s>][^>]*)?>/i, (m) => m + head) : s.replace(/<body/i, `<head>${head}</head><body`);
+  // Nur das <head>-Tag selbst treffen: früher fraß das Muster das nächste Tag mit (z. B. <style>) und
+  // setzte den eigenen Block mitten hinein, dann stand das CSS der Mail als Text da
+  s = /<head[\s>]/i.test(s) ? s.replace(/<head(\s[^>]*)?>/i, (m) => m + MAIL_HEAD) : s.replace(/<body/i, `<head>${MAIL_HEAD}</head><body`);
   return /^\s*<!doctype/i.test(s) ? s : `<!DOCTYPE html>${/<html[\s>]/i.test(s) ? s : `<html>${s}</html>`}`;
 }
 
