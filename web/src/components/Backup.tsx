@@ -7,7 +7,11 @@ import { T } from '../i18n';
 export function BackupSection() {
   const [auto, setAuto] = useState<boolean | null>(null);
   const [started, setStarted] = useState(false);
-  useEffect(() => { api.media().then((r) => setAuto(r.autoSave)).catch(() => {}); }, []);
+  const [keep, setKeep] = useState<boolean | null>(null);
+  useEffect(() => {
+    api.media().then((r) => setAuto(r.autoSave)).catch(() => {});
+    api.keepDeleted().then((r) => setKeep(r.on)).catch(() => {});
+  }, []);
   return (
     <section className="set-section">
       <h3>{T('Sicherung')}</h3>
@@ -18,6 +22,12 @@ export function BackupSection() {
         <label className="toggle">
           <input type="checkbox" checked={auto} onChange={async (e) => setAuto((await api.setMedia(e.target.checked)).autoSave)} />
           <span><b>{T('Medien automatisch speichern')}</b><small>{T('Neue Bilder, Videos und Sprachnachrichten sofort verschlüsselt auf dem Server ablegen. Messenger halten Anhänge nur begrenzt bereit, ohne diese Option fehlen sie später in der Sicherung.')}</small></span>
+        </label>
+      )}
+      {keep !== null && (
+        <label className="toggle">
+          <input type="checkbox" checked={keep} onChange={async (e) => setKeep((await api.setKeepDeleted(e.target.checked)).on)} />
+          <span><b>{T('Gelöschte Nachrichten behalten')}</b><small>{T('Zieht jemand eine Nachricht zurück, bleibt sie in Chorus sichtbar und ist als „Gelöscht“ markiert. Gilt ab jetzt, nicht rückwirkend.')}</small></span>
         </label>
       )}
       <small className="muted">{T('Hinweis: Chorus ist bei Signal und WhatsApp ein verknüpftes Gerät und kennt Nachrichten erst ab der Kopplung (WhatsApp überträgt dabei einen Teil der letzten Chats). Ältere Verläufe stehen nur auf dem Handy.')}</small>

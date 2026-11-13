@@ -954,6 +954,8 @@ async function saveToStorage(req: FastifyRequest, id: string, idx: string) {
 }
 app.get('/api/media', async (req) => ({ autoSave: H(req).autoSaveMedia }));
 app.put('/api/media', async (req) => { H(req).autoSaveMedia = !!(req.body as any)?.autoSave; return { autoSave: H(req).autoSaveMedia }; });
+app.get('/api/keep-deleted', async (req) => ({ on: H(req).keepDeleted }));
+app.put('/api/keep-deleted', async (req) => { H(req).keepDeleted = !!(req.body as any)?.on; return { on: H(req).keepDeleted }; });
 
 app.get('/api/search', async (req) => {
   const qs = req.query as { q?: string; chats?: string; before?: string };

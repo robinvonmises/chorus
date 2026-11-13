@@ -129,7 +129,10 @@ export class Hub {
             const cur = store.getMessage(id)?.status;
             if (cur && (rank[cur] ?? -1) >= rank[patch.status]) continue;
           }
-          const msg = store.patchMessage(id, patch);
+          // Vom Gegenüber zurückgezogen: Inhalt behalten und nur als gelöscht markieren (abschaltbar)
+          let p = patch;
+          if (patch.deleted && this.keepDeleted && !store.getMessage(id)?.fromMe) { const { text: _t, ...rest } = patch; p = rest; }
+          const msg = store.patchMessage(id, p);
           if (msg) this.emit({ type: 'message', message: msg });
         }
       },
@@ -325,7 +328,7 @@ export class Hub {
     const msg = this.store.getMessage(messageId);
     if (!msg) throw new Error('Nachricht nicht gefunden');
     const chat = this.chatOrThrow(msg.chatId);
-    if (!msg.remoteId.startsWith('local-')) await this.adapterFor(chat).delete(chat.remoteId, msg.remoteId, forEveryone);
+    if (!msg.remoteId.startsWith('local-') && !msg.deleted) await this.adapterFor(chat).delete(chat.remoteId, msg.remoteId, forEveryone);
     const m = this.store.patchMessage(messageId, { deleted: true, text: '', attachments: [] });
     if (m) this.emit({ type: 'message', message: m });
   }
@@ -350,6 +353,9 @@ export class Hub {
   private mediaBusy = false;
   get autoSaveMedia(): boolean { return this.store.getSetting('media', { autoSave: true }).autoSave; }
   set autoSaveMedia(on: boolean) { this.store.setSetting('media', { autoSave: on }); }
+  /** Vom Gegenüber gelöschte Nachrichten sichtbar behalten */
+  get keepDeleted(): boolean { return this.store.getSetting('keepDeleted', true); }
+  set keepDeleted(on: boolean) { this.store.setSetting('keepDeleted', on); }
   private queueMedia(messageId: string) {
     if (!this.autoSaveMedia) return;
     this.mediaQueue.push(messageId);
