@@ -619,7 +619,11 @@ app.put('/api/chats/:id/draft', async (req) => {
   const id = (req.params as any).id; const h = H(req);
   const b = (req.body ?? {}) as { text?: string; ts?: number };
   const ts = Math.min(Number(b.ts) || Date.now(), Date.now() + 60_000);
-  if (h.store.setDraft(id, String(b.text ?? ''), ts)) h.emitChat(id);
+  let text = String(b.text ?? '');
+  // Verspätete Speicherung eines gerade gesendeten Texts (z. B. Uhr des Geräts geht vor) nicht als Entwurf behalten
+  const norm = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+  if (text.trim() && h.store.recentOwnTexts(id, 5 * 60_000).some((t) => norm(t) === norm(text))) text = '';
+  if (h.store.setDraft(id, text, ts)) h.emitChat(id);
   return { ok: true };
 });
 app.patch('/api/messages/:id', async (req) => {
