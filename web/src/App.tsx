@@ -1,5 +1,6 @@
 import { SaveAsHost } from './components/NextcloudBrowser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { syncPush } from './push';
 import { setPlanned, usePlanned } from './plannedState';
 import { Gallery } from './components/Gallery';
@@ -255,11 +256,24 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
   }), []);
   const markReadNow = useCallback((id: string) => { zeroUnread([id]); api.markRead(id).catch(() => {}); }, [zeroUnread]);
 
+  const chatsRef = useRef(chats);
+  chatsRef.current = chats;
   const openChat = useCallback((id: string | null) => {
+    const go = () => {
+      if (id) { if (location.hash !== '#chat=' + encodeURIComponent(id)) location.hash = 'chat=' + encodeURIComponent(id); }
+      else if (location.hash) history.back();
+      setActive(id);
+    };
+    // iOS macht beim Navigieren (Hash-Wechsel) ein Standbild der Liste und zeigt es beim Zurückwischen.
+    // Hat der Chat Ungelesene, die Zahl erst entfernen und zeichnen lassen, dann navigieren – sonst steht
+    // auf dem Standbild noch die rote Zahl.
+    if (id && chatsRef.current.get(id)?.unread) {
+      flushSync(() => zeroUnread([id]));
+      requestAnimationFrame(() => requestAnimationFrame(go));
+      return;
+    }
     zeroUnread(id ? [id] : linkedRef.current);
-    if (id) { if (location.hash !== '#chat=' + encodeURIComponent(id)) location.hash = 'chat=' + encodeURIComponent(id); }
-    else if (location.hash) history.back();
-    setActive(id);
+    go();
   }, []);
 
   // Zusammengeführter Kontakt: alle Chats derselben Person gemeinsam anzeigen
