@@ -1,6 +1,5 @@
 import type { Network } from './api';
 import { T } from './i18n';
-import { daylightCss, fxOn } from './effects';
 
 /** App-Farbe (Knöpfe, Markierungen, eigene Sprechblasen). Standard: Smaragd */
 export type Accent = { id: string; name: string; brand: string; soft: string; dark: string; darkSoft: string };
@@ -87,7 +86,7 @@ export function chatBgCss(id = loadChatBg()): string {
 }
 export function applyChatBg(id = loadChatBg()) {
   const root = document.documentElement;
-  const css = fxOn('daylight') ? daylightCss() : chatBgCss(id);
+  const css = chatBgCss(id);
   root.classList.toggle('has-chat-bg', !!css);
   if (css) root.style.setProperty('--chat-bg', css); else root.style.removeProperty('--chat-bg');
 }

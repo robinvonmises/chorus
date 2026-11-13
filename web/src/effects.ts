@@ -1,18 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
 /**
- * Kleine Design-Effekte zum Ausprobieren. Jeder ist einzeln in Einstellungen → Darstellung abschaltbar
- * (Standard: an). Bewusst nur CSS transform/opacity, keine Layout-Übergänge; bei „Bewegung reduzieren“
- * laufen keine Animationen.
+ * Kleine Design-Effekte, einzeln abschaltbar in Einstellungen → Darstellung (Standard: an).
+ * Bewusst nur transform/opacity; bei „Bewegung reduzieren“ laufen keine Animationen.
  */
-export type Fx = 'waves' | 'typing' | 'inboxZero' | 'daylight' | 'night' | 'burst';
+export type Fx = 'burst';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
-  { id: 'waves', title: 'Chor-Wellen', hint: 'Feines Wellenband über der Chatliste, das bei neuen Nachrichten in der Farbe des Messengers aufschwingt' },
-  { id: 'typing', title: 'Lebendige Avatare', hint: 'Wer gerade tippt, bekommt einen sanft pulsierenden Ring ums Profilbild (Signal, WhatsApp, Telegram)' },
-  { id: 'inboxZero', title: 'Gelesen-Moment', hint: 'Wenn alles gelesen ist, schwingt das Chorus-Logo einmal aus' },
-  { id: 'daylight', title: 'Tageszeit-Hintergrund', hint: 'Chat-Hintergrund färbt sich mit der Uhrzeit: morgens kühl, abends golden. Ersetzt den gewählten Hintergrund' },
-  { id: 'night', title: 'Ruhemodus nachts', hint: 'Von 22 bis 6 Uhr wird alles leicht gedimmt und wärmer, Ungelesen-Zähler atmen langsam' },
   { id: 'burst', title: 'Reaktions-Burst', hint: 'Beim Reagieren platzt das Emoji in kleine Teilchen und landet federnd an der Blase' },
 ];
 
@@ -30,34 +24,6 @@ export function useFx(f: Fx) {
     return () => window.removeEventListener('chorus:fx', h);
   }, [f]);
   return on;
-}
-
-/** Farbverlauf je Stunde (oben, Mitte, unten); dazwischen wird weich übergeblendet */
-const DAY: [number, string, string, string][] = [
-  [0, '#1e1b4b', '#1e293b', '#0f172a'],
-  [5, '#312e81', '#475569', '#334155'],
-  [7, '#e0f2fe', '#dbeafe', '#e0e7ff'],
-  [10, '#f0f9ff', '#ecfeff', '#f0fdf4'],
-  [15, '#fefce8', '#fef9c3', '#ffedd5'],
-  [18, '#fde68a', '#fdba74', '#f9a8d4'],
-  [20, '#c4b5fd', '#a78bfa', '#6366f1'],
-  [22, '#312e81', '#1e293b', '#0f172a'],
-  [24, '#1e1b4b', '#1e293b', '#0f172a'],
-];
-const hex = (h: string) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const mix = (a: string, b: string, t: number) => `rgb(${hex(a).map((x, i) => Math.round(x + (hex(b)[i] - x) * t)).join(',')})`;
-export function daylightCss(d = new Date()): string {
-  const h = d.getHours() + d.getMinutes() / 60;
-  const i = DAY.findIndex((k, j) => j < DAY.length - 1 && h >= k[0] && h < DAY[j + 1][0]);
-  const a = DAY[i], b = DAY[i + 1];
-  const t = (h - a[0]) / (b[0] - a[0]);
-  return `linear-gradient(170deg, ${mix(a[1], b[1], t)}, ${mix(a[2], b[2], t)} 50%, ${mix(a[3], b[3], t)})`;
-}
-
-/** Ruhemodus nachts: Klasse am <html> setzen (22–6 Uhr) */
-export function applyNight(d = new Date()) {
-  const h = d.getHours();
-  document.documentElement.classList.toggle('fx-night', fxOn('night') && (h >= 22 || h < 6));
 }
 
 /** Reaktions-Burst: Emoji-Teilchen fliegen von der Blase aus (Web Animations, nur transform/opacity) */
@@ -105,4 +71,9 @@ export function setTyping(chatId: string, on: boolean) {
 const typingSub = (f: () => void) => { typingSubs.add(f); return () => { typingSubs.delete(f); }; };
 export function useTyping(chatId: string) {
   return useSyncExternalStore(typingSub, () => typingNow.has(chatId));
+}
+/** Tippt in einem der Chats gerade jemand? (zusammengeführte Kontakte: mehrere Chat-IDs) */
+export function useTypingAny(chatIds: string[]) {
+  const k = chatIds.join('|');
+  return useSyncExternalStore(typingSub, () => k.split('|').some((id) => typingNow.has(id)));
 }
