@@ -940,6 +940,9 @@ async function serveAttachment(req: FastifyRequest, reply: FastifyReply, id: str
   const i = Number(idx);
   const att = msg?.attachments[i];
   if (!msg || !att) return reply.code(404).send({ error: 'Nicht gefunden' });
+  // Gespeicherte Vorschau: sofort, ohne das (oft mehrere MB große) Original zu entschlüsseln
+  const savedThumb = q.thumb === '1' && att.fileId ? h.store.readThumb(att.fileId) : null;
+  if (savedThumb) return reply.header('Content-Type', 'image/jpeg').header('Cache-Control', 'private, max-age=31536000, immutable').send(savedThumb);
   let data: Buffer;
   try { data = await h.attachmentData(msg, i); }
   catch (e: any) {
@@ -952,6 +955,10 @@ async function serveAttachment(req: FastifyRequest, reply: FastifyReply, id: str
     const isVideo = att.kind === 'video' || /^video\//i.test(mime);
     const isImage = !isVideo && att.kind !== 'sticker' && /^image\/(jpe?g|png|webp|heic|heif|avif|bmp)/i.test(mime);
     const t = isVideo || isImage ? await thumbnail(`${C(req).p.id}:${id}:${i}`, isVideo ? 'video' : 'image', async () => data) : null;
+    if (t) {
+      const fid = h.store.getMessage(id)?.attachments[i]?.fileId;
+      if (fid) { try { h.store.storeThumb(fid, t); } catch (e: any) { req.log.warn({ err: e?.message }, 'Vorschau nicht gespeichert'); } }
+    }
     if (t) return reply.header('Content-Type', 'image/jpeg').header('Cache-Control', 'private, max-age=31536000, immutable').send(t);
     if (isVideo) return reply.code(404).send({ error: 'Keine Vorschau' });
   }
