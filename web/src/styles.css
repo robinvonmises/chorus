@@ -232,7 +232,7 @@ button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: poi
 .reaction span { font-size: 12px; color: var(--ink-2); font-weight: 600; }
 .reaction.mine { border-color: var(--accent); background: var(--accent-soft); }
 
-.att-img { display: block; border-radius: 14px; overflow: hidden; background: var(--bg-3); max-width: 340px; min-width: 160px; min-height: 120px; max-height: 420px; margin-bottom: 4px; }
+.att-img { position: relative; display: block; border-radius: 14px; overflow: hidden; background: var(--bg-3); max-width: 340px; min-width: 160px; min-height: 120px; max-height: 420px; margin-bottom: 4px; }
 .att-img img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .att-img.sticker { background: transparent; min-height: 0; max-width: 180px; }
 .att-video { display: block; max-width: 340px; width: 100%; border-radius: 14px; margin-bottom: 4px; background: #000; max-height: 460px; }
@@ -1270,3 +1270,10 @@ html .chat-view.own-bg { background: var(--chat-bg-own); }
 .anim-emoji { position: relative; display: inline-block; }
 .anim-emoji img { position: absolute; left: -6%; top: -6%; width: 112%; height: 112%; pointer-events: none; }
 .anim-emoji.ok > span { visibility: hidden; }
+
+/* Ladekreis über Medien, solange sie laden (MediaSpin.tsx). Erst nach 0,2 s sichtbar, damit Bilder aus dem Cache nichts aufblitzen lassen. */
+.media-spin { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; margin: -14px 0 0 -14px; box-sizing: border-box; border: 2.5px solid var(--line); border-top-color: var(--ink-2); border-radius: 50%; pointer-events: none; opacity: 0; animation: spin .9s linear infinite, media-spin-in .2s .2s forwards; }
+@keyframes media-spin-in { to { opacity: 1; } }
+.ok ~ .media-spin { display: none; }
+.att-vid .media-spin, .media-spin.big { width: 64px; height: 64px; margin: -32px 0 0 -32px; border-color: rgba(255,255,255,.25); border-top-color: #fff; }
+.media-spin.big { width: 76px; height: 76px; margin: -38px 0 0 -38px; }

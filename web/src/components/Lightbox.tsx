@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
+import { MediaSpin, loaded } from './MediaSpin';
 import { duration } from '../util';
 import type { Message } from '../api';
 import { saveAttachment, TARGET_LABEL, targetsFor, useStorage } from '../storageState';
@@ -194,14 +195,14 @@ export function Lightbox() {
           <div key={it.src} className="lightbox-slide" style={{ transform: `translate3d(${off * W() + dx}px, 0, 0)`, transition: live ? 'none' : undefined }}>
             {it.video
               ? <SlideVideo src={it.src} cur={cur} onUi={setVui} />
-              : <img ref={cur ? img : undefined} src={it.src} alt={it.name} draggable={false} onClick={(e) => e.stopPropagation()}
+              : <><img onLoad={loaded} onError={loaded} ref={cur ? img : undefined} src={it.src} alt={it.name} draggable={false} onClick={(e) => e.stopPropagation()}
                   onDoubleClick={cur ? (e) => { if (Date.now() - lastTouch.current > 1000) toggleZoom(rel(e.clientX, e.clientY)); } : undefined}
                   style={cur ? {
                     transform: z.s !== 1 || z.x || z.y
                       ? `translate(${z.x}px, ${z.y}px) scale(${z.s})`
                       : `translateY(${dy}px) scale(${1 - Math.min(Math.abs(dy), 300) / 1500})`,
                     transition: anim ? 'none' : undefined,
-                  } : undefined} />}
+                  } : undefined} /><MediaSpin big /></>}
           </div>
         );
       })}
@@ -225,6 +226,7 @@ function SlideVideo({ src, cur, onUi }: { src: string; cur: boolean; onUi: (show
   const [poke, setPoke] = useState(0);
   const [t, setT] = useState(0);
   const [d, setD] = useState(0);
+  const [buf, setBuf] = useState(true);
   const start = () => {
     const el = v.current; if (!el) return;
     setPlaying(true);
@@ -262,9 +264,11 @@ function SlideVideo({ src, cur, onUi }: { src: string; cur: boolean; onUi: (show
   const toggle = () => { const el = v.current; if (!el) return; if (el.paused) start(); else el.pause(); touch(); };
   return <>
     <video ref={v} src={src} playsInline preload="metadata" disableRemotePlayback
+      onWaiting={() => setBuf(true)} onPlaying={() => setBuf(false)} onCanPlay={() => setBuf(false)}
       onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
       onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} onLoadedMetadata={(e) => setD(e.currentTarget.duration || 0)}
       onMouseMove={onMove} onClick={(e) => { e.stopPropagation(); if (!playing) start(); else setUi((u) => !u); }} />
+    {cur && playing && buf && <MediaSpin big />}
     {cur && visible && <button className="lightbox-play" onMouseMove={onMove} onClick={(e) => { e.stopPropagation(); toggle(); }} onTouchEnd={stop}
       aria-label={playing ? T('Pause') : T('Abspielen')}><Icon name={playing ? 'pause' : 'play'} size={30} /></button>}
     {cur && visible && d > 0 && (
