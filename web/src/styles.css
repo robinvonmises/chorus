@@ -970,6 +970,7 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .lightbox-mute { display: grid; place-items: center; width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; cursor: pointer; }
 .lightbox-bar, .lightbox-actions, .lightbox-nav { transition: opacity .2s; }
 .lightbox.ui-off .lightbox-bar, .lightbox.ui-off .lightbox-actions, .lightbox.ui-off .lightbox-nav { opacity: 0; pointer-events: none; }
+.lightbox.ui-off { cursor: none; }
 /* Video in der Blase: Standbild mit Play-Symbol */
 .att-vid { position: relative; }
 .att-vid .gallery-play { display: none; }
