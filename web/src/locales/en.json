@@ -884,5 +884,21 @@
  "Anhängen, Emoji, GIF": "Attach, emoji, GIF",
  "Diese Datei lässt sich hier nicht anzeigen. Über „Teilen“ kannst du sie in einer anderen App öffnen.": "This file can't be shown here. Use “Share” to open it in another app.",
  "Pause": "Pause",
- "Ton aus": "Sound off"
+ "Ton aus": "Sound off",
+ "Rund": "Round",
+ "Weiche, runde Blasen": "Soft, rounded bubbles",
+ "Eckig": "Square",
+ "Klare Kanten, minimal": "Clean edges, minimal",
+ "Kompakt": "Compact",
+ "Enger und kleiner, mehr auf einen Blick": "Tighter and smaller, more at a glance",
+ "Blasen-Stil": "Bubble style",
+ "Haptik": "Haptics",
+ "Leichtes Vibrieren beim Senden, Reagieren und Wischen (iPhone ab iOS 18)": "Light vibration when sending, reacting and swiping (iPhone from iOS 18)",
+ "Ein eigenes Design für einzelne Chats gibt es im Chat-Menü unter „Chat-Design“.": "You can give single chats their own look in the chat menu under “Chat design”.",
+ "Chat-Design": "Chat design",
+ "Wie überall": "As everywhere",
+ "Hintergrund": "Background",
+ "Gilt nur für diesen Chat und dieses Gerät. „Wie überall“ nimmt die Einstellungen aus Darstellung.": "Applies only to this chat and this device. “As everywhere” uses your Appearance settings.",
+ "Animierte Reaktionen": "Animated reactions",
+ "Dein Reaktions-Emoji spielt einmal kurz groß über der Blase ab": "Your reaction emoji plays once, big, above the bubble"
 }

@@ -1,3 +1,4 @@
+import { haptic } from '../haptics';
 import { memo, useEffect, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { openFile, openMail } from './FileViewer';
@@ -49,7 +50,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
 
   const startPress = (e: React.TouchEvent) => {
     const t = e.touches[0];
-    press.current = window.setTimeout(() => { navigator.vibrate?.(10); onAction(m, { x: t.clientX, y: t.clientY }); }, 450);
+    press.current = window.setTimeout(() => { haptic(); onAction(m, { x: t.clientX, y: t.clientY }); }, 450);
   };
   const endPress = () => { if (press.current) clearTimeout(press.current); press.current = null; };
 
