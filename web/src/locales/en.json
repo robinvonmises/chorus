@@ -862,5 +862,18 @@
  "•••••••• gespeichert": "•••••••• saved",
  "→ Gerät hinzufügen": "→ Link a device",
  "🎤 Sprachnachricht": "🎤 Voice message",
- "📷 Foto": "📷 Photo"
+ "📷 Foto": "📷 Photo",
+ "GIF senden": "Send GIF",
+ "GIFs suchen": "Search GIFs",
+ "Keine GIFs gefunden": "No GIFs found",
+ "GIF-Dienst einrichten": "Set up GIF service",
+ "Für die GIF-Suche brauchst du einen kostenlosen API-Schlüssel von GIPHY oder KLIPY. Er bleibt auf deinem Server.": "GIF search needs a free API key from GIPHY or KLIPY. It stays on your server.",
+ "Schlüssel bei {0} holen": "Get a key from {0}",
+ "Auf diesem Server ist bereits ein Schlüssel hinterlegt. Ein eigener hat Vorrang.": "This server already has a key. Your own key takes precedence.",
+ "Schlüssel entfernen": "Remove key",
+ "Kein GIF-Schlüssel eingerichtet": "No GIF key set up",
+ "GIF-Schlüssel ungültig": "Invalid GIF key",
+ "GIF-Dienst nicht erreichbar": "GIF service unreachable",
+ "GIF nicht mehr verfügbar, bitte neu suchen": "GIF no longer available, please search again",
+ "GIF konnte nicht geladen werden": "Could not load GIF"
 }

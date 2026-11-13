@@ -25,6 +25,7 @@ import { whatsappFactory } from './adapters/whatsapp.js';
 import { emailFactory } from './adapters/email.js';
 import { Ai, AiError } from './ai.js';
 import { Storage, StorageError, type Target } from './storage.js';
+import { GifError, fetchGif, gifPublic, gifSettings, searchGifs, setGifSettings } from './gifs.js';
 import { AutopilotRunner } from './autopilot.js';
 import { Translator, guessLang } from './translate.js';
 import { Planner } from './planner.js';
@@ -867,6 +868,26 @@ app.get('/api/export', async (req, reply) => {
   try { await exportZip(h, reply.raw, chat ? [chat.id] : null); }
   catch (e) { app.log.error(e); reply.raw.destroy(e as Error); }
 });
+// ---------- GIFs (GIPHY oder KLIPY) ----------
+app.get('/api/gifs/settings', async (req) => gifPublic(H(req).store));
+app.put('/api/gifs/settings', async (req) => setGifSettings(H(req).store, (req.body ?? {}) as any));
+app.get('/api/gifs', async (req) => {
+  const s = gifSettings(H(req).store);
+  if (!s) throw new GifError(400, 'Kein GIF-Schlüssel eingerichtet');
+  const q = req.query as { q?: string; page?: string };
+  return searchGifs(s, String(q.q ?? '').trim().slice(0, 100), Math.max(1, Math.min(50, Number(q.page) || 1)), A(req).lang, C(req).p.id);
+});
+// Senden: WhatsApp und Telegram bekommen MP4 als Animation (spielt in Schleife wie ein GIF), Signal und E-Mail ein echtes GIF
+app.post('/api/chats/:id/gif', async (req) => {
+  const { gif, replyTo } = (req.body ?? {}) as { gif?: string; replyTo?: string | null };
+  const id = (req.params as any).id, h = H(req);
+  const chat = h.store.getChat(id);
+  if (!chat || !gif) throw Object.assign(new Error('Nicht gefunden'), { statusCode: 404 });
+  const f = await fetchGif(String(gif), chat.network === 'whatsapp' || chat.network === 'telegram' ? 'mp4' : 'gif');
+  await h.sendFile(id, { ...f, gif: true, ...(f.width && f.height ? { width: f.width, height: f.height } : {}) }, undefined, replyTo || null);
+  return { ok: true };
+});
+
 // ---------- Speicherziele: Immich (Fotos/Videos), Nextcloud (Dateien) ----------
 const S = (req: FastifyRequest) => new Storage(H(req).store);
 const target = (v: unknown): Target => { if (v === 'immich' || v === 'nextcloud') return v; throw new StorageError(400, 'Unbekanntes Speicherziel'); };

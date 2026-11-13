@@ -249,7 +249,7 @@ export class Hub {
       const att = msg.attachments[0];
       const data = att.fileId ? this.store.readFile(att.fileId) : null;
       if (!data) throw Object.assign(new Error('Anhang ist nicht mehr vorhanden'), { statusCode: 410 });
-      const file: OutgoingFile = { data, name: att.name || 'datei', mime: att.mime || 'application/octet-stream', voice: att.kind === 'voice', durationSec: att.durationSec,
+      const file: OutgoingFile = { data, name: att.name || 'datei', mime: att.mime || 'application/octet-stream', voice: att.kind === 'voice', gif: !!att.gif, durationSec: att.durationSec,
         ...(att.width && att.height ? { width: att.width, height: att.height } : {}) };
       send = () => a.sendFile(chat.remoteId, file, msg.text || undefined, msg.replyToRemoteId);
     }
@@ -284,7 +284,7 @@ export class Hub {
     const fileId = this.store.storeFile(file.data);
     const kind = file.voice ? 'voice' : file.mime.startsWith('image/') ? 'image' : file.mime.startsWith('video/') ? 'video' : file.mime.startsWith('audio/') ? 'audio' : 'file';
     const dims = kind === 'image' ? imageSize(file.data) : file.width && file.height ? { width: file.width, height: file.height } : null;
-    const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec, ...(dims ?? {}) }]);
+    const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec, ...(file.gif ? { gif: true } : {}), ...(dims ?? {}) }]);
     // Nicht auf den Messenger warten: Die Nachricht steht ab jetzt im Chat und zeigt selbst „wird gesendet“, „gesendet“ oder „fehlgeschlagen“.
     const done = this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
       .catch((e) => { console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`); return null; });
@@ -551,5 +551,6 @@ export function previewText(m: Message): string {
   // Text mit Anhang (z. B. Video mit Bildunterschrift): Symbol davor, damit man den Anhang in Liste und Push sieht
   if (m.text) return (a && a.kind !== 'sticker' ? ATT_ICON[a.kind] + ' ' : '') + m.text.slice(0, 200);
   if (!a) return '';
+  if (a.gif || /^image\/gif/i.test(a.mime)) return 'GIF';
   return { image: '📷 Foto', video: '🎬 Video', audio: '🎵 Audio', voice: '🎤 Sprachnachricht', file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }

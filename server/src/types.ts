@@ -98,6 +98,8 @@ export interface Attachment {
   durationSec?: number;
   width?: number;
   height?: number;
+  /** Animation (GIF): ohne Ton in Schleife abspielen */
+  gif?: boolean;
   /** Kennung beim Messenger, um den Anhang später abzuholen */
   remoteRef?: string;
 }
@@ -159,6 +161,8 @@ export interface OutgoingFile {
   name: string;
   mime: string;
   voice?: boolean;
+  /** Als GIF/Animation senden (WhatsApp gifPlayback, Telegram Animation) */
+  gif?: boolean;
   durationSec?: number;
   /** Bildmaße eines Videos (vom Browser gemessen), damit der Platz im Chat freigehalten wird */
   width?: number;

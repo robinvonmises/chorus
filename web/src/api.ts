@@ -35,7 +35,11 @@ export interface Autopilot {
 export interface Attachment {
   fileId: string | null; name: string; mime: string; size: number;
   kind: 'image' | 'video' | 'audio' | 'voice' | 'file' | 'sticker'; durationSec?: number; width?: number; height?: number;
+  /** Animation (GIF): ohne Ton in Schleife abspielen */
+  gif?: boolean;
 }
+export interface GifItem { id: string; title: string; preview: string; width: number; height: number }
+export interface GifSettings { enabled: boolean; provider: 'giphy' | 'klipy'; own: boolean; server: boolean }
 export interface Reaction { emoji: string; senderId: string; senderName?: string; fromMe: boolean }
 export interface Message {
   id: string; chatId: string; remoteId: string; senderId: string; senderName: string; fromMe: boolean; ts: number;
@@ -117,6 +121,10 @@ export const api = {
   renameProfile: (id: string, name: string) => req<PublicProfile>('PATCH', `/api/profiles/${id}`, { name }),
   deleteProfile: (id: string) => req('DELETE', `/api/profiles/${id}`),
   setAvatar: (id: string, jpeg: Blob) => { const f = new FormData(); f.append('file', jpeg, 'avatar.jpg'); return req<PublicProfile>('PUT', `/api/profiles/${id}/avatar`, f); },
+  gifSettings: () => req<GifSettings>('GET', '/api/gifs/settings'),
+  setGifSettings: (p: { provider: string; key: string | null }) => req<GifSettings>('PUT', '/api/gifs/settings', p),
+  gifs: (q: string, page: number) => req<{ items: GifItem[]; next: number | null }>('GET', `/api/gifs?q=${enc(q)}&page=${page}`),
+  sendGif: (chatId: string, gif: string, replyTo?: string | null) => req<{ ok: true }>('POST', `/api/chats/${enc(chatId)}/gif`, { gif, replyTo: replyTo ?? null }),
   storage: () => req<StorageSettings>('GET', '/api/storage'),
   setStorage: (patch: { immich?: Record<string, unknown>; nextcloud?: Record<string, unknown> }) => req<StorageSettings>('PUT', '/api/storage', patch),
   testStorage: (target: StorageTarget) => req<{ message: string }>('POST', '/api/storage/test', { target }),
