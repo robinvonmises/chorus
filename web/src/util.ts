@@ -7,6 +7,7 @@ export const NETWORKS: Record<Network, { name: string; short: string; color: str
   whatsapp: { name: 'WhatsApp', short: 'W', color: 'var(--net-whatsapp)' },
   email: { name: T('E-Mail'), short: '@', color: 'var(--net-email)' },
   demo: { name: 'Demo', short: 'D', color: 'var(--net-demo)' },
+  notes: { name: T('Notizen'), short: '✎', color: 'var(--net-notes)' },
 };
 
 const dayFmt = new Intl.DateTimeFormat(locale, { weekday: 'short' });

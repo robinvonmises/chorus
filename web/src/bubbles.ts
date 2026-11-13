@@ -36,7 +36,7 @@ export function saveAccent(id: string) { localStorage.setItem(ACCENT_KEY, id); a
 export type BubbleSettings = { mode: 'network' | 'single'; colors: Record<Network, string>; single: string };
 export const BUBBLE_DEFAULTS: BubbleSettings = {
   mode: 'single', single: 'accent',
-  colors: { signal: '#3a76f0', whatsapp: '#1f9e5a', telegram: '#3390ec', email: '#ea580c', demo: '#4f46e5' },
+  colors: { signal: '#3a76f0', whatsapp: '#1f9e5a', telegram: '#3390ec', email: '#ea580c', demo: '#4f46e5', notes: '#ca8a04' },
 };
 export const BUBBLE_PALETTE = ['#3a76f0', '#3390ec', '#0891b2', '#1f9e5a', '#0f766e', '#4f46e5', '#7c3aed', '#db2777', '#e11d48', '#ea580c', '#a16207', '#374151'];
 /** Tatsächliche Farbe der Einstellung (für Vorschau) */
@@ -114,4 +114,42 @@ export async function setCustomBg(file: File): Promise<void> {
     try { localStorage.setItem(BG_IMG, data); } catch { throw new Error(T('Das Bild ist zu groß für den Speicher des Browsers.')); }
     saveChatBg('custom');
   } finally { URL.revokeObjectURL(url); }
+}
+
+/** Blasen-Stil: rund (Standard), eckig-minimal, kompakt (enger, kleiner, für Vielschreiber) */
+export type BubbleShape = 'round' | 'square' | 'compact';
+export const BUBBLE_SHAPES: { id: BubbleShape; name: string; hint: string }[] = [
+  { id: 'round', name: T('Rund'), hint: T('Weiche, runde Blasen') },
+  { id: 'square', name: T('Eckig'), hint: T('Klare Kanten, minimal') },
+  { id: 'compact', name: T('Kompakt'), hint: T('Enger und kleiner, mehr auf einen Blick') },
+];
+const SHAPE_KEY = 'inbox:bubbleShape';
+export function loadShape(): BubbleShape {
+  const s = localStorage.getItem(SHAPE_KEY);
+  return s === 'square' || s === 'compact' ? s : 'round';
+}
+export function applyShape(s = loadShape()) {
+  const c = document.documentElement.classList;
+  c.toggle('shape-square', s === 'square');
+  c.toggle('shape-compact', s === 'compact');
+}
+export function saveShape(s: BubbleShape) { localStorage.setItem(SHAPE_KEY, s); applyShape(s); }
+
+/** Chat-Design pro Chat: eigene Blasenfarbe und eigener Hintergrund (nur Vorlagen), sonst gilt die Darstellung */
+export type ChatTheme = { color?: string; bg?: string };
+const THEME_KEY = 'inbox:chatThemes';
+function allThemes(): Record<string, ChatTheme> { try { return JSON.parse(localStorage.getItem(THEME_KEY) ?? '{}') ?? {}; } catch { return {}; } }
+export function loadChatTheme(chatId: string): ChatTheme { return allThemes()[chatId] ?? {}; }
+export function saveChatTheme(chatId: string, t: ChatTheme) {
+  const all = allThemes();
+  if (!t.color && !t.bg) delete all[chatId]; else all[chatId] = t;
+  localStorage.setItem(THEME_KEY, JSON.stringify(all));
+  window.dispatchEvent(new Event('chorus:theme'));
+}
+/** Inline-Stil für die Chat-Ansicht (überschreibt die globalen Variablen nur in diesem Chat) */
+export function chatThemeStyle(t: ChatTheme): Record<string, string> | undefined {
+  const st: Record<string, string> = {};
+  if (t.color) { st['--bubble-out'] = t.color; st['--bubble-out-ink'] = ink(t.color); }
+  if (t.bg) st['--chat-bg-own'] = CHAT_BACKGROUNDS.find((b) => b.id === t.bg)?.css || 'var(--bg)';
+  return Object.keys(st).length ? st : undefined;
 }

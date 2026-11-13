@@ -1,3 +1,4 @@
+import { haptic } from '../haptics';
 import { useEffect, useRef, useState } from 'react';
 import { api, type Chat, type Message } from '../api';
 import { duration } from '../util';
@@ -115,6 +116,7 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
       return;
     }
     if (files.length) {
+      haptic();
       const fs = files, ve = vEdits; setFiles([]); setVEdits(new Map()); setText(''); setNoTr(false); onSent();
       // Blasen sofort zeigen, dann nacheinander hochladen
       const ids = fs.map((f, i) => outbox.add({
@@ -141,7 +143,7 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
     if (!t) return;
     const r = replyTo?.remoteId;
     const translate = canTr && !noTr;
-    setText(''); setNoTr(false); onSent(); armRise();
+    haptic(); setText(''); setNoTr(false); onSent(); armRise();
     try { await api.send(chat.id, t, r, translate); } catch (e: any) { onError(e.message); }
   };
 
@@ -157,7 +159,7 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
     } catch (e: any) { onError(e.message); }
   };
   const sendPress = useRef<number | null>(null);
-  const pressStart = () => { if (editing) return; sendPress.current = window.setTimeout(() => { sendPress.current = -1; navigator.vibrate?.(10); setWhen(true); }, 500); };
+  const pressStart = () => { if (editing) return; sendPress.current = window.setTimeout(() => { sendPress.current = -1; haptic(); setWhen(true); }, 500); };
   const pressEnd = () => { if (sendPress.current && sendPress.current > 0) clearTimeout(sendPress.current); };
 
   /** Text in der eigenen ElevenLabs-Stimme als Sprachnachricht senden */

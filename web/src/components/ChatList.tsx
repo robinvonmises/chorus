@@ -1,3 +1,4 @@
+import { haptic } from '../haptics';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { api, serverText, type Account, type Chat, type Message, type Network } from '../api';
 import type { Filter } from '../App';
@@ -304,7 +305,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
 }) {
   const t = useRef<number | null>(null);
   const longFired = useRef(false);
-  const start = () => { longFired.current = false; t.current = window.setTimeout(() => { longFired.current = true; navigator.vibrate?.(10); onLong(); }, 480); };
+  const start = () => { longFired.current = false; t.current = window.setTimeout(() => { longFired.current = true; haptic(); onLong(); }, 480); };
   const cancel = () => { if (t.current) { clearTimeout(t.current); t.current = null; } };
   useEffect(() => cancel, []);
   return (
@@ -355,9 +356,9 @@ function SwipeRow({ children, left, right, far, disabled }: { children: React.Re
   const onEnd = () => {
     const st = s.current; s.current = null; setAnim(true);
     if (!st || st.dir !== 1) { setDx(0); return; }
-    if (dx < -W) out(-window.innerWidth, left.run);
-    else if (dx > FAR) { far.run(); setDx(0); }
-    else if (dx > W) out(window.innerWidth, right.run);
+    if (dx < -W) { haptic(); out(-window.innerWidth, left.run); }
+    else if (dx > FAR) { haptic(); far.run(); setDx(0); }
+    else if (dx > W) { haptic(); out(window.innerWidth, right.run); }
     else setDx(0);
   };
   const act = dx < 0 ? left : dx > FAR ? far : right;
