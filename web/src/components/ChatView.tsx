@@ -273,7 +273,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
 
   return (
     <div className={`chat-view${theme.bg ? ' own-bg' : ''}${pin ? ' has-pin' : ''}`} style={chatThemeStyle(theme) as React.CSSProperties | undefined} data-net={chat.network} onDragOver={(e) => e.preventDefault()}>
-      <header className="chat-head">
+      <header className={`chat-head${chat.network === 'email' ? ' mail' : ''}`}>
         <button className="icon-btn back" onClick={onBack} aria-label={T('Zurück')}><Icon name="back" /></button>
         <button className="chat-head-who" onClick={() => setContact(true)} aria-label={T('Profil anzeigen')}>
         <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
@@ -283,6 +283,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         </div>
         </button>
         <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>
+        {chat.network === 'email' && <>
+          <button className="icon-btn head-act" onClick={async () => { await onPatchChat({ archived: !chat.archived }); if (!chat.archived) onBack(); }} aria-label={chat.archived ? T('Aus dem Archiv holen') : T('Archivieren')} title={chat.archived ? T('Aus dem Archiv holen') : T('Archivieren')}><Icon name="archive" /></button>
+          <button className="icon-btn head-act" onClick={() => { if (askMailDelete() && !confirm(T('Alle E-Mails zu „{0}“ in den Papierkorb verschieben?', chat.title))) return; onRemove(); }} aria-label={T('E-Mails löschen')} title={T('E-Mails löschen')}><Icon name="trash" /></button>
+        </>}
         <div className="menu-wrap">
           <button className="icon-btn" onClick={() => setHeadMenu((v) => !v)} aria-label={T('Chat-Menü')}><Icon name="more" /></button>
           {headMenu && <div className="menu-catcher" onClick={() => setHeadMenu(false)} onTouchStart={() => setHeadMenu(false)} />}

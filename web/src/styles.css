@@ -163,6 +163,11 @@ input, textarea { font: inherit; color: inherit; }
 .chat-head-main b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-head-main small { color: var(--ink-3); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-head .ai-compose { margin-right: -16px; }
+.chat-head.mail .ai-compose, .chat-head .head-act { margin-right: -8px; }
+@media (max-width: 420px) {
+  .chat-head.mail .chat-head-who .avatar { display: none; }
+  .chat-head.mail .chat-head-who { padding-left: 4px; }
+}
 .menu-wrap { position: relative; }
 .menu { position: absolute; top: 44px; min-width: 200px; background: var(--bg); border-radius: 14px; box-shadow: var(--shadow); padding: 6px; z-index: 10; display: grid; }
 .menu.right { right: 0; }
