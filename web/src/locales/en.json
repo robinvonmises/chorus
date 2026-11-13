@@ -884,5 +884,9 @@
  "Anhängen, Emoji, GIF": "Attach, emoji, GIF",
  "Diese Datei lässt sich hier nicht anzeigen. Über „Teilen“ kannst du sie in einer anderen App öffnen.": "This file can't be shown here. Use “Share” to open it in another app.",
  "Pause": "Pause",
- "Ton aus": "Sound off"
+ "Ton aus": "Sound off",
+ "Fassung {0}": "Version {0}",
+ "Frühere Fassungen zeigen": "Show earlier versions",
+ "Gelöschte Nachrichten behalten": "Keep deleted messages",
+ "Zieht jemand eine Nachricht zurück, bleibt sie in Chorus sichtbar und ist als „Gelöscht“ markiert. Gilt ab jetzt, nicht rückwirkend.": "If someone unsends a message, it stays visible in Chorus, marked as “Deleted”. Applies from now on, not retroactively."
 }
