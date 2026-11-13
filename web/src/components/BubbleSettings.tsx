@@ -5,8 +5,9 @@ import { sendAnimEnabled, setSendAnim } from '../sendAnim';
 import { FX, fxOn, setFx } from '../effects';
 import {
   ACCENTS, BUBBLE_DEFAULTS, BUBBLE_PALETTE, bubbleHex, loadAccent, saveAccent, CHAT_BACKGROUNDS, chatBgCss, customBgImage, ink, loadBubbles, loadChatBg, saveBubbles, saveChatBg, setCustomBg,
-  type BubbleSettings,
+  BUBBLE_SHAPES, loadShape, saveShape, type BubbleSettings,
 } from '../bubbles';
+import { haptic, hapticsOn, setHaptics } from '../haptics';
 import { Icon } from './Icon';
 import { T } from '../i18n';
 
@@ -50,6 +51,8 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
   const [err, setErr] = useState('');
   const file = useRef<HTMLInputElement>(null);
   const [anim, setAnim] = useState(sendAnimEnabled);
+  const [shape, setShape] = useState(loadShape);
+  const [hap, setHap] = useState(hapticsOn);
   const list: Network[] = nets.length ? nets : ['signal', 'whatsapp', 'telegram'];
   const pickBg = (id: string) => { setBg(id); saveChatBg(id); };
   const previewNet = list[0];
@@ -89,6 +92,18 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
     </div>
     <p className="ios-foot"><button className="link-btn" onClick={() => set({ ...b, colors: BUBBLE_DEFAULTS.colors, single: BUBBLE_DEFAULTS.single })}>{T('Standardfarben')}</button> {T('· Helle Farben bekommen automatisch dunkle Schrift.')}</p>
 
+    <p className="ios-caption">{T('Blasen-Stil')}</p>
+    <div className="ios-card pad">
+      <div className="shape-grid">
+        {BUBBLE_SHAPES.map((x) => (
+          <button key={x.id} className={`shape-tile ${x.id}${shape === x.id ? ' on' : ''}`} onClick={() => { saveShape(x.id); setShape(x.id); }} aria-pressed={shape === x.id} title={x.hint}>
+            <i className="a" /><i className="b" /><span>{x.name}</span>
+          </button>
+        ))}
+      </div>
+      <small className="muted">{BUBBLE_SHAPES.find((x) => x.id === shape)?.hint}</small>
+    </div>
+
     <p className="ios-caption">{T('Chat-Hintergrund')}</p>
     <div className="ios-card pad">
       <div className="bg-grid">
@@ -118,7 +133,14 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
           <input type="checkbox" className="switch" checked={anim} onChange={(e) => { setAnim(e.target.checked); setSendAnim(e.target.checked); }} />
         </span>
       </label>
+      <label className="ios-row toggle-row">
+        <span className="ios-row-main">
+          <span className="ios-row-text"><span className="ios-title">{T('Haptik')}</span><small>{T('Leichtes Vibrieren beim Senden, Reagieren und Wischen (iPhone ab iOS 18)')}</small></span>
+          <input type="checkbox" className="switch" checked={hap} onChange={(e) => { setHap(e.target.checked); setHaptics(e.target.checked); if (e.target.checked) haptic(); }} />
+        </span>
+      </label>
     </div>
+    <p className="ios-foot">{T('Ein eigenes Design für einzelne Chats gibt es im Chat-Menü unter „Chat-Design“.')}</p>
 
     <p className="ios-caption">{T('Effekte')}</p>
     <div className="ios-card">

@@ -2,11 +2,12 @@ import { Component, StrictMode, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import './styles.css';
-import { applyAccent, applyBubbles, applyChatBg } from './bubbles';
+import { applyAccent, applyBubbles, applyChatBg, applyShape } from './bubbles';
 import { T } from './i18n';
 applyAccent();
 applyBubbles();
 applyChatBg();
+applyShape();
 
 // iOS-Statusleiste: Farbe beim Wechsel Hell/Dunkel nachziehen. Das Meta-Tag wird ersetzt statt geändert,
 // weil iOS eine bloße Änderung in der Web-App oft übersieht. Farbe = Hintergrund der Kopfleiste (--bg).

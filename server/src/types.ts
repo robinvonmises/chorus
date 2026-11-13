@@ -138,6 +138,8 @@ export interface Message {
   error?: string;
   /** E-Mail: bereinigtes Original-HTML (verschlüsselt gespeichert, fileId); abrufbar über /api/messages/:id/html */
   html?: string | null;
+  /** Frühere Fassungen einer bearbeiteten Nachricht (älteste zuerst; ts = wann ersetzt) */
+  history?: { text: string; ts: number }[];
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */
