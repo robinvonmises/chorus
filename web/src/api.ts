@@ -21,6 +21,8 @@ export interface Chat {
   /** E-Mail: Gegenüber. Alle Betreffe eines Absenders erscheinen als ein Kontakt */
   peer?: { id: string; name: string } | null;
   sendVia?: string | null;
+  /** Halb getippte Nachricht, auf allen Geräten gleich */
+  draft?: string | null; draftTs?: number | null;
   avatar?: string | null; customAvatar?: boolean; netTitle?: string; alias?: string | null; archived?: boolean; note?: string | null;
   info?: { phone?: string; username?: string; about?: string; description?: string; members?: number; fetchedAt?: number } | null;
 }
@@ -54,9 +56,12 @@ export interface Message {
   translation?: string | null;
   /** Sprache des Texts, wenn translation die deutsche Übersetzung ist (bei eigenen übersetzt gesendeten leer: dann ist translation das Original) */
   translationFrom?: string | null;
+  /** Nur in Chorus: angepinnt seit (ms), gemerkt */
+  pinnedAt?: number; starred?: boolean;
   /** Selbstzerstörende Notiz: verschwindet zu diesem Zeitpunkt */
   expiresAt?: number | null;
 }
+export interface LinkPreview { url: string; title: string | null; description: string | null; image: string | null; site: string | null }
 export interface PublicProfile {
   id: string; name: string; initialized: boolean; invite: boolean; totp: boolean; avatar: string | null;
   kdf: { alg: string; iterations: number; salt: string } | null;
@@ -93,7 +98,7 @@ export interface Planned {
   id: string; kind: 'send' | 'remind'; chatId: string; at: number; created: number; text: string;
   replyTo?: string | null; translate?: boolean; messageId?: string | null; note?: string; error?: string;
 }
-export type MediaKind = 'media' | 'files' | 'voice' | 'links';
+export type MediaKind = 'media' | 'files' | 'voice' | 'links' | 'starred';
 
 export interface AiSettings {
   provider: 'anthropic' | 'openai'; hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
@@ -259,6 +264,10 @@ export const api = {
   react: (msgId: string, emoji: string | null) => req('POST', `/api/messages/${enc(msgId)}/react`, { emoji }),
   forward: (msgId: string, chatIds: string[]) => req<{ ok: boolean; count: number }>('POST', `/api/messages/${enc(msgId)}/forward`, { chatIds }),
   edit: (msgId: string, text: string) => req('PATCH', `/api/messages/${enc(msgId)}`, { text }),
+  mark: (msgId: string, patch: { pinned?: boolean; starred?: boolean }) => req<Message>('POST', `/api/messages/${enc(msgId)}/mark`, patch),
+  pinned: (chats: string[]) => req<Message[]>('GET', `/api/pinned?chats=${chats.map(enc).join(',')}`),
+  saveDraft: (chatId: string, text: string, ts: number) => req('PUT', `/api/chats/${enc(chatId)}/draft`, { text, ts }),
+  linkPreview: (url: string) => req<LinkPreview>('GET', `/api/linkpreview?url=${enc(url)}`),
   retry: (msgId: string) => req('POST', `/api/messages/${enc(msgId)}/retry`),
   discard: (msgId: string) => req('DELETE', `/api/messages/${enc(msgId)}/discard`),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),

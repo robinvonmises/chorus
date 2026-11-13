@@ -189,6 +189,35 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
   }, []);
 
+  // Angepinnte Nachrichten (nur in Chorus): Leiste oben, Antippen springt hin und zeigt danach die nächste
+  const linkKey = linked.map((c) => c.id).join(',');
+  const [pins, setPins] = useState<Message[]>([]);
+  const [pinIdx, setPinIdx] = useState(0);
+  useEffect(() => {
+    let off = false;
+    api.pinned(linkKey.split(',')).then((r) => { if (!off) setPins(r); }).catch(() => {});
+    return () => { off = true; };
+  }, [linkKey]);
+  useEffect(() => {
+    if (!messages) return;
+    setPins((ps) => {
+      let next = ps;
+      for (const m of messages) {
+        const i = next.findIndex((p) => p.id === m.id);
+        if (m.pinnedAt && !m.deleted) { if (i < 0) next = [m, ...next]; else if (next[i] !== m) next = next.map((p) => (p.id === m.id ? m : p)); }
+        else if (i >= 0) next = next.filter((p) => p.id !== m.id);
+      }
+      return next === ps ? ps : [...next].sort((a, b) => (b.pinnedAt ?? 0) - (a.pinnedAt ?? 0));
+    });
+  }, [messages]);
+  const pin = pins.length ? pins[pinIdx % pins.length] : null;
+  const openPin = () => {
+    if (!pin) return;
+    if (scroller.current?.querySelector(`[data-remote="${CSS.escape(pin.remoteId)}"]`)) jump(pin.remoteId);
+    else onOpenMessage?.(pin);
+    setPinIdx((i) => (i + 1) % pins.length);
+  };
+
   // Gesprungen aus Suche, Galerie oder Erinnerung
   useEffect(() => {
     if (!focus || !messages?.some((m) => m.id === focus.id)) return;
@@ -243,7 +272,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   };
 
   return (
-    <div className={`chat-view${theme.bg ? ' own-bg' : ''}`} style={chatThemeStyle(theme) as React.CSSProperties | undefined} data-net={chat.network} onDragOver={(e) => e.preventDefault()}>
+    <div className={`chat-view${theme.bg ? ' own-bg' : ''}${pin ? ' has-pin' : ''}`} style={chatThemeStyle(theme) as React.CSSProperties | undefined} data-net={chat.network} onDragOver={(e) => e.preventDefault()}>
       <header className="chat-head">
         <button className="icon-btn back" onClick={onBack} aria-label={T('Zurück')}><Icon name="back" /></button>
         <button className="chat-head-who" onClick={() => setContact(true)} aria-label={T('Profil anzeigen')}>
@@ -284,6 +313,15 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         </div>
       </header>
 
+      {pin && (
+        <button className="pin-bar" onClick={openPin} aria-label={T('Zur angepinnten Nachricht springen')}>
+          <Icon name="pin" size={16} />
+          <span className="pin-bar-main">
+            <b>{pins.length > 1 ? T('Angepinnt {0}/{1}', (pinIdx % pins.length) + 1, pins.length) : T('Angepinnt')}</b>
+            <span>{previewOf(pin) || ' '}</span>
+          </span>
+        </button>
+      )}
       {missed && ai?.features.text && ai.catchUp !== false && (
         missed.text
           ? <div className="catchup-card"><Icon name="sparkle" size={16} /><span>{missed.text}</span><button className="icon-btn small" onClick={() => setMissed(null)} aria-label={T('Schließen')}><Icon name="close" size={14} /></button></div>
@@ -336,7 +374,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         {!aiOpen && !editing && draftEmpty && ai?.features.text && ai.quickReplies !== false && chat.aiEnabled && (
           <QuickReplies chatId={chat.id} last={messages?.at(-1)} onUse={(t) => setInject({ text: t, n: Date.now() })} />
         )}
-        <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? T('Nachricht über {0}', NETWORKS[sendChat.network].name) : undefined} draftId={chat.id} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
+        <Composer onEmpty={setDraftEmpty} chat={sendChat.id === chat.id ? chat : { ...sendChat, translate: chat.translate }} onPickLang={() => setTrSheet(true)} placeholder={multi ? T('Nachricht über {0}', NETWORKS[sendChat.network].name) : undefined} draftId={chat.id} serverDraft={{ text: chat.draft ?? null, ts: chat.draftTs ?? null }} onInfo={flash} onResize={() => { const el = scroller.current; if (el && bottomRef.current) el.scrollTop = el.scrollHeight; }} disabled={!connected} replyTo={replyTo} editing={editing} inject={inject}
           onCancel={() => { setReplyTo(null); setEditing(null); }}
           onSent={() => { setReplyTo(null); setEditing(null); }} onError={flash} />
       </div>
@@ -368,6 +406,8 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                 {reminders.has(menu.m.id)
                   ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash(T('Erinnerung gelöscht')); }); }}><Icon name="alarm" size={18} />{T('Erinnerung löschen')}</button>
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />{T('Erinnern …')}</button>}
+                {!menu.m.deleted && <button onClick={() => { const m = menu.m; setMenu(null); guard(async () => { await api.mark(m.id, { pinned: !m.pinnedAt }); if (!m.pinnedAt) setPinIdx(0); flash(m.pinnedAt ? T('Nicht mehr angepinnt') : T('Oben angepinnt')); }); }}><Icon name="pin" size={18} />{menu.m.pinnedAt ? T('Nicht mehr anpinnen') : T('Anpinnen')}</button>}
+                {!menu.m.deleted && <button onClick={() => { const m = menu.m; setMenu(null); guard(async () => { await api.mark(m.id, { starred: !m.starred }); flash(m.starred ? T('Lesezeichen entfernt') : T('Gemerkt')); }); }}><Icon name="star" size={18} />{menu.m.starred ? T('Nicht mehr merken') : T('Merken')}</button>}
                 {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash(T('Wird übersetzt …')); api.ai.translateOne(m.id).then((r) => { if (r.already) flash(T('Die Nachricht ist schon Deutsch.')); }).catch((e: any) => flash(e.message ?? T('Fehler'))); }}><Icon name="globe" size={18} />{T('Übersetzen')}</button>}
                 {ai?.features.text && !menu.m.deleted && (menu.m.text || menu.m.transcript) && <button onClick={() => { setOrganizeFor(menu.m); setMenu(null); }}><Icon name="sparkle" size={18} />{T('Termin, Aufgabe, Einkauf …')}</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash(T('Kopiert')); }}><Icon name="copy" size={18} />{T('Text kopieren')}</button>}

@@ -56,11 +56,14 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
+    // Nur in Chorus: angepinnt (Zeitpunkt) und gemerkt (Lesezeichen), wird vom Messenger-Abgleich nie überschrieben
+    if (!mcols.includes('pinned_at')) this.db.exec('ALTER TABLE messages ADD COLUMN pinned_at INTEGER');
+    if (!mcols.includes('starred')) this.db.exec('ALTER TABLE messages ADD COLUMN starred INTEGER NOT NULL DEFAULT 0');
     if (!mcols.includes('summary')) this.db.exec('ALTER TABLE messages ADD COLUMN summary TEXT');
     if (!mcols.includes('expires_at')) { this.db.exec('ALTER TABLE messages ADD COLUMN expires_at INTEGER'); this.db.exec('CREATE INDEX IF NOT EXISTS messages_expiry ON messages(expires_at) WHERE expires_at IS NOT NULL'); }
     if (!mcols.includes('history')) this.db.exec('ALTER TABLE messages ADD COLUMN history TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
-    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
+    for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT'], ['draft', 'TEXT'], ['draft_ts', 'INTEGER']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
   }
 
@@ -116,7 +119,7 @@ export class Store {
       id: r.id, accountId: r.account_id, network: r.network, remoteId: r.remote_id, title: r.title, kind: r.kind,
       lastTs: r.last_ts, lastText: r.last_text, unread: r.unread, pinned: !!r.pinned, muted: !!r.muted,
       avatarFileId: r.avatar_file_id, aiEnabled: !!r.ai_enabled, autopilot: r.autopilot ? JSON.parse(r.autopilot) : null,
-      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null, peer: r.peer ? JSON.parse(r.peer) : null,
+      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null, peer: r.peer ? JSON.parse(r.peer) : null, draft: r.draft || null, draftTs: r.draft_ts ?? null,
       avatar: (r.custom_avatar || r.avatar_file_id) ? `/api/chats/${encodeURIComponent(r.id)}/avatar?v=${String(r.custom_avatar || r.avatar_file_id).slice(0, 8)}` : null,
     };
     if (r.alias) c.title = r.alias;
@@ -246,6 +249,7 @@ export class Store {
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
       translationFrom: r.translation_from ?? null, html: r.html ?? null, summary: r.summary ?? null, expiresAt: r.expires_at ?? null, history: r.history ? JSON.parse(r.history) : [],
+      ...(r.pinned_at ? { pinnedAt: r.pinned_at } : {}), ...(r.starred ? { starred: true } : {}),
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -342,13 +346,30 @@ export class Store {
       // Dateinamen: nur echte Treffer im Namen, nicht in Typ/IDs
       .filter((m) => [m.text, m.transcript, m.translation].some((t) => t?.toLowerCase().includes(q.toLowerCase())) || m.attachments.some((a) => a.name?.toLowerCase().includes(q.toLowerCase())));
   }
-  /** Galerie: Bilder/Videos, Dateien, Sprachnachrichten oder Links, neueste zuerst */
-  media(kind: 'media' | 'files' | 'voice' | 'links', chatIds: string[] | null, beforeTs: number | undefined, limit: number): Message[] {
+  /** Entwurf pro Chat (geräteübergreifend). Ältere Stände (ts) werden ignoriert. true = geändert */
+  setDraft(id: string, text: string, ts: number): boolean {
+    const r = this.db.prepare('UPDATE chats SET draft=?, draft_ts=? WHERE id=? AND (draft_ts IS NULL OR draft_ts<?)').run(text.slice(0, 20000) || null, ts, id, ts);
+    return r.changes > 0;
+  }
+  /** Anpinnen/Merken (nur in Chorus) */
+  markMessage(id: string, patch: { pinned?: boolean; starred?: boolean }): Message | null {
+    if (patch.pinned !== undefined) this.db.prepare('UPDATE messages SET pinned_at=? WHERE id=?').run(patch.pinned ? Date.now() : null, id);
+    if (patch.starred !== undefined) this.db.prepare('UPDATE messages SET starred=? WHERE id=?').run(Number(patch.starred), id);
+    return this.getMessage(id);
+  }
+  pinnedMessages(chatIds: string[]): Message[] {
+    if (!chatIds.length) return [];
+    return this.db.prepare(`SELECT * FROM messages WHERE pinned_at IS NOT NULL AND deleted=0 AND chat_id IN (${chatIds.map(() => '?').join(',')}) ORDER BY pinned_at DESC LIMIT 50`)
+      .all(...chatIds).map((r) => this.rowToMsg(r));
+  }
+  /** Galerie: Bilder/Videos, Dateien, Sprachnachrichten, Links oder Gemerktes, neueste zuerst */
+  media(kind: 'media' | 'files' | 'voice' | 'links' | 'starred', chatIds: string[] | null, beforeTs: number | undefined, limit: number): Message[] {
     const cond = {
       media: `(attachments LIKE '%"kind":"image"%' OR attachments LIKE '%"kind":"video"%')`,
       files: `(attachments LIKE '%"kind":"file"%' OR attachments LIKE '%"kind":"audio"%')`,
       voice: `attachments LIKE '%"kind":"voice"%'`,
       links: `(text LIKE '%http://%' OR text LIKE '%https://%' OR text LIKE '%www.%')`,
+      starred: 'starred=1',
     }[kind];
     const inChats = chatIds ? `AND chat_id IN (${chatIds.map(() => '?').join(',') || "''"})` : '';
     return this.db.prepare(`SELECT * FROM messages WHERE deleted=0 AND ${cond} ${inChats} ${beforeTs ? 'AND ts<?' : ''} ORDER BY ts DESC LIMIT ?`)

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, attachmentUrl, thumbUrl, type Attachment, type Chat, type MediaKind, type Message } from '../api';
+import { api, attachmentUrl, thumbUrl, type LinkPreview, type Attachment, type Chat, type MediaKind, type Message } from '../api';
 import { NETWORKS, dayLabel, fileSize, msgTime } from '../util';
 import { Icon } from './Icon';
-import { AttachmentView, MediaThumb as Thumb } from './Message';
+import { AttachmentView, MediaThumb as Thumb, previewOf } from './Message';
 import { openLightbox } from './Lightbox';
 import { T, lang, locale } from '../i18n';
 
 const TABS: { k: MediaKind; label: string }[] = [
-  { k: 'media', label: T('Medien') }, { k: 'files', label: T('Dateien') }, { k: 'links', label: T('Links') }, { k: 'voice', label: T('Sprache') },
+  { k: 'media', label: T('Medien') }, { k: 'files', label: T('Dateien') }, { k: 'links', label: T('Links') }, { k: 'voice', label: T('Sprache') }, { k: 'starred', label: T('Gemerkt') },
 ];
 const MONTH = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' });
 const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"]|www\.[^\s<]+[^\s<.,;:!?)\]'"])/g;
@@ -73,11 +73,25 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
               </section>
             ))
           )}
+          {tab === 'starred' && (
+            <ul className="gallery-list">
+              {shown.map((m) => (
+                <li key={m.id} className="gallery-starred">
+                  <button className="gallery-starred-main" onClick={() => onOpen(m)} title={T('Im Chat zeigen')}>
+                    <small>{chatIds?.length !== 1 && <span className="dot" style={{ background: NETWORKS[chats.get(m.chatId)?.network ?? 'demo'].color }} />}{chatIds?.length !== 1 ? `${chats.get(m.chatId)?.title ?? ''} · ${m.fromMe ? T('Du') : m.senderName}` : m.fromMe ? T('Du') : m.senderName} · {dayLabel(m.ts)} {msgTime(m.ts)}</small>
+                    <span>{previewOf(m)}</span>
+                  </button>
+                  <button className="icon-btn small" title={T('Nicht mehr merken')} aria-label={T('Nicht mehr merken')}
+                    onClick={() => { setItems((x) => x?.filter((y) => y.id !== m.id) ?? x); void api.mark(m.id, { starred: false }).catch(() => {}); }}><Icon name="star" size={18} className="star-on" /></button>
+                </li>
+              ))}
+            </ul>
+          )}
           {tab === 'links' && (
             <ul className="gallery-list">
               {links.map(({ m, u }, i) => (
                 <li key={m.id + i}>
-                  <a className="gallery-link" href={u} target="_blank" rel="noreferrer noopener"><Icon name="link" size={18} /><span><b>{u.replace(/^https?:\/\//, '').slice(0, 80)}</b><small>{who(m)} · {dayLabel(m.ts)}</small></span></a>
+                  <LinkCard u={u} sub={`${who(m)} · ${dayLabel(m.ts)}`} />
                   <button className="icon-btn small" onClick={() => onOpen(m)} title={T('Im Chat zeigen')}><Icon name="chat" size={18} /></button>
                 </li>
               ))}
@@ -103,3 +117,37 @@ export function Gallery({ chatIds, title, chats, onClose, onOpen }: {
   );
 }
 
+
+/** Link mit Vorschau (Titel, Bild), geladen über den Server; höchstens vier gleichzeitig */
+const previews = new Map<string, Promise<LinkPreview | null>>();
+let running = 0; const waiting: (() => void)[] = [];
+function loadPreview(u: string): Promise<LinkPreview | null> {
+  let p = previews.get(u);
+  if (!p) {
+    p = new Promise<void>((go) => { if (running < 4) { running++; go(); } else waiting.push(() => { running++; go(); }); })
+      .then(() => api.linkPreview(u)).catch(() => null)
+      .finally(() => { running--; waiting.shift()?.(); });
+    previews.set(u, p);
+  }
+  return p;
+}
+function LinkCard({ u, sub }: { u: string; sub: string }) {
+  const [p, setP] = useState<LinkPreview | null | undefined>(undefined);
+  const [imgOk, setImgOk] = useState(true);
+  useEffect(() => { let off = false; void loadPreview(u).then((r) => { if (!off) setP(r); }); return () => { off = true; }; }, [u]);
+  let host = u; try { host = new URL(u).hostname.replace(/^www\./, ''); } catch { /* bleibt */ }
+  const title = p?.title && p.title !== host ? p.title : null;
+  return (
+    <a className="gallery-link" href={u} target="_blank" rel="noreferrer noopener">
+      {p?.image && imgOk
+        ? <img className="link-thumb" src={p.image} alt="" loading="lazy" onError={() => setImgOk(false)} />
+        : <span className="link-thumb icon"><Icon name="link" size={18} /></span>}
+      <span>
+        {title && <b className="link-title">{title}</b>}
+        <span className="link-url">{p?.site && p.site !== title ? `${p.site} · ` : ''}{u.replace(/^https?:\/\//, '').slice(0, 80)}</span>
+        {p?.description && <span className="link-desc">{p.description}</span>}
+        <small>{sub}</small>
+      </span>
+    </a>
+  );
+}
