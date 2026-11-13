@@ -31,6 +31,7 @@ export interface BroadcastJob { id: string; total: number; done: number; failed:
 export { fixKind } from './kinds.js';
 import { fixKind, sniffKind } from './kinds.js';
 import { imageSize } from './imagesize.js';
+import { thumbnail } from './thumbs.js';
 
 /** Bildgröße nachtragen, wenn der Messenger keine geliefert hat: so kann die Oberfläche den Platz freihalten */
 function withSize<T extends { kind: string; width?: number; height?: number }>(a: T, data: Buffer): T {
@@ -379,11 +380,24 @@ export class Hub {
       for (let i = 0; i < msg.attachments.length; i++) {
         const a = msg.attachments[i];
         if (a.fileId || (a.size && a.size > MAX_AUTO_MEDIA)) continue;
-        await this.attachmentData(this.store.getMessage(id) ?? msg, i).catch(() => {});
+        const data = await this.attachmentData(this.store.getMessage(id) ?? msg, i).catch(() => null);
+        if (data) await this.prepareThumb(id, i, data).catch(() => {});
       }
       await new Promise((r) => setTimeout(r, 200));
     }
     this.mediaBusy = false;
+  }
+
+  /** Vorschaubild (Foto, Video-Standbild) gleich nach dem Herunterladen erzeugen und speichern,
+   *  damit es schon beim ersten Öffnen des Chats sofort da ist */
+  private async prepareThumb(id: string, i: number, data: Buffer) {
+    const a = this.store.getMessage(id)?.attachments[i];
+    if (!a?.fileId || a.gif || this.store.readThumb(a.fileId)) return;
+    const isVideo = a.kind === 'video' || /^video\//i.test(a.mime);
+    const isImage = !isVideo && a.kind !== 'sticker' && /^image\/(jpe?g|png|webp|heic|heif|avif|bmp)/i.test(a.mime);
+    if (!isVideo && !isImage) return;
+    const t = await thumbnail(`pre:${a.fileId}`, isVideo ? 'video' : 'image', async () => data);
+    if (t) this.store.storeThumb(a.fileId, t);
   }
 
   async attachmentData(msg: Message, index: number): Promise<Buffer> {
