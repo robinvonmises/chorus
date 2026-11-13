@@ -212,6 +212,8 @@ export function Lightbox() {
   );
 }
 
+const finePointer = typeof matchMedia !== 'undefined' && matchMedia('(pointer: fine)').matches;
+
 /** Video im Vollbild. Startet sofort (noch in der Tipp-Geste, deshalb useLayoutEffect: so darf iOS mit Ton abspielen),
  *  ohne sichtbare Steuerung. Tippen aufs Video blendet sie ein, nach 3 s Laufzeit verschwindet sie wieder.
  *  Eigene Steuerung statt der eingebauten: die schluckt sonst das seitliche Wischen. */
@@ -244,6 +246,8 @@ function SlideVideo({ src, cur, onUi }: { src: string; cur: boolean; onUi: (show
     return () => clearTimeout(h);
   }, [ui, playing, poke]);
   const touch = () => { setUi(true); setPoke((n) => n + 1); };
+  /** Mit Maus (nur pointer: fine, am iPhone unverändert): Bewegen blendet die Steuerung ein, Stillstand wieder aus */
+  const onMove = finePointer ? () => { if (cur) touch(); } : undefined;
   const seek = (e: React.TouchEvent | React.MouseEvent) => {
     e.stopPropagation(); touch();
     const el = v.current, bar = e.currentTarget as HTMLElement;
@@ -260,11 +264,11 @@ function SlideVideo({ src, cur, onUi }: { src: string; cur: boolean; onUi: (show
     <video ref={v} src={src} playsInline preload="metadata" disableRemotePlayback
       onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
       onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} onLoadedMetadata={(e) => setD(e.currentTarget.duration || 0)}
-      onClick={(e) => { e.stopPropagation(); if (!playing) start(); else setUi((u) => !u); }} />
-    {cur && visible && <button className="lightbox-play" onClick={(e) => { e.stopPropagation(); toggle(); }} onTouchEnd={stop}
+      onMouseMove={onMove} onClick={(e) => { e.stopPropagation(); if (!playing) start(); else setUi((u) => !u); }} />
+    {cur && visible && <button className="lightbox-play" onMouseMove={onMove} onClick={(e) => { e.stopPropagation(); toggle(); }} onTouchEnd={stop}
       aria-label={playing ? T('Pause') : T('Abspielen')}><Icon name={playing ? 'pause' : 'play'} size={30} /></button>}
     {cur && visible && d > 0 && (
-      <div className="lightbox-vbar" onClick={stop} onTouchEnd={stop}>
+      <div className="lightbox-vbar" onMouseMove={onMove} onClick={stop} onTouchEnd={stop}>
         <span>{duration(t)}</span>
         <div className="lightbox-vtrack" onTouchStart={seek} onTouchMove={seek} onMouseDown={seek}>
           <div style={{ width: `${(t / d) * 100}%` }} />
