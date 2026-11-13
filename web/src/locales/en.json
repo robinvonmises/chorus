@@ -1054,5 +1054,7 @@
  "Zum Zusammenfassen wird die Sprachnachricht erst transkribiert. Dafür bitte einen ElevenLabs-Schlüssel eintragen.": "To summarize, the voice message is transcribed first. Please add an ElevenLabs key for that.",
  "Die Antwort der KI konnte nicht gelesen werden. Bitte erneut versuchen.": "The AI's answer could not be read. Please try again.",
  "Ungültiger Kalender": "Invalid calendar",
- "Nextcloud: Eintrag ließ sich nicht anlegen": "Nextcloud: entry could not be created"
+ "Nextcloud: Eintrag ließ sich nicht anlegen": "Nextcloud: entry could not be created",
+ "Animierte Emojis": "Animated emojis",
+ "Nachrichten nur aus Emojis bewegen sich, solange sie zu sehen sind": "Emoji-only messages move while they're on screen"
 }

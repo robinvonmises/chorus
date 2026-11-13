@@ -23,7 +23,7 @@ import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 import { rise, takeRise } from '../sendAnim';
 import { T } from '../i18n';
-import { animoji, burst, useTypingAny } from '../effects';
+import { animoji, useTypingAny } from '../effects';
 
 const TTLS: [number, string][] = [[0, T('Nie')], [3600, T('1 Std.')], [86400, T('1 Tag')], [7 * 86400, T('1 Woche')], [30 * 86400, T('30 Tage')]];
 
@@ -169,7 +169,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const guard = async (fn: () => Promise<unknown>) => { try { await fn(); } catch (e: any) { flash(e.message ?? T('Fehler')); } };
 
   // Feste Funktionen für die Blasen: Sonst zeichnet jede Kleinigkeit (auch eine Nachricht in einem anderen Chat) alle Blasen neu
-  const react = useCallback((m: Message, emoji: string | null) => { haptic(); if (emoji) { burst(m.id, emoji); animoji(m.id, emoji); } void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? T('Fehler'))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const react = useCallback((m: Message, emoji: string | null) => { haptic(); if (emoji) animoji(m.id, emoji); void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? T('Fehler'))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openMenu = useCallback((mm: Message, p: { x: number; y: number }) => setMenu({ m: mm, ...p }), []);
   const transcribe = useCallback((m: Message) => api.ai.transcribe(m.id).then(() => {}).catch((e: any) => flash(e.message ?? T('Fehler'))), []);
   const summarizeVoice = useCallback((m: Message) => api.ai.voiceSummary(m.id).then(() => {}).catch((e: any) => flash(e.message ?? T('Fehler'))), []);

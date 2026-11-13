@@ -1098,11 +1098,6 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 
 /* ===== Effekte (einzeln abschaltbar, nur transform/opacity) ===== */
 /* Reaktions-Burst */
-.fx-burst { position: fixed; z-index: 2147482000; width: 0; height: 0; pointer-events: none; }
-.fx-burst span { position: absolute; left: -10px; top: -12px; font-size: 20px; line-height: 1; will-change: transform, opacity; }
-.reaction.fx-pop { animation: fx-pop .55s cubic-bezier(.3,1.6,.5,1) .18s both; }
-@keyframes fx-pop { 0% { transform: scale(.2); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
-@media (prefers-reduced-motion: reduce) { .reaction.fx-pop { animation: none; } }
 
 /* Jemand tippt: drei hüpfende Punkte in einer Sprechblase */
 .typing-dots { display: flex; gap: 4px; align-items: center; min-width: 0; padding: 12px 14px; }
@@ -1264,3 +1259,8 @@ html .chat-view.own-bg { background: var(--chat-bg-own); }
 .bubble .edit-hist { font-size: 13px; opacity: .75; border-left: 2px solid currentColor; padding-left: 8px; margin: 2px 0 6px; display: grid; gap: 4px; }
 .bubble .edit-hist small { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
 .chat-view.has-pin .catchup-pill, .chat-view.has-pin .catchup-card, .chat-view.has-pin .loading-old.floating { top: 112px; }
+
+/* Animierte Emojis in Emoji-Nachrichten (AnimEmoji.tsx) */
+.anim-emoji { position: relative; display: inline-block; }
+.anim-emoji img { position: absolute; left: -6%; top: -6%; width: 112%; height: 112%; pointer-events: none; }
+.anim-emoji.ok > span { visibility: hidden; }

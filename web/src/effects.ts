@@ -4,11 +4,11 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
  * Kleine Design-Effekte, einzeln abschaltbar in Einstellungen → Darstellung (Standard: an).
  * Bewusst nur transform/opacity; bei „Bewegung reduzieren“ laufen keine Animationen.
  */
-export type Fx = 'burst' | 'animoji';
+export type Fx = 'animoji' | 'animEmoji';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
-  { id: 'burst', title: 'Reaktions-Burst', hint: 'Beim Reagieren platzt das Emoji in kleine Teilchen und landet federnd an der Blase' },
   { id: 'animoji', title: 'Animierte Reaktionen', hint: 'Dein Reaktions-Emoji spielt einmal kurz groß über der Blase ab' },
+  { id: 'animEmoji', title: 'Animierte Emojis', hint: 'Nachrichten nur aus Emojis bewegen sich, solange sie zu sehen sind' },
 ];
 
 const key = (f: Fx) => `inbox:fx:${f}`;
@@ -25,37 +25,6 @@ export function useFx(f: Fx) {
     return () => window.removeEventListener('chorus:fx', h);
   }, [f]);
   return on;
-}
-
-/** Reaktions-Burst: Emoji-Teilchen fliegen von der Blase aus (Web Animations, nur transform/opacity) */
-const popped = new Map<string, number>();
-export const justReacted = (id: string, emoji: string) => (popped.get(`${id}|${emoji}`) ?? 0) > Date.now() - 2500;
-export function burst(messageId: string, emoji: string) {
-  if (!fxOn('burst') || reducedMotion()) return;
-  popped.set(`${messageId}|${emoji}`, Date.now());
-  const msg = document.querySelector(`.msg[data-id="${CSS.escape(messageId)}"]`);
-  const b = msg?.querySelector('.bubble');
-  if (!b || typeof (b as HTMLElement).animate !== 'function') return;
-  const r = b.getBoundingClientRect();
-  const out = msg!.classList.contains('out');
-  const layer = document.createElement('div');
-  layer.className = 'fx-burst';
-  layer.style.left = `${out ? r.right - 22 : r.left + 22}px`;
-  layer.style.top = `${r.bottom - 4}px`;
-  const n = 9;
-  for (let i = 0; i < n; i++) {
-    const s = document.createElement('span');
-    s.textContent = emoji;
-    layer.appendChild(s);
-    const a = (Math.PI * 2 * i) / n + Math.random() * 0.5;
-    const d = 34 + Math.random() * 26;
-    s.animate([
-      { transform: 'translate(0,0) scale(.3)', opacity: 1 },
-      { transform: `translate(${Math.cos(a) * d}px, ${Math.sin(a) * d - 10}px) scale(${0.55 + Math.random() * 0.4})`, opacity: 0 },
-    ], { duration: 650, easing: 'cubic-bezier(.2,.7,.3,1)', delay: i * 12, fill: 'forwards' });
-  }
-  document.body.appendChild(layer);
-  window.setTimeout(() => layer.remove(), 900);
 }
 
 /** Codepunkte eines Emojis wie bei Noto Animated Emoji: „2764_fe0f“, „1f44d_1f3fb“ */
