@@ -47,6 +47,8 @@ export interface Message {
   reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
   /** Nur live bei fehlgeschlagenem Senden: Grund */
   error?: string;
+  /** Frühere Fassungen einer bearbeiteten Nachricht (älteste zuerst) */
+  history?: { text: string; ts: number }[];
   /** E-Mail: Original-HTML vorhanden */
   html?: string | null;
   translation?: string | null;
@@ -163,6 +165,8 @@ export const api = {
   },
   media: () => req<{ autoSave: boolean }>('GET', '/api/media'),
   setMedia: (autoSave: boolean) => req<{ autoSave: boolean }>('PUT', '/api/media', { autoSave }),
+  keepDeleted: () => req<{ on: boolean }>('GET', '/api/keep-deleted'),
+  setKeepDeleted: (on: boolean) => req<{ on: boolean }>('PUT', '/api/keep-deleted', { on }),
   removeAvatar: (id: string) => req<PublicProfile>('DELETE', `/api/profiles/${id}/avatar`),
   totpSetup: () => req<{ secret: string; uri: string }>('POST', '/api/2fa/setup'),
   totpEnable: (code: string) => req<{ ok: true; trust?: string }>('POST', '/api/2fa/enable', { code }),

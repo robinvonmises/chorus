@@ -139,6 +139,8 @@ export interface Message {
   html?: string | null;
   /** Selbstzerstörende Notiz: wird zu diesem Zeitpunkt (ms) endgültig gelöscht */
   expiresAt?: number | null;
+  /** Frühere Fassungen einer bearbeiteten Nachricht (älteste zuerst; ts = wann ersetzt) */
+  history?: { text: string; ts: number }[];
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

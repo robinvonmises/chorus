@@ -126,8 +126,10 @@ async function writeChat(zip: ZipWriter, hub: Hub, chat: Chat, dir: string, back
       const r = byRemote.get(m.replyToRemoteId);
       inner += `<div class="q">${r ? `<b>${esc(r.fromMe ? 'Du' : r.senderName)}</b>: ${esc((r.text || '[Anhang]').slice(0, 120))}` : 'Antwort auf eine ältere Nachricht'}</div>`;
     }
-    if (m.deleted) inner += `<div class="del">Diese Nachricht wurde gelöscht.</div>`;
+    const kept = m.deleted && !!(m.text || m.attachments.length);
+    if (m.deleted && !kept) inner += `<div class="del">Diese Nachricht wurde gelöscht.</div>`;
     else {
+      if (kept) inner += `<div class="del">🚫 Gelöscht</div>`;
       for (let i = 0; i < m.attachments.length; i++) {
         const a = fixKind(m.attachments[i]);
         let data: Buffer | null = null;

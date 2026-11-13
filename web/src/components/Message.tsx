@@ -1,3 +1,4 @@
+import { haptic } from '../haptics';
 import { memo, useEffect, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { openFile, openMail } from './FileViewer';
@@ -39,6 +40,10 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   onTranscribe?: (m: Message) => Promise<void>;
 }) {
   const press = useRef<number | null>(null);
+  const [showHist, setShowHist] = useState(false);
+  // Vom Gegenüber gelöscht, Inhalt aber behalten
+  const kept = m.deleted && !!(m.text || m.attachments.length || m.transcript);
+  const hist = !m.deleted && m.edited ? m.history ?? [] : [];
   const big = !m.deleted && !m.attachments.length && isOnlyEmoji(m.text);
   const msgs = album ?? [m];
   const last = msgs[msgs.length - 1];
@@ -49,7 +54,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
 
   const startPress = (e: React.TouchEvent) => {
     const t = e.touches[0];
-    press.current = window.setTimeout(() => { navigator.vibrate?.(10); onAction(m, { x: t.clientX, y: t.clientY }); }, 450);
+    press.current = window.setTimeout(() => { haptic(); onAction(m, { x: t.clientX, y: t.clientY }); }, 450);
   };
   const endPress = () => { if (press.current) clearTimeout(press.current); press.current = null; };
 
@@ -68,7 +73,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
       onTouchStart={startPress} onTouchEnd={endPress} onTouchMove={endPress}
       onDoubleClick={() => !m.deleted && onReact(m, myReaction === '❤️' ? null : '❤️')}>
       {senderAvatar !== undefined && showName && <span className="msg-av"><Avatar name={m.senderName || '?'} src={senderAvatar} size={32} /></span>}
-      <div className={`bubble ${big ? 'big-emoji' : ''} ${media && !m.text ? 'media-only' : ''} ${media && m.text ? 'has-media' : ''} ${m.deleted ? 'deleted' : ''}`}>
+      <div className={`bubble ${big ? 'big-emoji' : ''} ${media && !m.text ? 'media-only' : ''} ${media && m.text ? 'has-media' : ''} ${m.deleted ? (kept ? 'kept-deleted' : 'deleted') : ''}`}>
         {showName && group && !m.fromMe && <div className="sender" style={{ color: `hsl(${hue(m.senderName)} 50% 42%)` }}>{m.senderName}</div>}
         {replied !== undefined && m.replyToRemoteId && (
           <button className="quote" onClick={() => onJump(m.replyToRemoteId!)}>
@@ -76,7 +81,13 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
             <span>{replied ? previewOf(replied) : T('Ältere Nachricht')}</span>
           </button>
         )}
-        {m.deleted ? <i>{T('Diese Nachricht wurde gelöscht.')}</i> : <>
+        {kept && <div className="del-tag"><Icon name="ban" size={12} /> {T('Gelöscht')}</div>}
+        {showHist && hist.length > 0 && (
+          <div className="edit-hist">
+            {hist.map((h, i) => <div key={i}><small>{i === 0 ? T('Original') : T('Fassung {0}', String(i + 1))}</small>{h.text}</div>)}
+          </div>
+        )}
+        {m.deleted && !kept ? <i>{T('Diese Nachricht wurde gelöscht.')}</i> : <>
           {mosaic && <Mosaic tiles={tiles} lead={m} />}
           {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
@@ -91,7 +102,9 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
         </>}
         <span className="meta">
           {reminder && <span className="remind-tag" title={T('Erinnerung')}>⏰ {whenLabel(reminder)}</span>}
-          {m.edited && !m.deleted && <span>{T('bearbeitet')}</span>}
+          {m.edited && !m.deleted && (hist.length
+            ? <button className="edited-btn" onClick={(e) => { e.stopPropagation(); setShowHist((v) => !v); }} title={T('Frühere Fassungen zeigen')}>{T('bearbeitet')}</button>
+            : <span>{T('bearbeitet')}</span>)}
           {last.expiresAt && <span className="expiry" title={T('Verschwindet von selbst')}>⏳ {leftText(last.expiresAt)}</span>}
           <span>{msgTime(last.ts)}</span>
           {last.fromMe && (last.status === 'failed'

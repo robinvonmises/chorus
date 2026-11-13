@@ -4,10 +4,11 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
  * Kleine Design-Effekte, einzeln abschaltbar in Einstellungen → Darstellung (Standard: an).
  * Bewusst nur transform/opacity; bei „Bewegung reduzieren“ laufen keine Animationen.
  */
-export type Fx = 'burst';
+export type Fx = 'burst' | 'animoji';
 
 export const FX: { id: Fx; title: string; hint: string }[] = [
   { id: 'burst', title: 'Reaktions-Burst', hint: 'Beim Reagieren platzt das Emoji in kleine Teilchen und landet federnd an der Blase' },
+  { id: 'animoji', title: 'Animierte Reaktionen', hint: 'Dein Reaktions-Emoji spielt einmal kurz groß über der Blase ab' },
 ];
 
 const key = (f: Fx) => `inbox:fx:${f}`;
@@ -55,6 +56,43 @@ export function burst(messageId: string, emoji: string) {
   }
   document.body.appendChild(layer);
   window.setTimeout(() => layer.remove(), 900);
+}
+
+/** Codepunkte eines Emojis wie bei Noto Animated Emoji: „2764_fe0f“, „1f44d_1f3fb“ */
+export function emojiCode(e: string) {
+  return [...e].map((c) => c.codePointAt(0)!.toString(16)).join('_');
+}
+
+/** Animierte Reaktion: Noto-Animation (animiertes WebP, über den eigenen Server zwischengespeichert)
+ *  erscheint einmal kurz über der Blase. Gibt es keine Animation oder lädt sie zu lange, passiert nichts. */
+export function animoji(messageId: string, emoji: string) {
+  if (!fxOn('animoji') || reducedMotion()) return;
+  const img = new Image();
+  const t0 = Date.now();
+  img.decoding = 'async';
+  img.onload = () => {
+    if (Date.now() - t0 > 2500) return; // zu spät, der Moment ist vorbei
+    const b = document.querySelector(`.msg[data-id="${CSS.escape(messageId)}"] .bubble`);
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    if (r.bottom < 0 || r.top > innerHeight) return;
+    const out = !!b.closest('.msg.out');
+    const S = 96;
+    img.className = 'fx-animoji';
+    img.alt = '';
+    img.style.width = img.style.height = `${S}px`;
+    img.style.left = `${Math.max(4, Math.min(innerWidth - S - 4, out ? r.left - S * 0.35 : r.right - S * 0.65))}px`;
+    img.style.top = `${Math.max(4, r.top - S * 0.6)}px`;
+    document.body.appendChild(img);
+    if (typeof img.animate === 'function') {
+      img.animate([
+        { transform: 'scale(.4)', opacity: 0 }, { transform: 'scale(1.05)', opacity: 1, offset: 0.12 },
+        { transform: 'scale(1)', opacity: 1, offset: 0.8 }, { transform: 'scale(.85)', opacity: 0 },
+      ], { duration: 1700, easing: 'ease-out', fill: 'forwards' });
+    }
+    window.setTimeout(() => img.remove(), 1750);
+  };
+  img.src = `/api/emoji/${emojiCode(emoji)}.webp`;
 }
 
 /** Wer tippt gerade? Nur live vom Server, läuft nach 12 s ohne Auffrischung von selbst ab */
