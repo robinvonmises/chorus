@@ -92,6 +92,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
         <span className="meta">
           {reminder && <span className="remind-tag" title={T('Erinnerung')}>⏰ {whenLabel(reminder)}</span>}
           {m.edited && !m.deleted && <span>{T('bearbeitet')}</span>}
+          {last.expiresAt && <span className="expiry" title={T('Verschwindet von selbst')}>⏳ {leftText(last.expiresAt)}</span>}
           <span>{msgTime(last.ts)}</span>
           {last.fromMe && (last.status === 'failed'
             ? <button className="st failed" title={T('Nicht gesendet – tippen für „Erneut senden“')} aria-label={T('Nicht gesendet, Optionen')} onClick={(e) => { e.stopPropagation(); onAction(last, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>
@@ -268,4 +269,12 @@ const URL_RE = /(https?:\/\/[^\s<]+[^\s<.,;:!?)\]'"])/g;
 function linkify(text: string) {
   const parts = text.split(URL_RE);
   return parts.map((p, i) => (i % 2 ? <a key={i} href={p} target="_blank" rel="noreferrer noopener">{p}</a> : p));
+}
+
+/** Restzeit einer selbstzerstörenden Notiz, grob: 5 Min., 3 Std., 2 T. */
+function leftText(at: number): string {
+  const s = Math.max(0, (at - Date.now()) / 1000);
+  if (s < 3600) return T('{0} Min.', Math.max(1, Math.round(s / 60)));
+  if (s < 86400) return T('{0} Std.', Math.round(s / 3600));
+  return T('{0} T.', Math.round(s / 86400));
 }

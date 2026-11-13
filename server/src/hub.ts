@@ -21,7 +21,11 @@ export type HubEvent =
   | { type: 'typing'; chatId: string; on: boolean }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: import('./planner.js').Planned[] }
-  | { type: 'reminder'; item: import('./planner.js').Planned; chat: Chat | null };
+  | { type: 'reminder'; item: import('./planner.js').Planned; chat: Chat | null }
+  | { type: 'broadcast'; job: BroadcastJob };
+
+/** Massen-Nachricht: Fortschritt (geht live an alle Geräte) */
+export interface BroadcastJob { id: string; total: number; done: number; failed: number; running: boolean; current?: string | null }
 
 /** Zentrale: hält alle Adapter, speichert Ereignisse, verteilt sie an verbundene Browser */
 export { fixKind } from './kinds.js';
@@ -75,6 +79,7 @@ export class Hub {
 
   async stopAll() {
     clearInterval(this.staleTimer);
+    clearInterval(this.expiryTimer);
     for (const a of this.adapters.values()) await a.stop().catch(() => {});
     this.adapters.clear();
   }
@@ -219,7 +224,10 @@ export class Hub {
       const remoteId = await send();
       const msg = this.store.renameMessage(tmp.id, remoteId, chat.id);
       if (msg) {
-        const m2 = msg.status === 'pending' ? this.store.patchMessage(msg.id, { status: 'sent' })! : msg;
+        let m2 = msg.status === 'pending' ? this.store.patchMessage(msg.id, { status: 'sent' })! : msg;
+        // Notizen an mich: eingestellte Lebensdauer anhängen (selbstzerstörend)
+        const ttl = chat.network === 'notes' ? this.notesTtl : 0;
+        if (ttl > 0) m2 = this.store.setExpiry(m2.id, Date.now() + ttl * 1000) ?? m2;
         this.emit({ type: 'message', message: m2, replacedId: tmp.id });
         this.store.touchChat(chat.id, m2.ts, previewText(m2), false);
         this.emit({ type: 'chat', chat: this.store.getChat(chat.id)! });
@@ -325,6 +333,7 @@ export class Hub {
     const msg = this.store.getMessage(messageId);
     if (!msg) throw new Error('Nachricht nicht gefunden');
     const chat = this.chatOrThrow(msg.chatId);
+    if (chat.network === 'notes') return this.purge([msg.id]); // Notizen: ganz weg statt „Nachricht gelöscht“
     if (!msg.remoteId.startsWith('local-')) await this.adapterFor(chat).delete(chat.remoteId, msg.remoteId, forEveryone);
     const m = this.store.patchMessage(messageId, { deleted: true, text: '', attachments: [] });
     if (m) this.emit({ type: 'message', message: m });
@@ -469,6 +478,74 @@ export class Hub {
   async resync() {
     for (const [id, a] of this.adapters) if (this.statuses.get(id)?.state === 'connected') await a.resync?.().catch(() => {});
     this.queueStaleContacts();
+  }
+
+  // ---------- Notizen an mich ----------
+  /** Lebensdauer neuer Notizen in Sekunden (0 = bleiben) */
+  get notesTtl(): number { return Number(this.store.getSetting('notes', { ttl: 0 }).ttl) || 0; }
+  set notesTtl(ttl: number) { this.store.setSetting('notes', { ttl: Math.max(0, Math.min(ttl, 365 * 86400)) }); }
+  /** Den Notizen-Chat anlegen, falls es ihn noch nicht gibt (einmal je Profil, angeheftet) */
+  async ensureNotes(title: string) {
+    if (!this.factories.notes || this.store.listAccountRows().some((a) => a.network === 'notes')) return;
+    const a = await this.addAccount('notes', title, { title });
+    // Der Adapter legt den Chat beim Start an; danach anheften, damit man ihn findet
+    const id = `${a.id}:self`;
+    for (let i = 0; i < 20 && !this.store.getChat(id); i++) await new Promise((r) => setTimeout(r, 50));
+    if (this.store.getChat(id)) { this.store.setPinned(id, true); this.emitChat(id); }
+  }
+  /** Nachrichten endgültig löschen und die Chat-Vorschau nachziehen */
+  purge(ids: string[]) {
+    const chats = new Set<string>();
+    for (const id of ids) {
+      const m = this.store.getMessage(id);
+      if (!m) continue;
+      this.store.purgeMessage(id);
+      chats.add(m.chatId);
+      this.emit({ type: 'message_removed', id, chatId: m.chatId });
+    }
+    for (const cid of chats) {
+      const c = this.store.getChat(cid);
+      if (!c) continue;
+      const last = this.store.listMessages(cid, undefined, 1)[0];
+      this.store.resetPreview(cid, last ? previewText(last) : '', last?.ts ?? c.lastTs);
+      this.emitChat(cid);
+    }
+  }
+  private expiryTimer = setInterval(() => {
+    try { const ids = this.store.expiredMessages(Date.now()).map((x) => x.id); if (ids.length) this.purge(ids); } catch { /* DB geschlossen */ }
+  }, 20_000);
+
+  // ---------- Massen-Nachricht ----------
+  // Jede Nachricht geht einzeln über den Messenger des Kontakts. Damit WhatsApp & Co. das nicht für Spam halten:
+  // höchstens 50 Empfänger, immer nur ein Durchlauf, zufällige Pausen zwischen den Sendungen.
+  private job: BroadcastJob | null = null;
+  get broadcastJob() { return this.job; }
+  startBroadcast(chatIds: string[], text: string): BroadcastJob {
+    if (this.job?.running) throw Object.assign(new Error('Es läuft schon eine Massen-Nachricht'), { statusCode: 409 });
+    const ids = [...new Set(chatIds)].filter((id) => this.store.getChat(id)).slice(0, 50);
+    if (!ids.length) throw Object.assign(new Error('Keine Empfänger'), { statusCode: 400 });
+    if (!text.trim()) throw Object.assign(new Error('Leere Nachricht'), { statusCode: 400 });
+    const job: BroadcastJob = { id: randomUUID().slice(0, 8), total: ids.length, done: 0, failed: 0, running: true, current: null };
+    this.job = job;
+    void (async () => {
+      for (let i = 0; i < ids.length; i++) {
+        const chat = this.store.getChat(ids[i]);
+        if (!chat) { job.failed++; continue; }
+        job.current = chat.title; this.emit({ type: 'broadcast', job: { ...job } });
+        const first = (chat.peer?.name || chat.title).trim().split(/\s+/)[0] || '';
+        try { await this.sendText(chat.id, text.replace(/\{name\}/gi, chat.kind === 'direct' ? first : '').replace(/[ \t]+([,.!?])/g, '$1').trim()); job.done++; }
+        catch (e: any) { job.failed++; console.warn(`[massen-nachricht] ${chat.network}: ${e?.message ?? e}`); }
+        this.emit({ type: 'broadcast', job: { ...job } });
+        if (i < ids.length - 1) {
+          const next = this.store.getChat(ids[i + 1])?.network;
+          const [min, max] = next === 'whatsapp' ? [4000, 9000] : next === 'signal' ? [2000, 4500] : [1200, 2500];
+          await new Promise((r) => setTimeout(r, min + Math.random() * (max - min)));
+        }
+      }
+      job.running = false; job.current = null;
+      this.emit({ type: 'broadcast', job: { ...job } });
+    })();
+    return { ...job };
   }
 
   setTranscript(messageId: string, transcript: string) {

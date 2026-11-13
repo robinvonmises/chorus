@@ -56,6 +56,7 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
+    if (!mcols.includes('expires_at')) { this.db.exec('ALTER TABLE messages ADD COLUMN expires_at INTEGER'); this.db.exec('CREATE INDEX IF NOT EXISTS messages_expiry ON messages(expires_at) WHERE expires_at IS NOT NULL'); }
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
     for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
@@ -135,12 +136,16 @@ export class Store {
   listChats(): Chat[] {
     return this.db.prepare('SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id ORDER BY c.pinned DESC, c.last_ts DESC LIMIT 1000').all().map((r) => this.rowToChat(r));
   }
+  listAllChats(): Chat[] {
+    return this.db.prepare('SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id').all().map((r) => this.rowToChat(r));
+  }
   /** Chats/Kontakte nach Name, Alias oder Nummer suchen – auch solche ohne Nachrichten, die in listChats() wegen des Limits fehlen können */
   searchChats(q: string, limit = 100): Chat[] {
     const like = '%' + q.replace(/[\\%_]/g, (m) => '\\' + m) + '%';
     return this.db.prepare(`SELECT c.*, a.network FROM chats c JOIN accounts a ON a.id=c.account_id
       WHERE c.title LIKE ? ESCAPE '\\' OR c.alias LIKE ? ESCAPE '\\' OR c.remote_id LIKE ? ESCAPE '\\' ORDER BY c.last_ts DESC LIMIT ?`).all(like, like, like, limit).map((r) => this.rowToChat(r));
   }
+  setPinned(id: string, on: boolean) { this.db.prepare('UPDATE chats SET pinned=? WHERE id=?').run(Number(on), id); }
   updateChat(id: string, patch: Partial<Pick<Chat, 'pinned' | 'muted' | 'unread' | 'archived' | 'alias' | 'note'>> & { aiEnabled?: boolean }) {
     const cols: Record<string, string> = { pinned: 'pinned', muted: 'muted', unread: 'unread', aiEnabled: 'ai_enabled', archived: 'archived', alias: 'alias', note: 'note' };
     for (const [k, v] of Object.entries(patch)) {
@@ -238,7 +243,7 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
-      translationFrom: r.translation_from ?? null, html: r.html ?? null,
+      translationFrom: r.translation_from ?? null, html: r.html ?? null, expiresAt: r.expires_at ?? null,
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -277,6 +282,19 @@ export class Store {
     return this.getMessage(newId);
   }
   removeMessage(id: string) { this.db.prepare('DELETE FROM messages WHERE id=?').run(id); }
+  /** Nachricht samt gespeicherter Anhänge endgültig löschen (selbstzerstörende Notizen) */
+  purgeMessage(id: string) {
+    const m = this.getMessage(id);
+    if (!m) return;
+    for (const a of m.attachments) if (a.fileId) this.deleteFile(a.fileId);
+    this.removeMessage(id);
+  }
+  setExpiry(id: string, at: number | null) { this.db.prepare('UPDATE messages SET expires_at=? WHERE id=?').run(at, id); return this.getMessage(id); }
+  expiredMessages(now: number): { id: string; chatId: string }[] {
+    return this.db.prepare('SELECT id, chat_id AS chatId FROM messages WHERE expires_at IS NOT NULL AND expires_at<=? LIMIT 500').all(now) as { id: string; chatId: string }[];
+  }
+  /** Vorschau in der Chatliste nach dem Entfernen von Nachrichten neu setzen */
+  resetPreview(chatId: string, text: string, ts: number) { this.db.prepare('UPDATE chats SET last_text=?, last_ts=? WHERE id=?').run(text, ts, chatId); }
   patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
     const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {

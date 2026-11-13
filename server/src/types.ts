@@ -1,4 +1,5 @@
-export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
+/** notes = „Notizen an mich“: eingebauter Chat nur auf dem Server, ohne Messenger */
+export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo' | 'notes';
 
 export type AccountState =
   | 'disconnected'
@@ -136,6 +137,8 @@ export interface Message {
   error?: string;
   /** E-Mail: bereinigtes Original-HTML (verschlüsselt gespeichert, fileId); abrufbar über /api/messages/:id/html */
   html?: string | null;
+  /** Selbstzerstörende Notiz: wird zu diesem Zeitpunkt (ms) endgültig gelöscht */
+  expiresAt?: number | null;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

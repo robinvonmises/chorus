@@ -15,6 +15,7 @@ import { StorageSection } from './StorageSettings';
 import { useStorage } from '../storageState';
 import { BubbleSection } from './BubbleSettings';
 import { AdminSection } from './AdminSection';
+import { StatsPage } from './Stats';
 import { PushSection } from './PushSection';
 import { Avatar } from './Rail';
 import { loadAccent } from '../bubbles';
@@ -25,10 +26,10 @@ const STATE_TEXT: Record<Account['status']['state'], string> = {
   connected: T('Verbunden'), connecting: T('Verbinde …'), disconnected: T('Getrennt'), need_input: T('Anmeldung offen'), qr: T('QR-Code scannen'), error: T('Fehler'),
 };
 
-type Page = 'me' | 'accounts' | 'lang' | 'ai' | 'push' | 'look' | 'backup' | 'storage' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
+type Page = 'me' | 'stats' | 'accounts' | 'lang' | 'ai' | 'push' | 'look' | 'backup' | 'storage' | 'security' | 'profiles' | 'server' | 'about' | `acc:${string}`;
 
 const TITLES: Record<string, string> = {
-  me: T('Mein Profil'), accounts: T('Messenger'), lang: T('Sprache'), ai: T('KI-Assistent'), push: T('Benachrichtigungen'), look: T('Darstellung'), backup: T('Sicherung'), storage: T('Speicherorte'),
+  me: T('Mein Profil'), stats: T('Statistik'), accounts: T('Messenger'), lang: T('Sprache'), ai: T('KI-Assistent'), push: T('Benachrichtigungen'), look: T('Darstellung'), backup: T('Sicherung'), storage: T('Speicherorte'),
   security: T('Sicherheit'), profiles: T('Profile'), server: T('Server'), about: T('Über Chorus'),
 };
 
@@ -52,8 +53,8 @@ function Row({ tile, title, sub, value, onClick, chevron = true, danger }: {
   );
 }
 
-export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfileChanged, onReload }: {
-  server: ServerState; accounts: Account[]; onClose: () => void; onAdd: () => void; onLocked: () => void; onProfileChanged: () => void; onReload: () => Promise<void>;
+export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfileChanged, onReload, onOpenChat }: {
+  server: ServerState; accounts: Account[]; onOpenChat: (id: string) => void; onClose: () => void; onAdd: () => void; onLocked: () => void; onProfileChanged: () => void; onReload: () => Promise<void>;
 }) {
   const me = server.profile!;
   const [comfort, setComfort] = useState(me.comfort);
@@ -131,6 +132,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
       case 'accounts': return <AccountsPage accounts={accounts} sync={sync} lastSync={lastSync} onSync={() => void runSync()} onOpen={(id) => go(`acc:${id}`)} onAdd={onAdd} />;
       case 'me': return <div className="ios-card pad"><MyProfile server={server} onChanged={onProfileChanged} /></div>;
       case 'ai': return <AiSettingsSection />;
+      case 'stats': return <StatsPage name={me.name} onOpenChat={onOpenChat} />;
       case 'push': return <div className="ios-card pad"><PushSection /></div>;
       case 'look': return <BubbleSection nets={[...new Set(accounts.map((a) => a.network))]} />;
       case 'backup': return <div className="ios-card pad"><BackupSection /></div>;
@@ -203,6 +205,10 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
               <Row tile={<Tile color="#ff3b30" icon="bell" />} title={T('Benachrichtigungen')} value={pushOn ? T('Push an') : undefined} onClick={() => go('push')} />
               <Row tile={<Tile color="#5856d6" icon="globe" />} title={T('Sprache')} value={LANGS.find((l) => l.id === lang)?.name} onClick={() => go('lang')} />
               <Row tile={<Tile color="#007aff" icon="palette" />} title={T('Darstellung')} value={bubbleMode} onClick={() => go('look')} />
+            </div>
+
+            <div className="ios-card">
+              <Row tile={<Tile color="#ff2d55" icon="chart" />} title={T('Statistik')} sub={T('Mit wem du schreibst, Jahresrückblick')} onClick={() => go('stats')} />
             </div>
 
             <div className="ios-card">

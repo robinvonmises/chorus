@@ -1,6 +1,6 @@
 import { trustStore } from './keys';
 import { T, lang } from './i18n';
-export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo';
+export type Network = 'telegram' | 'signal' | 'whatsapp' | 'email' | 'demo' | 'notes';
 
 export interface AccountStatus {
   state: 'disconnected' | 'connecting' | 'need_input' | 'qr' | 'connected' | 'error';
@@ -52,6 +52,8 @@ export interface Message {
   translation?: string | null;
   /** Sprache des Texts, wenn translation die deutsche Übersetzung ist (bei eigenen übersetzt gesendeten leer: dann ist translation das Original) */
   translationFrom?: string | null;
+  /** Selbstzerstörende Notiz: verschwindet zu diesem Zeitpunkt */
+  expiresAt?: number | null;
 }
 export interface PublicProfile {
   id: string; name: string; initialized: boolean; invite: boolean; totp: boolean; avatar: string | null;
@@ -72,7 +74,18 @@ export type HubEvent =
   | { type: 'typing'; chatId: string; on: boolean }
   | { type: 'notify'; chat: Chat; message: Message }
   | { type: 'planned'; items: Planned[] }
-  | { type: 'reminder'; item: Planned; chat: Chat | null };
+  | { type: 'reminder'; item: Planned; chat: Chat | null }
+  | { type: 'broadcast'; job: BroadcastJob };
+
+export interface StatsContact { key: string; title: string; avatar: string | null; networks: Network[]; kind: Chat['kind']; sent: number; received: number; chatId: string }
+export interface Stats {
+  year: number | null; years: number[]; sent: number; received: number; words: number; chats: number; voice: number; photos: number;
+  replyMedian: number | null; replyCount: number; theirMedian: number | null;
+  top: StatsContact[]; groups: StatsContact[]; networks: { network: Network; count: number }[];
+  hours: number[]; weekdays: number[]; busiestDay: { day: string; count: number } | null; emojis: { emoji: string; count: number }[];
+}
+/** Massen-Nachricht: Fortschritt */
+export interface BroadcastJob { id: string; total: number; done: number; failed: number; running: boolean; current?: string | null }
 
 export interface Planned {
   id: string; kind: 'send' | 'remind'; chatId: string; at: number; created: number; text: string;
@@ -246,6 +259,11 @@ export const api = {
   discard: (msgId: string) => req('DELETE', `/api/messages/${enc(msgId)}/discard`),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
   searchChats: (q: string) => req<Chat[]>('GET', `/api/chats/search?q=${encodeURIComponent(q)}`),
+  notes: () => req<{ ttl: number }>('GET', '/api/notes'),
+  setNotes: (ttl: number) => req<{ ttl: number }>('PUT', '/api/notes', { ttl }),
+  broadcast: (chatIds: string[], text: string) => req<BroadcastJob>('POST', '/api/broadcast', { chatIds, text }),
+  broadcastJob: () => req<BroadcastJob | null>('GET', '/api/broadcast'),
+  stats: (year: number | 'all') => req<Stats>('GET', `/api/stats?year=${year}&tz=${new Date().getTimezoneOffset()}`),
   startChat: (accountId: string, phone: string) => req<Chat>('POST', `/api/accounts/${accountId}/start-chat`, { phone }),
   search: (q: string, chats?: string[]) => req<Message[]>('GET', `/api/search?q=${encodeURIComponent(q)}${chats ? `&chats=${chats.map(enc).join(',')}` : ''}`),
 
