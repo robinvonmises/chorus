@@ -66,6 +66,8 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
   useEffect(() => {
     if (editing) return; // Bearbeiten ist kein Entwurf
     localStorage.setItem(draftKey, text); if (!text) localStorage.removeItem(draftKey);
+    // Ausstehende Speicherung eines älteren Stands verwerfen (sonst kam der Text nach dem Senden als Entwurf zurück)
+    if (syncTimer.current) { clearTimeout(syncTimer.current); syncTimer.current = null; }
     if (text === synced.current) return;
     // Leeren (z. B. nach dem Senden) muss immer gewinnen, auch wenn die Uhr eines anderen Geräts vorgeht
     const ts = text.trim() ? Date.now() : Math.max(Date.now(), serverTs.current + 1);
@@ -73,7 +75,6 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
     const id = draftId ?? chat.id, t = text;
     const save = (retry: boolean): void => void api.saveDraft(id, t.trim() ? t : '', ts).catch(() => { if (retry) setTimeout(() => save(false), 3000); });
     pushDraft.current = () => { syncTimer.current = null; synced.current = t; save(true); };
-    if (syncTimer.current) clearTimeout(syncTimer.current);
     if (!t.trim()) pushDraft.current(); else syncTimer.current = setTimeout(() => pushDraft.current(), 800);
   }, [text, draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Beim Verlassen des Chats den letzten Stand sofort speichern

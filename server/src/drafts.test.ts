@@ -31,3 +31,9 @@ test('Entwurf: anderer Text bleibt stehen, Geister werden beim Start aufgeräumt
   assert.equal(s.getChat(b.id)!.draft, null);
   assert.equal(s.getChat(a.id)!.draft, 'Noch nicht fertig');
 });
+
+test('Entwurf: gerade gesendete Texte werden erkannt', () => {
+  const s = store(); const c = chat(s, 'r');
+  own(s, c.id, 'Bin gleich da');
+  assert.deepEqual(s.recentOwnTexts(c.id, 60_000), ['Bin gleich da']);
+});

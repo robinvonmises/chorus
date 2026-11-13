@@ -376,6 +376,11 @@ export class Store {
     }
     return done;
   }
+  /** Texte der eigenen Nachrichten der letzten ms Millisekunden (Original und Übersetzung) */
+  recentOwnTexts(chatId: string, ms: number): string[] {
+    return (this.db.prepare('SELECT text, translation FROM messages WHERE chat_id=? AND from_me=1 AND ts>? ORDER BY ts DESC LIMIT 20').all(chatId, Date.now() - ms) as { text: string; translation: string | null }[])
+      .flatMap((r) => [r.text, r.translation ?? '']).filter(Boolean);
+  }
   /** Alte Geister-Entwürfe: Entwurf steht schon als eigene Nachricht im Chat */
   clearGhostDrafts(): number {
     const rows = this.db.prepare('SELECT id FROM chats WHERE draft IS NOT NULL').all() as { id: string }[];
