@@ -30,6 +30,10 @@ export function haptic() {
   last = now;
   try {
     if (typeof navigator.vibrate === 'function') { navigator.vibrate(10); return; }
+    // Der Schalter-Trick holt den Fokus aus dem Eingabefeld: iOS klappt dann die Tastatur ein, die Sende-Animation
+    // landet an der falschen Stelle und die Blase fliegt über die anderen. Mit offenem Eingabefeld daher keine Haptik.
+    const a = document.activeElement as HTMLElement | null;
+    if (a && (a.isContentEditable || a.matches('textarea, input:not([type=checkbox]):not([type=radio]):not([type=range])'))) return;
     iosSwitch().click();
   } catch { /* egal */ }
 }

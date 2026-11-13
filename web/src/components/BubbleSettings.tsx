@@ -135,7 +135,7 @@ export function BubbleSection({ nets }: { nets: Network[] }) {
       </label>
       <label className="ios-row toggle-row">
         <span className="ios-row-main">
-          <span className="ios-row-text"><span className="ios-title">{T('Haptik')}</span><small>{T('Leichtes Vibrieren beim Senden, Reagieren und Wischen (iPhone ab iOS 18)')}</small></span>
+          <span className="ios-row-text"><span className="ios-title">{T('Haptik')}</span><small>{T('Leichtes Vibrieren beim Reagieren und Wischen (iPhone ab iOS 18)')}</small></span>
           <input type="checkbox" className="switch" checked={hap} onChange={(e) => { setHap(e.target.checked); setHaptics(e.target.checked); if (e.target.checked) haptic(); }} />
         </span>
       </label>
