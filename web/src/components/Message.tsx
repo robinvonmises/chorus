@@ -10,7 +10,7 @@ import { Icon } from './Icon';
 import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
 import { T, lang, locale } from '../i18n';
-import { justReacted } from '../effects';
+import { BigEmoji } from './AnimEmoji';
 import { hintOf } from '../detect';
 
 const ATT_ICON = { image: '📷', video: '🎬', audio: '🎵', voice: '🎤', file: '📎', sticker: '' } as const;
@@ -96,7 +96,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
           {mosaic && <Mosaic tiles={tiles} lead={m} />}
           {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
           {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} onSummarize={onSummarize} />}
-          {m.text && <div className="text">{linkify(m.text)}</div>}
+          {m.text && (big ? <BigEmoji text={m.text} /> : <div className="text">{linkify(m.text)}</div>)}
           {onDetect && <DetectHint m={m} onDetect={onDetect} />}
           {m.html && <button className="mail-orig" onClick={() => openMail(m)}><Icon name="file" size={14} />{T('Original-E-Mail ansehen')}</button>}
           {m.translation && (() => {
@@ -129,7 +129,7 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
       {groups.size > 0 && (
         <div className="reactions">
           {[...groups].map(([emoji, g]) => (
-            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}${g.mine && justReacted(m.id, emoji) ? ' fx-pop' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? T('Reaktion entfernen') : T('Auch reagieren')}>
+            <button key={emoji} className={`reaction ${g.mine ? 'mine' : ''}`} onClick={() => onReact(m, g.mine ? null : emoji)} title={g.mine ? T('Reaktion entfernen') : T('Auch reagieren')}>
               {emoji}{g.n > 1 && <span>{g.n}</span>}
             </button>
           ))}
