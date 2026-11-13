@@ -56,6 +56,7 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
+    if (!mcols.includes('summary')) this.db.exec('ALTER TABLE messages ADD COLUMN summary TEXT');
     if (!mcols.includes('expires_at')) { this.db.exec('ALTER TABLE messages ADD COLUMN expires_at INTEGER'); this.db.exec('CREATE INDEX IF NOT EXISTS messages_expiry ON messages(expires_at) WHERE expires_at IS NOT NULL'); }
     if (!mcols.includes('history')) this.db.exec('ALTER TABLE messages ADD COLUMN history TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
@@ -244,7 +245,7 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
-      translationFrom: r.translation_from ?? null, html: r.html ?? null, expiresAt: r.expires_at ?? null, history: r.history ? JSON.parse(r.history) : [],
+      translationFrom: r.translation_from ?? null, html: r.html ?? null, summary: r.summary ?? null, expiresAt: r.expires_at ?? null, history: r.history ? JSON.parse(r.history) : [],
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -307,13 +308,13 @@ export class Store {
   }
   /** Vorschau in der Chatliste nach dem Entfernen von Nachrichten neu setzen */
   resetPreview(chatId: string, text: string, ts: number) { this.db.prepare('UPDATE chats SET last_text=?, last_ts=? WHERE id=?').run(text, ts, chatId); }
-  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
+  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom' | 'summary'>>) {
     if (patch.edited && patch.text !== undefined) {
       const cur = this.db.prepare('SELECT text, deleted FROM messages WHERE id=?').get(id) as { text: string; deleted: number } | undefined;
       if (cur?.deleted) return this.getMessage(id);
       if (cur) this.keepVersion(id, cur.text, patch.text);
     }
-    const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
+    const map: Record<string, string> = { summary: 'summary', translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
       if (!map[k]) continue;
       const val = typeof v === 'boolean' ? Number(v) : Array.isArray(v) ? JSON.stringify(v) : v;
