@@ -139,7 +139,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
       case 'server': return <div className="ios-card pad"><AdminSection /></div>;
       case 'about': return (
         <>
-          <div className="ios-hero"><img src="/icon.svg?v=3" alt="" width={72} height={72} style={{ borderRadius: 16 }} /><h3>{T('Chorus')}</h3><small className="muted">{T('Version')}{' '}{server.version}</small></div>
+          <div className="ios-hero"><img src="/icon.svg?v=4" alt="" width={72} height={72} style={{ borderRadius: 16 }} /><h3>{T('Chorus')}</h3><small className="muted">{T('Version')}{' '}{server.version}</small></div>
           <div className="ios-card pad"><p className="muted">{T('Deine Messenger in einer App. Deine Daten liegen verschlüsselt auf deinem eigenen Server.')}</p></div>
           <div className="ios-card">
             <a className="ios-row" href="https://github.com/robinvonmises/chorus" target="_blank" rel="noreferrer"><span className="ios-row-main"><span className="ios-row-text"><span className="ios-title">{T('Quellcode auf GitHub')}</span></span><Icon name="chevron" size={18} /></span></a>

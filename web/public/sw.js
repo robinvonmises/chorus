@@ -42,7 +42,7 @@ self.addEventListener('push', (e) => {
     const img = d.image && !ios ? loadImage(d.image) : Promise.resolve(undefined);
     return img.then((image) => self.registration.showNotification(d.title || 'Chorus', {
       body: d.body || '', tag: d.tag || d.chatId || undefined, renotify: true, image,
-      data: { chatId: d.chatId || null }, icon: '/icon-192.png?v=3', badge: '/icon-192.png?v=3',
+      data: { chatId: d.chatId || null }, icon: '/icon-192.png?v=4', badge: '/icon-192.png?v=4',
     }));
   }));
 });

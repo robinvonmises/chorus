@@ -1,10 +1,10 @@
 /* Chorus – eigenes Design. Hell/Dunkel automatisch. */
 :root {
   /* App-Farbe: --brand* setzt applyAccent() je nach Wahl (Einstellungen → Darstellung) */
-  --brand: #059669;
-  --brand-soft: #ecfdf5;
-  --brand-dark: #34d399;
-  --brand-dark-soft: #0f2a22;
+  --brand: #2563eb;
+  --brand-soft: #eff6ff;
+  --brand-dark: #60a5fa;
+  --brand-dark-soft: #172340;
   --accent: var(--brand);
   --accent-soft: var(--brand-soft);
   --accent-ink: #ffffff;
@@ -904,7 +904,7 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .via-setting h4 { margin: 0 0 4px; }
 .radio-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line, #eee); cursor: pointer; }
 .radio-row:last-child { border-bottom: 0; }
-.radio-row input { accent-color: var(--accent, #059669); width: 18px; height: 18px; margin: 0; }
+.radio-row input { accent-color: var(--accent, #2563eb); width: 18px; height: 18px; margin: 0; }
 .radio-row .dot { flex: none; }
 .auto-set { display: grid; gap: 6px; margin: 10px 0; }
 .auto-label { font-size: 12px; font-weight: 600; color: var(--ink-3); text-transform: uppercase; letter-spacing: .03em; margin-top: 4px; }
