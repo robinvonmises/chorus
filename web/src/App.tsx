@@ -168,7 +168,11 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
     } else if (e.type === 'chat_removed') {
       setChats((cs) => { const n = new Map(cs); n.delete(e.id); return n; });
       setActive((a) => (a === e.id ? null : a));
-    } else if (e.type === 'chat') setChats((cs) => new Map(cs).set(e.chat.id, e.chat));
+    } else if (e.type === 'chat') {
+      // Offener Chat bleibt gelesen: ein verspätetes „unread: 1“ vom Server nicht wieder anzeigen
+      const open = linkedRef.current.includes(e.chat.id) && document.visibilityState === 'visible';
+      setChats((cs) => new Map(cs).set(e.chat.id, open && e.chat.unread ? { ...e.chat, unread: 0 } : e.chat));
+    }
     else if (e.type === 'message') {
       setMessages((ms) => {
         const list = ms.get(e.message.chatId);
@@ -187,7 +191,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
         const mine = lm.fromMe && !lm.deleted && lm.status !== 'received' ? lm.status : null;
         return (c.lastMine ?? null) === mine ? cs : new Map(cs).set(c.id, { ...c, lastMine: mine });
       });
-      if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
+      if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') markReadNow(e.message.chatId);
       if (!e.message.fromMe && Date.now() - e.message.ts < 60_000) setTyping(e.message.chatId, false);
     } else if (e.type === 'typing') setTyping(e.chatId, e.on);
     else if (e.type === 'message_removed') {
@@ -243,7 +247,16 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
     return () => window.removeEventListener('inbox:open-settings', open);
   }, []);
 
+  /** Ungelesen sofort lokal auf 0 setzen (nicht erst auf die Server-Antwort warten) und dem Server melden */
+  const zeroUnread = useCallback((ids: string[]) => setChats((cs) => {
+    let n = cs;
+    for (const id of ids) { const c = cs.get(id); if (c?.unread) { if (n === cs) n = new Map(cs); n.set(id, { ...c, unread: 0 }); } }
+    return n;
+  }), []);
+  const markReadNow = useCallback((id: string) => { zeroUnread([id]); api.markRead(id).catch(() => {}); }, [zeroUnread]);
+
   const openChat = useCallback((id: string | null) => {
+    zeroUnread(id ? [id] : linkedRef.current);
     if (id) { if (location.hash !== '#chat=' + encodeURIComponent(id)) location.hash = 'chat=' + encodeURIComponent(id); }
     else if (location.hash) history.back();
     setActive(id);
@@ -259,7 +272,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
   linkedRef.current = linkedIds;
   useEffect(() => {
     if (!live) return;
-    for (const id of linkedIds.slice(1)) { void prefetch(id); api.markRead(id).catch(() => {}); }
+    for (const id of linkedIds.slice(1)) { void prefetch(id); markReadNow(id); }
   }, [linkedIds.join(','), live]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Stand auf dem Gerät merken, damit die App nach einem Kaltstart sofort etwas zeigt.
@@ -320,7 +333,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
       });
       if (ms.length < 20) api.history(active).catch(() => {});
     });
-    api.markRead(active).catch(() => {});
+    markReadNow(active);
     return () => { cancelled = true; };
   }, [active, live]);
 
@@ -358,7 +371,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
         const cur = m.get(id), next = keepSame(cur, ms);
         return next === cur ? m : new Map(m).set(id, next);
       })).catch(() => {});
-      if (document.visibilityState === 'visible') api.markRead(id).catch(() => {});
+      if (document.visibilityState === 'visible') markReadNow(id);
     }
   };
 
