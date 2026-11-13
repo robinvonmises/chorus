@@ -44,6 +44,9 @@ export interface Chat {
   avatarFileId?: string | null;
   /** E-Mail: Gegenüber (Adresse und Name). Die Oberfläche fasst alle Betreffe eines Absenders zu einem Kontakt zusammen */
   peer?: { id: string; name: string } | null;
+  /** Halb getippte Nachricht (geräteübergreifend), draftTs = Zeitpunkt der Änderung */
+  draft?: string | null;
+  draftTs?: number | null;
   /** Bild-URL (eigenes Bild hat Vorrang vor dem vom Messenger) */
   avatar?: string | null;
   /** Name beim Messenger (title ist der angezeigte, ggf. eigener Name) */
@@ -136,6 +139,9 @@ export interface Message {
   error?: string;
   /** E-Mail: bereinigtes Original-HTML (verschlüsselt gespeichert, fileId); abrufbar über /api/messages/:id/html */
   html?: string | null;
+  /** Nur in Chorus: angepinnt seit (ms) bzw. als Lesezeichen gemerkt */
+  pinnedAt?: number;
+  starred?: boolean;
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */

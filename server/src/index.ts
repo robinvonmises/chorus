@@ -1,3 +1,4 @@
+import { linkPreview, previewImage } from './linkpreview.js';
 import { randomUUID } from 'node:crypto';
 import type { Chat, Message, OutgoingFile } from './types.js';
 import { createRequire } from 'node:module';
@@ -594,6 +595,27 @@ app.post('/api/messages/:id/react', async (req) => {
   await H(req).react((req.params as any).id, emoji);
   return { ok: true };
 });
+/** Anpinnen (Leiste oben im Chat) und Merken (Lesezeichen), nur in Chorus */
+app.post('/api/messages/:id/mark', async (req) => {
+  const b = (req.body ?? {}) as { pinned?: boolean; starred?: boolean };
+  const h = H(req);
+  const m = h.store.markMessage((req.params as any).id, { pinned: b.pinned === undefined ? undefined : !!b.pinned, starred: b.starred === undefined ? undefined : !!b.starred });
+  if (!m) throw Object.assign(new Error('Nachricht nicht gefunden'), { statusCode: 404 });
+  h.emit({ type: 'message', message: m });
+  return m;
+});
+app.get('/api/pinned', async (req) => {
+  const ids = String((req.query as any)?.chats ?? '').split(',').filter(Boolean).slice(0, 20);
+  return H(req).store.pinnedMessages(ids);
+});
+/** Entwurf pro Chat speichern (geräteübergreifend); die anderen Geräte bekommen ihn als Chat-Update */
+app.put('/api/chats/:id/draft', async (req) => {
+  const id = (req.params as any).id; const h = H(req);
+  const b = (req.body ?? {}) as { text?: string; ts?: number };
+  const ts = Math.min(Number(b.ts) || Date.now(), Date.now() + 60_000);
+  if (h.store.setDraft(id, String(b.text ?? ''), ts)) h.emitChat(id);
+  return { ok: true };
+});
 app.patch('/api/messages/:id', async (req) => {
   const { text } = req.body as { text: string };
   await H(req).edit((req.params as any).id, text);
@@ -961,12 +983,29 @@ app.get('/api/search', async (req) => {
   const chats = qs.chats ? String(qs.chats).split(',').filter(Boolean) : undefined;
   return q.length < 2 ? [] : H(req).store.search(q, 60, chats, qs.before ? Number(qs.before) : undefined);
 });
-/** Galerie: ?kind=media|files|voice|links&chats=a,b&before=ts */
+/** Galerie: ?kind=media|files|voice|links|starred&chats=a,b&before=ts */
 app.get('/api/gallery', async (req) => {
   const qs = req.query as { kind?: string; chats?: string; before?: string };
-  const kind = (['media', 'files', 'voice', 'links'] as const).find((k) => k === qs.kind) ?? 'media';
+  const kind = (['media', 'files', 'voice', 'links', 'starred'] as const).find((k) => k === qs.kind) ?? 'media';
   const chats = qs.chats ? String(qs.chats).split(',').filter(Boolean) : null;
   return H(req).store.media(kind, chats, qs.before ? Number(qs.before) : undefined, 120);
+});
+/** Link-Vorschau für die Links-Ansicht: Titel, Beschreibung, Bild (über den Server geladen) */
+app.get('/api/linkpreview', async (req) => {
+  const url = String((req.query as any)?.url ?? '');
+  if (!/^https?:\/\//i.test(url) || url.length > 2000) throw Object.assign(new Error('Ungültiger Link'), { statusCode: 400 });
+  const p = await linkPreview(url);
+  return p ? { ...p, image: p.image ? `/api/linkpreview/image?url=${encodeURIComponent(p.image)}` : null } : { url, title: null, description: null, image: null, site: null };
+});
+app.get('/api/linkpreview/image', async (req, reply) => {
+  const url = String((req.query as any)?.url ?? '');
+  if (!/^https?:\/\//i.test(url) || url.length > 3000) return reply.code(400).send({ error: 'Ungültiger Link' });
+  const img = await previewImage(url);
+  if (!img) return reply.code(404).send({ error: 'Kein Bild' });
+  reply.header('Content-Type', img.mime);
+  reply.header('Cache-Control', 'private, max-age=86400');
+  reply.header('Content-Security-Policy', "default-src 'none'; sandbox");
+  return reply.send(img.data);
 });
 /** KI-Suche: Frage in Alltagssprache. Standard: nur Chats mit eingeschalteter KI; „all“ nach Freigabe in den Einstellungen */
 app.post('/api/search/ai', async (req) => {

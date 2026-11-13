@@ -18,8 +18,8 @@ import { T, lang, locale } from '../i18n';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
-export function Composer({ chat, onPickLang, draftId, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo, onEmpty }: {
-  chat: Chat; onPickLang?: () => void; draftId?: string; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean; onEmpty?: (empty: boolean) => void;
+export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo, onEmpty }: {
+  chat: Chat; onPickLang?: () => void; draftId?: string; serverDraft?: { text: string | null; ts: number | null }; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean; onEmpty?: (empty: boolean) => void;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
 }) {
   const draftKey = `inbox:draft:${draftId ?? chat.id}`;
@@ -31,7 +31,17 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const [noTr, setNoTr] = useState(false);
   const [gifPick, setGifPick] = useState(false);
   const [when, setWhen] = useState(false);
-  const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '');
+  // Entwurf: lokal sofort, auf dem Server kurz verzögert (geräteübergreifend). Der neuere Stand gewinnt.
+  const draftTsKey = `inbox:draftTs:${draftId ?? chat.id}`;
+  const localTs = useRef(Number(localStorage.getItem(draftTsKey)) || 0);
+  const [text, setText] = useState(() => {
+    const local = localStorage.getItem(draftKey) ?? '';
+    if (serverDraft?.ts && serverDraft.ts > localTs.current) { localTs.current = serverDraft.ts; return serverDraft.text ?? ''; }
+    return local;
+  });
+  const synced = useRef(text);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushDraft = useRef<() => void>(() => {});
   const [emoji, setEmoji] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [editIdx, setEditIdx] = useState<number | null>(null);
@@ -50,7 +60,24 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   const [speaking, setSpeaking] = useState(false);
   const ai = useAi();
 
-  useEffect(() => { localStorage.setItem(draftKey, text); if (!text) localStorage.removeItem(draftKey); }, [text, draftKey]);
+  useEffect(() => {
+    localStorage.setItem(draftKey, text); if (!text) localStorage.removeItem(draftKey);
+    if (editing || text === synced.current) return;
+    const ts = Date.now(); localTs.current = ts; localStorage.setItem(draftTsKey, String(ts));
+    const id = draftId ?? chat.id, t = text;
+    pushDraft.current = () => { syncTimer.current = null; synced.current = t; void api.saveDraft(id, t.trim() ? t : '', ts).catch(() => {}); };
+    if (syncTimer.current) clearTimeout(syncTimer.current);
+    if (!t.trim()) pushDraft.current(); else syncTimer.current = setTimeout(() => pushDraft.current(), 800);
+  }, [text, draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Beim Verlassen des Chats den letzten Stand sofort speichern
+  useEffect(() => () => { if (syncTimer.current) { clearTimeout(syncTimer.current); pushDraft.current(); } }, []);
+  // Auf einem anderen Gerät weitergeschrieben: übernehmen, solange hier nicht gerade getippt wird
+  useEffect(() => {
+    if (!serverDraft?.ts || serverDraft.ts <= localTs.current || editing) return;
+    if (document.activeElement === ta.current && text.trim()) return;
+    localTs.current = serverDraft.ts; localStorage.setItem(draftTsKey, String(serverDraft.ts));
+    synced.current = serverDraft.text ?? ''; setText(serverDraft.text ?? '');
+  }, [serverDraft?.ts]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (editing) { setText(editing.text); ta.current?.focus(); } }, [editing]);
   useEffect(() => { if (replyTo) ta.current?.focus(); }, [replyTo]);
   const empty = !text.trim();

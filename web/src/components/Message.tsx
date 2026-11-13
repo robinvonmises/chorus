@@ -92,6 +92,8 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
         <span className="meta">
           {reminder && <span className="remind-tag" title={T('Erinnerung')}>⏰ {whenLabel(reminder)}</span>}
           {m.edited && !m.deleted && <span>{T('bearbeitet')}</span>}
+          {m.pinnedAt && <span className="mark-tag" title={T('Angepinnt')}><Icon name="pin" size={12} /></span>}
+          {m.starred && <span className="mark-tag" title={T('Gemerkt')}><Icon name="star" size={12} /></span>}
           <span>{msgTime(last.ts)}</span>
           {last.fromMe && (last.status === 'failed'
             ? <button className="st failed" title={T('Nicht gesendet – tippen für „Erneut senden“')} aria-label={T('Nicht gesendet, Optionen')} onClick={(e) => { e.stopPropagation(); onAction(last, { x: e.clientX, y: e.clientY }); }}><Icon name="alert" size={14} /></button>

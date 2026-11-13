@@ -179,7 +179,7 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
             <><button className="icon-btn" onClick={() => setFilter({ ...filter, archived: false })} aria-label={T('Zurück')}><Icon name="back" /></button><h1>{T('Archiv')}</h1></>
           ) : <h1>{T('Chats')}</h1>}
           {!(sender && !q) && <div className="row">
-            <button className="icon-btn" onClick={onGallery} title={T('Medien, Dateien und Links')} aria-label={T('Galerie')}><Icon name="gallery" /></button>
+            <button className="icon-btn" onClick={onGallery} title={T('Medien, Dateien, Links und Gemerktes')} aria-label={T('Galerie')}><Icon name="gallery" /></button>
             <button className={`icon-btn ${filterActive ? 'on' : ''} ${filterActive && !showFilters ? 'badge' : ''}`} onClick={toggleFilters} title={showFilters ? T('Filter ausblenden') : T('Filter einblenden')} aria-label="Filter" aria-pressed={showFilters}><Icon name="filter" /></button>
             <button className="icon-btn" onClick={() => setSel(new Set())} title={T('Auswählen')} aria-label={T('Auswählen')}><Icon name="select" /></button>
             {!filter.archived && archivedCount > 0 && <button className="icon-btn" onClick={() => setFilter({ ...filter, archived: true })} title={T('Archiv ({0})', archivedCount)} aria-label={T('Archiv')}><Icon name="archive" /></button>}
@@ -319,7 +319,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">
-          <Preview id={c.id} text={(c.lastText && T(c.lastText)) || ' '} />
+          <Preview id={c.id} text={(c.lastText && T(c.lastText)) || ' '} draft={!active && c.draft?.trim() ? c.draft : null} />
           {c.autopilot?.on && <span title={T('Autobot an')}>🤖</span>}
           {c.pinned && <Icon name="pin" size={14} className="muted-icon" />}
           {c.muted && <Icon name="belloff" size={14} className="muted-icon" />}
@@ -378,7 +378,9 @@ function SwipeRow({ children, left, right, far, disabled }: { children: React.Re
 }
 
 /** Vorschauzeile; solange jemand tippt, steht dort „schreibt …“ */
-function Preview({ id, text }: { id: string; text: string }) {
+function Preview({ id, text, draft }: { id: string; text: string; draft?: string | null }) {
   const typing = useTyping(id);
-  return typing ? <span className="chat-preview typing-text">{T('schreibt …')}</span> : <span className="chat-preview">{text}</span>;
+  if (typing) return <span className="chat-preview typing-text">{T('schreibt …')}</span>;
+  if (draft) return <span className="chat-preview"><span className="draft-label">{T('Entwurf:')}</span> {draft.replace(/\s+/g, ' ')}</span>;
+  return <span className="chat-preview">{text}</span>;
 }
