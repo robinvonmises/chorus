@@ -24,6 +24,8 @@ import { rise, takeRise } from '../sendAnim';
 import { T } from '../i18n';
 import { animoji, burst, useTypingAny } from '../effects';
 
+const TTLS: [number, string][] = [[0, T('Nie')], [3600, T('1 Std.')], [86400, T('1 Tag')], [7 * 86400, T('1 Woche')], [30 * 86400, T('30 Tage')]];
+
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
 export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchChat, onChat, linked = [chat], accounts = [], focus, planned = [], onGallery, onOpenMessage, onRemove }: {
@@ -38,6 +40,10 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const [editing, setEditing] = useState<Message | null>(null);
   const [menu, setMenu] = useState<{ m: Message; x: number; y: number; picker?: boolean } | null>(null);
   const [headMenu, setHeadMenu] = useState(false);
+  // Notizen an mich: Lebensdauer neuer Notizen (gilt für alle Geräte)
+  const notes = chat.network === 'notes';
+  const [ttl, setTtl] = useState(0);
+  useEffect(() => { if (notes) api.notes().then((r) => setTtl(r.ttl)).catch(() => {}); }, [notes, headMenu]);
   const [toast, setToast] = useState('');
   const [loadingOld, setLoadingOld] = useState(false);
   const loadingRef = useRef(false);
@@ -225,7 +231,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
-          <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? chat.peer.name : chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && T(' · nicht verbunden')}{tr?.on && <span> · 🌐 {tr.langName ?? T('Übersetzung an')}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> {T('· 🤖 Autobot (')}{chat.autopilot.max - chat.autopilot.used} {T('übrig)')}</span>}</small>
+          <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? chat.peer.name : chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : notes ? <>{T('Nur für dich, auf allen Geräten')}{ttl ? ` · ⏳ ${TTLS.find((x) => x[0] === ttl)?.[1] ?? ''}` : ''}</> : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && T(' · nicht verbunden')}{tr?.on && <span> · 🌐 {tr.langName ?? T('Übersetzung an')}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> {T('· 🤖 Autobot (')}{chat.autopilot.max - chat.autopilot.used} {T('übrig)')}</span>}</small>
         </div>
         </button>
         <button className={`icon-btn ai-compose ${aiOpen ? 'on' : ''}`} onClick={() => setAiOpen((v) => !v)} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>
@@ -236,8 +242,15 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             <div className="menu right">
               <button onClick={() => { setHeadMenu(false); onPatchChat({ pinned: !chat.pinned }); }}><Icon name="pin" size={18} />{chat.pinned ? T('Lösen') : 'Anheften'}</button>
               <button onClick={() => { setHeadMenu(false); onPatchChat({ muted: !chat.muted }); }}><Icon name={chat.muted ? 'bell' : 'belloff'} size={18} />{chat.muted ? T('Ton an') : 'Stummschalten'}</button>
+              {notes ? <>
+                <div className="menu-label">{T('Neue Notizen verschwinden nach')}</div>
+                <div className="menu-pills">
+                  {TTLS.map(([sec, label]) => <button key={sec} className={`pill${ttl === sec ? ' on' : ''}`} onClick={() => { setTtl(sec); void api.setNotes(sec).then((r) => setTtl(r.ttl)).catch(() => {}); }}>{label}</button>)}
+                </div>
+              </> : <>
               <button onClick={() => { setHeadMenu(false); setContact(true); }}><Icon name="user" size={18} />{chat.kind === 'direct' ? 'Kontaktprofil' : 'Gruppeninfo'}</button>
               <button onClick={() => { setHeadMenu(false); setTrSheet(true); }}><Icon name="globe" size={18} />{tr?.on ? T('Übersetzung · {0}', tr.langName ?? 'an') : T('Live-Übersetzung')}</button>
+              </>}
               <button onClick={() => { setHeadMenu(false); setThemeSheet(true); }}><Icon name="palette" size={18} />{T('Chat-Design')}</button>
               {onGallery && <button onClick={() => { setHeadMenu(false); onGallery(); }}><Icon name="gallery" size={18} />{T('Medien, Dateien & Links')}</button>}
               <button onClick={() => { setHeadMenu(false); onPatchChat({ archived: !chat.archived }); }}><Icon name="archive" size={18} />{chat.archived ? T('Aus dem Archiv holen') : 'Archivieren'}</button>
