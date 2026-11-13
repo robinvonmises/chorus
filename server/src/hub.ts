@@ -43,6 +43,9 @@ function withSize<T extends { kind: string; width?: number; height?: number }>(a
 const rank: Record<string, number> = { pending: 0, failed: 0, sent: 1, delivered: 2, read: 3 };
 const MAX_AUTO_MEDIA = Number(process.env.MAX_AUTO_MEDIA_MB ?? 200) * 1024 * 1024;
 
+/** Bis zu diesem Alter bekommt eine neu eingetroffene Nachricht noch eine Push-Benachrichtigung */
+const NOTIFY_MAX_AGE = 30 * 60_000;
+
 export class Hub {
   private adapters = new Map<string, Adapter>();
   private statuses = new Map<string, AccountStatus>();
@@ -119,7 +122,14 @@ export class Hub {
           const chat = store.getChat(cid)!;
           if (!chat.info?.fetchedAt) this.queueContact(cid);
           this.emit({ type: 'chat', chat });
-          if (!msg.fromMe && Date.now() - msg.ts < 60_000 && !chat.muted && !chat.archived) this.emit({ type: 'notify', chat, message: msg });
+          // Push für jede neue eingehende Nachricht bis 30 Min. Alter. Früher nur bis 60 s: Nach einem Neustart (Auto-Update),
+          // einer Signal-/WhatsApp-Neuverbindung oder bei verspäteter Zustellung (Signal-Zeitstempel = Sendezeit beim Absender)
+          // kam dann gar keine Benachrichtigung. Doppelte gibt es nicht, weil nur neu gespeicherte Nachrichten hier ankommen.
+          const age = Date.now() - msg.ts;
+          if (!msg.fromMe && !chat.muted && !chat.archived) {
+            if (age < NOTIFY_MAX_AGE) this.emit({ type: 'notify', chat, message: msg });
+            else if (age < 6 * 3600_000) console.log(`[push] keine Benachrichtigung: Nachricht kam ${Math.round(age / 60_000)} Min. zu spät (${chat.id})`);
+          }
           if (Date.now() - msg.ts < 5 * 60_000) this.fire(msg.fromMe ? this.own : this.incoming, chat, msg);
           if (msg.attachments.some((a) => !a.fileId)) this.queueMedia(msg.id);
           this.draftSent(cid, msg);
