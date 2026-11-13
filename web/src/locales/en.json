@@ -882,5 +882,7 @@
  "Es werden nur die ersten 50 Seiten gezeigt.": "Only the first 50 pages are shown.",
  "Office-Dateien kann Chorus nicht selbst anzeigen. Über „Teilen“ öffnest du sie z. B. in Word, Pages oder Dateien.": "Chorus can't display Office files itself. Use “Share” to open them in Word, Pages or Files, for example.",
  "Anhängen, Emoji, GIF": "Attach, emoji, GIF",
- "Diese Datei lässt sich hier nicht anzeigen. Über „Teilen“ kannst du sie in einer anderen App öffnen.": "This file can't be shown here. Use “Share” to open it in another app."
+ "Diese Datei lässt sich hier nicht anzeigen. Über „Teilen“ kannst du sie in einer anderen App öffnen.": "This file can't be shown here. Use “Share” to open it in another app.",
+ "Pause": "Pause",
+ "Ton aus": "Sound off"
 }

@@ -959,7 +959,18 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 @media (hover: none) { .lightbox-nav { display: none; } }
 .lightbox-slide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; transition: transform .28s cubic-bezier(.2, .8, .2, 1); will-change: transform; }
 .lightbox-slide img, .lightbox-slide video { max-width: 100vw; max-height: 100%; object-fit: contain; }
-.lightbox-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; pointer-events: none; }
+.lightbox-play { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; margin: -32px 0 0 -32px; display: grid; place-items: center; border: 0; padding: 0; border-radius: 50%; background: rgba(0,0,0,.45); color: #fff; cursor: pointer; }
+.lightbox-slide video { width: 100vw; height: 100%; }
+.lightbox-mute { display: grid; place-items: center; width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: rgba(255,255,255,.14); color: #fff; cursor: pointer; }
+.lightbox-bar, .lightbox-actions, .lightbox-nav { transition: opacity .2s; }
+.lightbox.ui-off .lightbox-bar, .lightbox.ui-off .lightbox-actions, .lightbox.ui-off .lightbox-nav { opacity: 0; pointer-events: none; }
+/* Video in der Blase: Standbild mit Play-Symbol */
+.att-vid { position: relative; }
+.att-vid .gallery-play { display: none; }
+.att-vid-play { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.5); color: #fff; pointer-events: none; }
+.att-vid-play .icon { margin-left: 3px; }
+.att-vid-dur { position: absolute; left: 8px; bottom: 8px; padding: 1px 6px; border-radius: 8px; background: rgba(0,0,0,.5); color: #fff; font-size: 12px; font-variant-numeric: tabular-nums; pointer-events: none; }
+.att-vid > video { display: block; width: 100%; height: 100%; object-fit: cover; }
 .lightbox-vbar { position: absolute; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom) + 74px); display: flex; align-items: center; gap: 10px; color: #fff; font-size: 13px; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
 .lightbox-vtrack { flex: 1; height: 28px; display: flex; align-items: center; cursor: pointer; background: linear-gradient(rgba(255,255,255,.3), rgba(255,255,255,.3)) center / 100% 4px no-repeat; border-radius: 2px; }
 .lightbox-vtrack > div { height: 4px; background: #fff; border-radius: 2px; }

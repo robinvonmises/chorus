@@ -204,8 +204,16 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
   }
   // GIF als Video (WhatsApp, Telegram): stumm in Schleife wie ein Bild, Tippen öffnet die Großansicht
   if (a.kind === 'video' && a.gif) return <GifVideo url={pending ? undefined : url} a={a} onOpen={() => !pending && openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), video: true, ref: { m, i } })} />;
-  if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} controls preload="none" playsInline
-    style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined} />;
+  // Video: nur Standbild mit Play-Symbol; Tippen spielt es im Vollbild ab (Lightbox startet es noch in der Tipp-Geste, also mit Ton)
+  if (a.kind === 'video') return (
+    <a className="att-img att-vid" href={pending ? undefined : url}
+      style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined}
+      onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), video: true, ref: { m, i } }); }}>
+      {!pending && <MediaThumb m={m} a={a} i={i} />}
+      <span className="att-vid-play"><Icon name="play" size={26} /></span>
+      {a.durationSec ? <span className="att-vid-dur">{duration(a.durationSec)}</span> : null}
+    </a>
+  );
   if (a.kind === 'voice' || a.kind === 'audio') return <VoicePlayer m={m} i={i} url={pending ? null : `${url}&play=1`} dur={a.durationSec} voice={a.kind === 'voice'} name={a.name} />;
   return <FileCard m={m} a={a} i={i} />;
 }
