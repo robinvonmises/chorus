@@ -114,12 +114,19 @@ export class Store {
     if (c.peer) this.db.prepare('UPDATE chats SET peer=? WHERE id=?').run(JSON.stringify(c.peer), id);
     return this.getChat(id)!;
   }
+  private lastStmt: any = null;
+  /** Letzte Nachricht des Chats: wenn von mir, deren Status (für die Haken in der Chatliste) */
+  private lastMine(chatId: string): Chat['lastMine'] {
+    this.lastStmt ??= this.db.prepare('SELECT from_me, status, deleted FROM messages WHERE chat_id=? ORDER BY ts DESC LIMIT 1');
+    const m = this.lastStmt.get(chatId) as { from_me: number; status: string; deleted: number } | undefined;
+    return m && m.from_me && !m.deleted && m.status !== 'received' ? (m.status as Chat['lastMine']) : null;
+  }
   private rowToChat(r: any): Chat {
     const c: Chat = {
       id: r.id, accountId: r.account_id, network: r.network, remoteId: r.remote_id, title: r.title, kind: r.kind,
       lastTs: r.last_ts, lastText: r.last_text, unread: r.unread, pinned: !!r.pinned, muted: !!r.muted,
       avatarFileId: r.avatar_file_id, aiEnabled: !!r.ai_enabled, autopilot: r.autopilot ? JSON.parse(r.autopilot) : null,
-      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null, peer: r.peer ? JSON.parse(r.peer) : null, draft: r.draft || null, draftTs: r.draft_ts ?? null,
+      customAvatar: !!r.custom_avatar, netTitle: r.title, alias: r.alias ?? null, archived: !!r.archived, info: r.info ? JSON.parse(r.info) : null, note: r.note ?? null, translate: r.translate ? JSON.parse(r.translate) : null, link: r.link ?? null, sendVia: r.link ? r.send_via ?? null : null, peer: r.peer ? JSON.parse(r.peer) : null, draft: r.draft || null, draftTs: r.draft_ts ?? null, lastMine: this.lastMine(r.id),
       avatar: (r.custom_avatar || r.avatar_file_id) ? `/api/chats/${encodeURIComponent(r.id)}/avatar?v=${String(r.custom_avatar || r.avatar_file_id).slice(0, 8)}` : null,
     };
     if (r.alias) c.title = r.alias;

@@ -179,6 +179,14 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
         else { next = [...next, e.message]; next.sort((a, b) => a.ts - b.ts); }
         return new Map(ms).set(e.message.chatId, next);
       });
+      // Haken in der Chatliste: Status der letzten Nachricht mitführen (gesendet → zugestellt → gelesen)
+      const lm = e.message;
+      setChats((cs) => {
+        const c = cs.get(lm.chatId);
+        if (!c || lm.ts < c.lastTs) return cs;
+        const mine = lm.fromMe && !lm.deleted && lm.status !== 'received' ? lm.status : null;
+        return (c.lastMine ?? null) === mine ? cs : new Map(cs).set(c.id, { ...c, lastMine: mine });
+      });
       if (linkedRef.current.includes(e.message.chatId) && !e.message.fromMe && document.visibilityState === 'visible') api.markRead(e.message.chatId).catch(() => {});
       if (!e.message.fromMe && Date.now() - e.message.ts < 60_000) setTyping(e.message.chatId, false);
     } else if (e.type === 'typing') setTyping(e.chatId, e.on);
