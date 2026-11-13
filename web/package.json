@@ -10,10 +10,12 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
+    "mammoth": "^1.13.0",
     "pdfjs-dist": "^6.5.438",
     "qrcode": "^1.5.4",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6",

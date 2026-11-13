@@ -99,6 +99,42 @@ function MailViewer({ m, close }: { m: Message; close: () => void }) {
   );
 }
 
+const DOCX = /\.docx$/i;
+const SHEET = /\.(xlsx|xlsm|xls|ods)$/i;
+const OFFICE_CSS = 'body{margin:0;padding:14px;font:15px/1.5 -apple-system,system-ui,sans-serif;color:#111;background:#fff;word-wrap:break-word}img{max-width:100%;height:auto}'
+  + 'table{border-collapse:collapse;font-size:13px}td,th{border:1px solid #ccc;padding:4px 6px;vertical-align:top}'
+  + '.tabs{position:sticky;top:-14px;margin:-14px -14px 10px;padding:8px 14px;background:#f3f4f6;display:flex;gap:8px;overflow-x:auto;white-space:nowrap}.tabs a{color:#111;font-weight:600;text-decoration:none}'
+  + 'h2.sheet{font-size:16px;margin:18px 0 8px}';
+
+/** Word (docx) mit mammoth, Tabellen (xlsx/xls/ods) mit SheetJS als HTML; Anzeige im iframe ohne Skripte */
+function OfficeView({ url, name }: { url: string; name: string }) {
+  const [html, setHtml] = useState<string | null>(null);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    let off = false;
+    (async () => {
+      const buf = await fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))));
+      let body = '';
+      if (DOCX.test(name)) {
+        const mammoth: any = (await import('mammoth')).default ?? (await import('mammoth'));
+        body = (await mammoth.convertToHtml({ arrayBuffer: buf })).value;
+      } else {
+        const XLSX = await import('xlsx');
+        const wb = XLSX.read(buf, { type: 'array', sheetRows: 500 });
+        const names = wb.SheetNames.slice(0, 20);
+        const tabs = names.length > 1 ? `<div class="tabs">${names.map((n, i) => `<a href="#s${i}" target="_self">${esc(n)}</a>`).join('')}</div>` : '';
+        body = tabs + names.map((n, i) => `${names.length > 1 ? `<h2 class="sheet" id="s${i}">${esc(n)}</h2>` : ''}${XLSX.utils.sheet_to_html(wb.Sheets[n], { header: '', footer: '' })}`).join('');
+      }
+      if (!off) setHtml(`<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="script-src 'none'"><base target="_blank"><style>${OFFICE_CSS}</style></head><body>${body || '<p>(leer)</p>'}</body></html>`);
+    })().catch(() => { if (!off) setErr(true); });
+    return () => { off = true; };
+  }, [url]);
+  if (err) return <div className="fileview-info"><small className="muted">{T('Diese Datei lässt sich hier nicht anzeigen. Über „Teilen“ kannst du sie in einer anderen App öffnen.')}</small></div>;
+  if (html === null) return <div className="fileview-info"><small className="muted">{T('Wird geladen …')}</small></div>;
+  return <iframe srcDoc={html} title={name} sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin" />;
+}
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
+
 /** PDF-Seiten mit pdf.js als Bilder: iOS zeigt PDFs in iframes oft gar nicht oder nur die erste Seite */
 function PdfView({ url }: { url: string }) {
   const box = useRef<HTMLDivElement>(null);
@@ -152,7 +188,8 @@ function Viewer({ m, i, close }: Req & { close: () => void }) {
   const image = !pdf && (/^image\/(jpe?g|png|gif|webp|avif|bmp|svg\+xml|heic|heif)$/i.test(a.mime) || /\.(jpe?g|png|gif|webp|avif|bmp|heic)$/i.test(a.name));
   const video = !pdf && !image && (/^video\//i.test(a.mime) || /\.(mp4|mov|m4v|webm)$/i.test(a.name));
   const audio = !pdf && !image && !video && (/^audio\//i.test(a.mime) || /\.(mp3|m4a|aac|wav|ogg|opus)$/i.test(a.name));
-  const text = !pdf && !image && !video && !audio && a.size <= TEXT_MAX && (/^text\//i.test(a.mime) || /json|xml|csv|calendar|vcard/i.test(a.mime) || TEXT_EXT.test(a.name));
+  const office = !pdf && a.size <= 25 * 1024 * 1024 && (DOCX.test(a.name) || SHEET.test(a.name));
+  const text = !pdf && !office && !image && !video && !audio && a.size <= TEXT_MAX && (/^text\//i.test(a.mime) || /json|xml|csv|calendar|vcard/i.test(a.mime) || TEXT_EXT.test(a.name));
   const storage = useStorage();
   const sh = useShareFile(url, a.name, a.mime, a.size);
   const [body, setBody] = useState<string | null>(null);
@@ -176,6 +213,7 @@ function Viewer({ m, i, close }: Req & { close: () => void }) {
       </div>
       <div className="fileview-body">
         {pdf ? <PdfView url={url} />
+          : office ? <OfficeView url={url} name={a.name} />
           : image ? <img className="fileview-img" src={url} alt={a.name} />
           : video ? <video className="fileview-media" src={url} controls playsInline preload="metadata" />
           : audio ? <div className="fileview-info"><span className="att-file-icon big"><Icon name="file" size={40} /></span><b>{a.name}</b><audio src={`${url}&play=1`} controls preload="metadata" /></div>

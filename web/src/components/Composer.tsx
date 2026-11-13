@@ -198,9 +198,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   };
 
   const hasContent = text.trim().length > 0 || files.length > 0;
-  // Beim Tippen (Handy) Platz fürs Textfeld: Knöpfe einklappen, „+“ holt sie zurück
-  const [tools, setTools] = useState(false);
-  useEffect(() => { if (!text.trim()) setTools(false); }, [text]);
+  // Beim Tippen (Handy) Platz fürs Textfeld: KI-Knopf einklappen; Anhänge, Emoji und GIF liegen hinter „+“
 
   return (
     <footer className="composer-wrap">
@@ -261,9 +259,11 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
       {attMenu && <>
         <div className="att-menu-bg" onClick={() => setAttMenu(false)} />
         <div className="att-menu menu-list" role="menu">
-          <button onClick={() => { setAttMenu(false); fileIn.current?.click(); }}><Icon name="attach" size={18} />{T('Fotos und Dateien vom Gerät')}</button>
-          {storage?.immich.enabled && <button onClick={() => { setAttMenu(false); setImPick(true); }}><Icon name="photos" size={18} />{T('Aus Immich')}</button>}
-          {storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />{T('Aus Nextcloud')}</button>}
+          {!editing && <button onClick={() => { setAttMenu(false); fileIn.current?.click(); }}><Icon name="attach" size={18} />{T('Fotos und Dateien vom Gerät')}</button>}
+          {!editing && storage?.immich.enabled && <button onClick={() => { setAttMenu(false); setImPick(true); }}><Icon name="photos" size={18} />{T('Aus Immich')}</button>}
+          {!editing && storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />{T('Aus Nextcloud')}</button>}
+          <button onClick={() => { setAttMenu(false); setEmoji(true); }}><Icon name="smile" size={18} />Emoji</button>
+          {!editing && <button onClick={() => { setAttMenu(false); setEmoji(false); setGifPick(true); }}><span className="gif-badge menu-gif">GIF</span>{T('GIF senden')}</button>}
         </div>
       </>}
       {gifPick && <GifPicker onClose={() => setGifPick(false)} onPick={(g) => {
@@ -280,12 +280,9 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           <button className="send-btn" onClick={() => stopRec(false)} aria-label={T('Sprachnachricht senden')}><Icon name="send" /></button>
         </div>
       ) : (
-        <div className={`composer ${text.trim() && !tools ? 'compact' : ''}`}>
-          <button className="icon-btn tools-toggle" onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => setTools(true)} aria-label={T('Mehr Funktionen')}><Icon name="plus" /></button>
+        <div className={`composer ${text.trim() ? 'compact' : ''}`}>
+          <button className={`icon-btn plus-btn ${attMenu || emoji ? 'on' : ''}`} onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => { setEmoji(false); setAttMenu((v) => !v); }} aria-label={T('Anhängen, Emoji, GIF')} title={T('Anhängen, Emoji, GIF')}><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>}
-          {!editing && <button className={`icon-btn tool ${attMenu ? 'on' : ''}`} onClick={() => { if (storage?.immich.enabled || storage?.nextcloud.enabled) setAttMenu((v) => !v); else fileIn.current?.click(); }} aria-label={T('Anhängen')}><Icon name="attach" /></button>}
-          <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
-          {!editing && <button className="icon-btn tool gif-btn" onClick={() => { setEmoji(false); setGifPick(true); }} aria-label="GIF" title={T('GIF senden')}><span className="gif-badge">GIF</span></button>}
           <textarea ref={ta} rows={1} value={text} placeholder={disabled ? T('Nicht verbunden') : placeholder ?? T('Nachricht')} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />

@@ -625,15 +625,10 @@ button.st.failed { all: unset; display: inline-flex; color: #fca5a5; cursor: poi
 /* Ziehen zum Aktualisieren */
 
 /* Eingabe: beim Tippen auf dem Handy Knöpfe einklappen */
-.tools-toggle { display: none; }
 @media (max-width: 860px) {
-  .composer .tool, .composer .tools-toggle { transition: max-width .22s var(--ease-out), opacity .18s, margin .22s var(--ease-out), padding .22s var(--ease-out); max-width: 44px; overflow: hidden; }
-  .composer .tools-toggle { display: grid; max-width: 0; opacity: 0; margin: 0; }
+  .composer .tool { transition: max-width .22s var(--ease-out), opacity .18s, margin .22s var(--ease-out), padding .22s var(--ease-out); max-width: 44px; overflow: hidden; }
   .composer.compact .tool { max-width: 0; opacity: 0; margin: 0 -6px 0 0; pointer-events: none; }
-  .composer .tools-toggle { margin-right: -6px; }
-  .composer.compact .tools-toggle { margin-right: 0; }
-  .composer .tool, .composer .tools-toggle { flex-shrink: 0; min-width: 0; }
-  .composer.compact .tools-toggle { max-width: 44px; opacity: 1; color: var(--ink-3); }
+  .composer .tool { flex-shrink: 0; min-width: 0; }
   .composer.compact { gap: 6px; }
 }
 
@@ -1006,6 +1001,9 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .im-albums small { color: var(--ink-3); }
 
 /* Büroklammer-Menü: Gerät, Immich, Nextcloud */
+.composer .plus-btn { flex-shrink: 0; transition: transform .2s var(--ease-out); }
+.composer .plus-btn.on { transform: rotate(45deg); }
+.att-menu .menu-gif { font-size: 9px; padding: 1px 3px; margin: 0 1px; }
 .att-menu-bg { position: fixed; inset: 0; z-index: 4; }
 .att-menu { position: absolute; bottom: 100%; left: 8px; margin-bottom: 8px; min-width: 230px; padding: 6px; background: var(--bg); border-radius: 16px; box-shadow: var(--shadow); z-index: 5; animation: pop-in .18s var(--ease-out) both; }
 
