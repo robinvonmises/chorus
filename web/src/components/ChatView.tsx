@@ -7,7 +7,6 @@ import { WhenPicker, whenLabel } from './WhenPicker';
 import { NETWORKS, QUICK_REACTIONS, adjLang, askMailDelete, dayLabel } from '../util';
 import { TranslateSheet } from './TranslateSheet';
 import { Avatar } from './Rail';
-import { TypingAvatar } from './ChatList';
 import { Icon } from './Icon';
 import { MessageBubble, albumable, previewOf } from './Message';
 import { Composer } from './Composer';
@@ -20,7 +19,7 @@ import { ForwardSheet } from './ForwardSheet';
 import { outbox, useOutbox, type Outgoing } from '../outbox';
 import { rise, takeRise } from '../sendAnim';
 import { T } from '../i18n';
-import { burst } from '../effects';
+import { burst, useTypingAny } from '../effects';
 
 /** „Englisch“ → „Englischen“ (aus dem Englischen) */
 
@@ -212,7 +211,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       <header className="chat-head">
         <button className="icon-btn back" onClick={onBack} aria-label={T('Zurück')}><Icon name="back" /></button>
         <button className="chat-head-who" onClick={() => setContact(true)} aria-label={T('Profil anzeigen')}>
-        <TypingAvatar id={chat.id}><Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} /></TypingAvatar>
+        <Avatar name={chat.peer?.name ?? chat.title} size={40} src={chat.avatar} />
         <div className="chat-head-main">
           <b>{chat.title}</b>
           <small>{chat.peer ? <><span className="dot" style={{ background: NETWORKS.email.color }} />{chat.peer.name !== chat.peer.id ? `${chat.peer.name} · ` : ''}{chat.peer.id}</> : multi ? linked.map((c) => <Fragment key={c.id}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{NETWORKS[c.network].name} </Fragment>) : <><span className="dot" style={{ background: NETWORKS[chat.network].color }} />{NETWORKS[chat.network].name}{account && account.label !== NETWORKS[chat.network].name ? ` · ${account.label}` : ''}</>}{!connected && T(' · nicht verbunden')}{tr?.on && <span> · 🌐 {tr.langName ?? T('Übersetzung an')}</span>}{chat.autopilot?.on && <span className="autopilot-tag"> {T('· 🤖 Autobot (')}{chat.autopilot.max - chat.autopilot.used} {T('übrig)')}</span>}</small>
@@ -256,6 +255,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
           </Fragment>
         ))}
         {pending.map((o) => <PendingBubble key={o.id} o={o} />)}
+        <TypingBubble ids={linked.length ? linked.map((c) => c.id) : [chat.id]} />
         </div>
       </div>
       {!atBottom && <button className="to-bottom" onClick={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })}><Icon name="back" className="rot-270" /></button>}
@@ -426,4 +426,11 @@ function Ring({ p }: { p: number | null }) {
         strokeDasharray={c} strokeDashoffset={p == null ? c * 0.7 : c * (1 - Math.max(0.03, p))} transform="rotate(-90 18 18)" style={{ transition: 'stroke-dashoffset .2s linear' }} />
     </svg>
   );
+}
+
+/** Jemand tippt: Sprechblase mit drei Punkten unten im Chat */
+function TypingBubble({ ids }: { ids: string[] }) {
+  const on = useTypingAny(ids);
+  if (!on) return null;
+  return <div className="msg in typing-msg" aria-label={T('schreibt …')}><div className="bubble typing-dots"><i /><i /><i /></div></div>;
 }
