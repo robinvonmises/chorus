@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { duration } from '../util';
 import type { Message } from '../api';
@@ -33,6 +33,8 @@ export function Lightbox() {
   const [dx, setDx] = useState(0);
   const [z, setZ] = useState<Z>(Z0);
   const [live, setLive] = useState(false);
+  /** Bei Videos: Leisten oben/unten nur zusammen mit der Video-Steuerung zeigen */
+  const [vui, setVui] = useState(true);
   const img = useRef<HTMLImageElement>(null);
   const storage = useStorage();
   const [note, setNote] = useState('');
@@ -113,7 +115,7 @@ export function Lightbox() {
   const fade = Math.max(0.25, 1 - Math.abs(dy) / 400);
   const anim = live || (dy !== 0 && !closing);
   return (
-    <div className={`lightbox${closing ? ' out' : ''}`} style={{ background: `rgba(0,0,0,${0.92 * fade})` }} onClick={() => { if (zr.current.s === 1) closeNav(); }}
+    <div className={`lightbox${closing ? ' out' : ''}${item.video && !vui ? ' ui-off' : ''}`} style={{ background: `rgba(0,0,0,${0.92 * fade})` }} onClick={() => { if (zr.current.s === 1) closeNav(); }}
       onTouchStart={(e) => { lastTouch.current = Date.now(); begin(e.touches); }}
       onTouchMove={(e) => {
         const c = g.current; if (!c) return;
@@ -160,7 +162,7 @@ export function Lightbox() {
         }
         if (!c.moved) { // Doppeltipp erkennen
           const now = Date.now(), l = lastTap.current;
-          if (l && now - l.t < 350 && dist(l.p, c.p0) < 50) { lastTap.current = null; e.preventDefault(); toggleZoom(c.p0); }
+          if (!item.video && l && now - l.t < 350 && dist(l.p, c.p0) < 50) { lastTap.current = null; e.preventDefault(); toggleZoom(c.p0); }
           else lastTap.current = { t: now, p: c.p0 };
         }
       }}
@@ -191,7 +193,7 @@ export function Lightbox() {
         return (
           <div key={it.src} className="lightbox-slide" style={{ transform: `translate3d(${off * W() + dx}px, 0, 0)`, transition: live ? 'none' : undefined }}>
             {it.video
-              ? <SlideVideo src={it.src} cur={cur} />
+              ? <SlideVideo src={it.src} cur={cur} onUi={setVui} />
               : <img ref={cur ? img : undefined} src={it.src} alt={it.name} draggable={false} onClick={(e) => e.stopPropagation()}
                   onDoubleClick={cur ? (e) => { if (Date.now() - lastTouch.current > 1000) toggleZoom(rel(e.clientX, e.clientY)); } : undefined}
                   style={cur ? {
@@ -210,19 +212,40 @@ export function Lightbox() {
   );
 }
 
-/** Video im Vollbild. Eigene schlichte Steuerung statt der eingebauten: die schluckt sonst das seitliche Wischen.
- *  Tippen = Abspielen/Pause, unten Zeitleiste zum Spulen. Läuft nur, solange es das aktuelle Bild ist. */
-function SlideVideo({ src, cur }: { src: string; cur: boolean }) {
+/** Video im Vollbild. Startet sofort (noch in der Tipp-Geste, deshalb useLayoutEffect: so darf iOS mit Ton abspielen),
+ *  ohne sichtbare Steuerung. Tippen aufs Video blendet sie ein, nach 3 s Laufzeit verschwindet sie wieder.
+ *  Eigene Steuerung statt der eingebauten: die schluckt sonst das seitliche Wischen. */
+function SlideVideo({ src, cur, onUi }: { src: string; cur: boolean; onUi: (show: boolean) => void }) {
   const v = useRef<HTMLVideoElement>(null);
   const [playing, setPlaying] = useState(false);
+  const [ui, setUi] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [poke, setPoke] = useState(0);
   const [t, setT] = useState(0);
   const [d, setD] = useState(0);
-  useEffect(() => {
+  const start = () => {
     const el = v.current; if (!el) return;
-    if (cur) void el.play().catch(() => {}); else el.pause();
+    setPlaying(true);
+    el.play().catch((e: any) => {
+      // Ohne Geste erlaubt iOS nur stumm: dann stumm starten, Ton per Knopf
+      if (e?.name !== 'NotAllowedError' || el.muted) throw e;
+      el.muted = true; setMuted(true); return el.play();
+    }).catch(() => { setPlaying(false); });
+  };
+  useLayoutEffect(() => {
+    const el = v.current; if (!el) return;
+    if (cur) start(); else { el.pause(); setUi(false); }
   }, [cur]);
+  const visible = ui || !playing;
+  useLayoutEffect(() => { if (cur) onUi(visible); }, [cur, visible]);
+  useEffect(() => {
+    if (!ui || !playing) return;
+    const h = setTimeout(() => setUi(false), 3000);
+    return () => clearTimeout(h);
+  }, [ui, playing, poke]);
+  const touch = () => { setUi(true); setPoke((n) => n + 1); };
   const seek = (e: React.TouchEvent | React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); touch();
     const el = v.current, bar = e.currentTarget as HTMLElement;
     if (!el || !d) return;
     const x = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
@@ -232,19 +255,25 @@ function SlideVideo({ src, cur }: { src: string; cur: boolean }) {
     setT(el.currentTime);
   };
   const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+  const toggle = () => { const el = v.current; if (!el) return; if (el.paused) start(); else el.pause(); touch(); };
   return <>
-    <video ref={v} src={src} playsInline preload="metadata"
+    <video ref={v} src={src} playsInline preload="metadata" disableRemotePlayback
       onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onEnded={() => setPlaying(false)}
       onTimeUpdate={(e) => setT(e.currentTarget.currentTime)} onLoadedMetadata={(e) => setD(e.currentTarget.duration || 0)}
-      onClick={(e) => { e.stopPropagation(); const el = v.current; if (el) { if (el.paused) void el.play().catch(() => {}); else el.pause(); } }} />
-    {!playing && <span className="lightbox-play"><Icon name="play" size={30} /></span>}
-    {cur && d > 0 && (
+      onClick={(e) => { e.stopPropagation(); if (!playing) start(); else setUi((u) => !u); }} />
+    {cur && visible && <button className="lightbox-play" onClick={(e) => { e.stopPropagation(); toggle(); }} onTouchEnd={stop}
+      aria-label={playing ? T('Pause') : T('Abspielen')}><Icon name={playing ? 'pause' : 'play'} size={30} /></button>}
+    {cur && visible && d > 0 && (
       <div className="lightbox-vbar" onClick={stop} onTouchEnd={stop}>
         <span>{duration(t)}</span>
         <div className="lightbox-vtrack" onTouchStart={seek} onTouchMove={seek} onMouseDown={seek}>
           <div style={{ width: `${(t / d) * 100}%` }} />
         </div>
         <span>{duration(d)}</span>
+        <button className="lightbox-mute" aria-label={muted ? T('Ton an') : T('Ton aus')}
+          onClick={() => { const el = v.current; if (!el) return; el.muted = !el.muted; setMuted(el.muted); touch(); }}>
+          <Icon name={muted ? 'volumeoff' : 'volume'} size={20} />
+        </button>
       </div>
     )}
   </>;

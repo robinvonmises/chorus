@@ -31,6 +31,8 @@ const P: Record<string, string> = {
   stop: 'M6 6h12v12H6z',
   play: 'M7 4l13 8-13 8z',
   pause: 'M7 4h4v16H7zM14 4h4v16h-4z',
+  volume: 'M4 9h4l5-4v14l-5-4H4zM16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12',
+  volumeoff: 'M4 9h4l5-4v14l-5-4H4zM16 9l6 6M22 9l-6 6',
   lock: 'M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4',
   sparkle: 'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8zM19 17l.7 1.8 1.8.7-1.8.7L19 22l-.7-1.8-1.8-.7 1.8-.7z',
   archive: 'M3 4h18v4H3zM5 8v12h14V8M10 12h4',
