@@ -81,8 +81,8 @@ export function rise(msg: Element | null | undefined) {
     const bw0 = Math.max(b.width, f.width);
     const tx = Math.round(Math.min(0, f.left - (b.left + dx)));
     const T = 850; // Wayne: eher 0,8–1 s
-    const X1 = 0.26, Y0 = 0.1, Y1 = 0.66; // Anteile von T: nach rechts bis X1, Aufstieg von Y0 bis Y1, dann Wachsen
-    const push = bezier(0.2, 0.85, 0.35, 1), lift = bezier(0.45, 0, 0.2, 1), grow = bezier(0.3, 0.6, 0.3, 1);
+    const X1 = 0.17, Y0 = 0.05, Y1 = 0.6; // Anteile von T: nach rechts bis X1, Aufstieg von Y0 bis Y1, dann Wachsen
+    const push = bezier(0.1, 0.9, 0.3, 1), lift = bezier(0.5, 0, 0.25, 1), grow = bezier(0.3, 0.6, 0.3, 1);
     const part = (t: number, a: number, z: number) => Math.min(1, Math.max(0, (t - a) / (z - a)));
     const N = 40;
     const frames: Keyframe[] = [];
@@ -97,7 +97,7 @@ export function rise(msg: Element | null | undefined) {
         opacity: Math.min(1, 0.5 + 0.25 * px + 0.25 * py),
       });
     }
-    const pushCss = 'cubic-bezier(.2, .85, .35, 1)';
+    const pushCss = 'cubic-bezier(.1, .9, .3, 1)';
     const anims = [
       layer.animate(frames, { duration: T }),
       bg.animate([
