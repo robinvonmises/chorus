@@ -131,6 +131,8 @@ export interface Message {
   reactions: Reaction[];
   status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received';
   transcript?: string | null;
+  /** Sprachnachricht: Kernaussage in einem Satz (auf Knopfdruck, aus dem Transkript) */
+  summary?: string | null;
   /** Eingehend: deutsche Übersetzung. Eigene: der deutsche Originaltext vor dem Übersetzen */
   translation?: string | null;
   /** Sprache des Nachrichtentexts (deutscher Name), wenn translation eine Übersetzung ins Deutsche ist.

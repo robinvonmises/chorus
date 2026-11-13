@@ -213,7 +213,7 @@ export function Settings({ server, accounts, onClose, onAdd, onLocked, onProfile
 
             <div className="ios-card">
               <Row tile={<Tile color="#30b0c7" icon="cloud" />} title={T('Sicherung')} onClick={() => go('backup')} />
-              <Row tile={<Tile color="#ff9f0a" icon="folder" />} title={T('Speicherorte')} sub={T('Immich, Nextcloud')} value={storeVal || undefined} onClick={() => go('storage')} />
+              <Row tile={<Tile color="#ff9f0a" icon="folder" />} title={T('Speicherorte')} sub={T('Immich, Nextcloud, Bring!')} value={storeVal || undefined} onClick={() => go('storage')} />
             </div>
 
             <div className="ios-card">

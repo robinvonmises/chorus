@@ -11,6 +11,7 @@ import { Avatar } from './Rail';
 import { player, usePlayer } from '../player';
 import { T, lang, locale } from '../i18n';
 import { justReacted } from '../effects';
+import { hintOf } from '../detect';
 
 const ATT_ICON = { image: '📷', video: '🎬', audio: '🎵', voice: '🎤', file: '📎', sticker: '' } as const;
 
@@ -23,7 +24,7 @@ export function previewOf(m: Message): string {
   return { image: '📷 ' + T('Foto'), video: '🎬 ' + T('Video'), audio: '🎵 Audio', voice: '🎤 ' + T('Sprachnachricht'), file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, reminder, trLang }: {
+export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, onSummarize, onDetect, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
   /** Mehrere kurz nacheinander geschickte Foto-Nachrichten desselben Absenders, als eine Blase gezeigt (m = erste) */
   album?: Message[];
@@ -38,6 +39,10 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   onReact: (m: Message, emoji: string | null) => void;
   onJump: (remoteId: string) => void;
   onTranscribe?: (m: Message) => Promise<void>;
+  /** Sprachnachricht in einem Satz (transkribiert bei Bedarf vorher) */
+  onSummarize?: (m: Message) => Promise<void>;
+  /** Dezenter Hinweis „Termin/Aufgabe/Einkauf“ (lokal erkannt), Tipp öffnet das Erkennen */
+  onDetect?: (m: Message) => void;
 }) {
   const press = useRef<number | null>(null);
   const [showHist, setShowHist] = useState(false);
@@ -90,8 +95,9 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
         {m.deleted && !kept ? <i>{T('Diese Nachricht wurde gelöscht.')}</i> : <>
           {mosaic && <Mosaic tiles={tiles} lead={m} />}
           {m.attachments.map((a, i) => mosaic && isTile(a) ? null : <AttachmentView key={i} m={m} a={a} i={i} />)}
-          {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} />}
+          {hasAudio(m) && <Transcript m={m} onTranscribe={onTranscribe} onSummarize={onSummarize} />}
           {m.text && <div className="text">{linkify(m.text)}</div>}
+          {onDetect && <DetectHint m={m} onDetect={onDetect} />}
           {m.html && <button className="mail-orig" onClick={() => openMail(m)}><Icon name="file" size={14} />{T('Original-E-Mail ansehen')}</button>}
           {m.translation && (() => {
             // Eigene, übersetzt gesendete Nachricht: darunter steht das deutsche Original. Sonst die deutsche Übersetzung.
@@ -135,15 +141,31 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
 
 function hasAudio(m: Message) { return m.attachments.some((a) => a.kind === 'voice' || effKind(a) === 'audio'); }
 
-function Transcript({ m, onTranscribe }: { m: Message; onTranscribe?: (m: Message) => Promise<void> }) {
-  const [busy, setBusy] = useState(false);
-  if (m.transcript) return <div className="transcript"><Icon name="file" size={14} /> {m.transcript}</div>;
-  if (!onTranscribe || m.status === 'pending') return null;
-  return (
-    <button className="transcribe-btn" disabled={busy} onClick={async () => { setBusy(true); await onTranscribe(m); setBusy(false); }}>
-      {busy ? <><span className="spinner" /> {T('Wird transkribiert …')}</> : <><Icon name="file" size={14} /> {T('Transkribieren')}</>}
-    </button>
-  );
+function Transcript({ m, onTranscribe, onSummarize }: { m: Message; onTranscribe?: (m: Message) => Promise<void>; onSummarize?: (m: Message) => Promise<void> }) {
+  const [busy, setBusy] = useState<'' | 'tr' | 'sum'>('');
+  const go = (k: 'tr' | 'sum', fn: (m: Message) => Promise<void>) => async () => { setBusy(k); await fn(m); setBusy(''); };
+  // Zusammenfassen lohnt erst bei längeren Sprachnachrichten
+  const sumOk = onSummarize && !m.summary && m.status !== 'pending' && (!m.transcript || m.transcript.length > 160);
+  return (<>
+    {m.summary && <div className="voice-summary"><Icon name="sparkle" size={13} /> <span>{m.summary}</span></div>}
+    {m.transcript && <div className="transcript"><Icon name="file" size={14} /> {m.transcript}</div>}
+    {((!m.transcript && onTranscribe && m.status !== 'pending') || sumOk) && <div className="transcribe-row">
+      {!m.transcript && onTranscribe && m.status !== 'pending' && <button className="transcribe-btn" disabled={!!busy} onClick={go('tr', onTranscribe)}>
+        {busy === 'tr' ? <><span className="spinner" /> {T('Wird transkribiert …')}</> : <><Icon name="file" size={14} /> {T('Transkribieren')}</>}
+      </button>}
+      {sumOk && <button className="transcribe-btn" disabled={!!busy} onClick={go('sum', onSummarize!)}>
+        {busy === 'sum' ? <><span className="spinner" /> {T('Wird zusammengefasst …')}</> : <><Icon name="sparkle" size={14} /> {T('Zusammenfassen')}</>}
+      </button>}
+    </div>}
+  </>);
+}
+
+const HINT_LABEL = { event: () => T('Termin eintragen'), task: () => T('Als Aufgabe'), shop: () => T('Auf die Einkaufsliste') };
+const HINT_ICON = { event: '📅', task: '✅', shop: '🛒' };
+function DetectHint({ m, onDetect }: { m: Message; onDetect: (m: Message) => void }) {
+  const h = hintOf(m);
+  if (!h) return null;
+  return <button className="transcribe-btn detect-btn" onClick={(e) => { e.stopPropagation(); onDetect(m); }}>{HINT_ICON[h]} {HINT_LABEL[h]()}</button>;
 }
 
 function StatusIcon({ s }: { s: Message['status'] }) {

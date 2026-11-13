@@ -3,6 +3,7 @@ import { api, type StorageTarget } from '../api';
 import { storageState, useStorage } from '../storageState';
 import { Icon } from './Icon';
 import { T } from '../i18n';
+import { OrganizeSection } from './OrganizeSettings';
 
 /** Einstellungen → Speicherorte: Immich für Fotos/Videos, Nextcloud für Dateien */
 export function StorageSection() {
@@ -63,5 +64,6 @@ export function StorageSection() {
       </div>
       {msg.nextcloud && <small>{msg.nextcloud}</small>}
     </div>
+    <OrganizeSection key={String(s.nextcloud.enabled)} />
   </>);
 }

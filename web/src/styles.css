@@ -1141,6 +1141,27 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .gallery-link .link-title { color: var(--ink); font-weight: 600; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .gallery-link .link-url { color: var(--accent); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gallery-link .link-desc { color: var(--ink-2); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* „Was hab ich verpasst?“ oben im Chat, Sprachnachricht-Kern, Erkennen-Hinweise */
+.catchup-pill, .catchup-card { position: absolute; left: 50%; top: 66px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 2px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: var(--shadow); animation: fade-in .25s var(--ease-out) both; }
+.catchup-pill { border-radius: 999px; padding: 2px 4px 2px 2px; }
+.catchup-pill > button:first-child { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent); padding: 6px 8px 6px 12px; cursor: pointer; white-space: nowrap; }
+.catchup-pill small { font-weight: 400; opacity: .7; color: var(--ink); }
+.catchup-pill .spinner { width: 14px; height: 14px; border-width: 2px; }
+.catchup-card { width: min(560px, calc(100% - 24px)); align-items: flex-start; gap: 8px; padding: 10px 6px 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+.catchup-card > .icon { flex: none; margin-top: 2px; color: var(--accent); }
+.catchup-card > span { flex: 1; }
+.voice-summary { margin-top: 6px; font-size: 13px; line-height: 1.4; font-weight: 600; display: flex; gap: 4px; }
+.voice-summary .icon { flex: none; margin-top: 2px; }
+.transcribe-row { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.detect-btn { display: flex; }
+.organize-sheet .org-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 12px; border-radius: 14px; background: var(--bg-2); }
+.organize-sheet .org-card > .btn { align-self: flex-start; }
+.organize-sheet .row { display: flex; gap: 8px; align-items: center; }
+.organize-sheet .row .input { flex: 1; min-width: 0; }
+.org-allday, .org-item { display: flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; }
+.org-item { white-space: normal; padding: 2px 0; }
+.organize-sheet .spinner { width: 14px; height: 14px; border-width: 2px; }
 /* ---------- Statistik ---------- */
 .stats-years { display: flex; gap: 8px; overflow-x: auto; padding: 0 4px 14px; scrollbar-width: none; }
 .stats-years .pill { border: 0; cursor: pointer; }
@@ -1242,3 +1263,4 @@ html .chat-view.own-bg { background: var(--chat-bg-own); }
 .bubble .edited-btn { background: none; border: 0; padding: 0; font: inherit; color: inherit; text-decoration: underline dotted; cursor: pointer; }
 .bubble .edit-hist { font-size: 13px; opacity: .75; border-left: 2px solid currentColor; padding-left: 8px; margin: 2px 0 6px; display: grid; gap: 4px; }
 .bubble .edit-hist small { display: block; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.chat-view.has-pin .catchup-pill, .chat-view.has-pin .catchup-card, .chat-view.has-pin .loading-old.floating { top: 112px; }

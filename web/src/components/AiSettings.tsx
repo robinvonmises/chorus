@@ -158,6 +158,14 @@ export function AiSettingsSection() {
           <input type="checkbox" checked={ai.quickReplies} disabled={busy} onChange={(e) => save({ quickReplies: e.target.checked ? 'on' : 'off' }, e.target.checked ? T('Antwortvorschläge an.') : T('Antwortvorschläge aus.'))} />
           <span><b>{T('Antwortvorschläge')}</b><small>{T('Drei kurze Antworten über dem Eingabefeld, wenn eine neue Nachricht kommt (nur in Chats mit KI-Freigabe). Aus: keine Vorschläge und keine Anfrage an die KI.')}</small></span>
         </label>
+        <label className="toggle">
+          <input type="checkbox" checked={ai.catchUp !== false} disabled={busy} onChange={(e) => save({ catchUp: e.target.checked ? 'on' : 'off' }, e.target.checked ? T('„Was hab ich verpasst?“ an.') : T('„Was hab ich verpasst?“ aus.'))} />
+          <span><b>{T('Was hab ich verpasst?')}</b><small>{T('Bei vielen neuen Nachrichten oben im Chat ein Knopf, der sie in ein bis drei Sätzen zusammenfasst. Die KI läuft erst beim Antippen.')}</small></span>
+        </label>
+        <label className="toggle">
+          <input type="checkbox" checked={ai.detectHints !== false} disabled={busy} onChange={(e) => save({ detectHints: e.target.checked ? 'on' : 'off' }, e.target.checked ? T('Hinweise an.') : T('Hinweise aus.'))} />
+          <span><b>{T('Termine, Aufgaben, Einkäufe')}</b><small>{T('Kleiner Hinweis unter Nachrichten, die nach Termin, Aufgabe oder Einkauf aussehen. Das erkennt Chorus selbst, ohne KI; erst ein Tipp schickt die eine Nachricht an die KI. Per Langdruck geht es immer.')}</small></span>
+        </label>
       </div>
     </>)}
 
