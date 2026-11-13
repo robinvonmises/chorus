@@ -12,6 +12,7 @@ import { MessageBubble, albumable, previewOf } from './Message';
 import { Composer } from './Composer';
 import { EmojiPicker } from './EmojiPicker';
 import { AiPanel } from './AiPanel';
+import { OrganizeSheet } from './OrganizeSheet';
 import { useExit } from '../useExit';
 import { useAi } from '../aiState';
 import { ContactSheet } from './ContactSheet';
@@ -57,6 +58,12 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   // Transkribieren ist ein ausdrücklicher Klick pro Nachricht: braucht nur den ElevenLabs-Schlüssel, nicht die KI-Freigabe des Chats
   // (sonst fehlte der Knopf in Chats ohne KI-Opt-in, z. B. bei zusammengeführten WhatsApp-Kontakten).
   const canTranscribe = !!ai?.features.transcribe;
+  const [organizeFor, setOrganizeFor] = useState<Message | null>(null);
+  // „Was hab ich verpasst?“: Zahl der Ungelesenen beim Öffnen merken (danach gilt der Chat als gelesen)
+  const [missed, setMissed] = useState<{ n: number; text?: string; busy?: boolean } | null>(() => {
+    const n = linked.reduce((k, c) => k + (c.unread || 0), 0);
+    return n >= CATCHUP_MIN ? { n } : null;
+  });
   const prevLen = useRef(0);
   const prevFirst = useRef<string | null>(null);
   const prevHeight = useRef(0);
@@ -148,6 +155,18 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
   const react = useCallback((m: Message, emoji: string | null) => { if (emoji) burst(m.id, emoji); void api.react(m.id, emoji).catch((e: any) => flash(e.message ?? T('Fehler'))); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const openMenu = useCallback((mm: Message, p: { x: number; y: number }) => setMenu({ m: mm, ...p }), []);
   const transcribe = useCallback((m: Message) => api.ai.transcribe(m.id).then(() => {}).catch((e: any) => flash(e.message ?? T('Fehler'))), []);
+  const summarizeVoice = useCallback((m: Message) => api.ai.voiceSummary(m.id).then(() => {}).catch((e: any) => flash(e.message ?? T('Fehler'))), []);
+  const detect = useCallback((m: Message) => setOrganizeFor(m), []);
+  const catchUp = async () => {
+    if (!missed || missed.busy) return;
+    if (!chat.aiEnabled) {
+      if (!confirm(T('Für die Zusammenfassung gehen die neuen Nachrichten dieses Chats an die KI. KI für diesen Chat erlauben?'))) return;
+      try { onChat(await api.ai.setChat(chat.id, true)); } catch (e: any) { flash(e.message ?? T('Fehler')); return; }
+    }
+    setMissed({ ...missed, busy: true });
+    try { setMissed({ n: missed.n, text: (await api.ai.catchUp(chat.id, missed.n)).text }); }
+    catch (e: any) { flash(e.message ?? T('Fehler')); setMissed({ n: missed.n }); }
+  };
   const jump = useCallback((remoteId: string) => {
     const el = scroller.current?.querySelector(`[data-remote="${CSS.escape(remoteId)}"]`);
     if (el) { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1200); }
@@ -240,6 +259,12 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
         </div>
       </header>
 
+      {missed && ai?.features.text && ai.catchUp !== false && (
+        missed.text
+          ? <div className="catchup-card"><Icon name="sparkle" size={16} /><span>{missed.text}</span><button className="icon-btn small" onClick={() => setMissed(null)} aria-label={T('Schließen')}><Icon name="close" size={14} /></button></div>
+          : <div className="catchup-pill"><button onClick={catchUp} disabled={missed.busy}>{missed.busy ? <span className="spinner" /> : <Icon name="sparkle" size={15} />} {T('Was hab ich verpasst?')} <small>{T('{0} neu', missed.n)}</small></button>
+              <button className="icon-btn small" onClick={() => setMissed(null)} aria-label={T('Ausblenden')}><Icon name="close" size={13} /></button></div>
+      )}
       {loadingOld && <div className="loading-old floating">{T('Lade ältere Nachrichten …')}</div>}
       <div className="messages" ref={scroller} onScroll={onScroll} onTouchStart={touchStart} onTouchMove={touchMove}>
         <div className="messages-inner" ref={inner}>
@@ -251,7 +276,9 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
             <MessageBubble m={m} album={album} group={group} showName={showName} senderAvatar={group && !m.fromMe ? senderAv[m.senderId] ?? null : undefined} replied={m.replyToRemoteId ? byRemote.get(m.replyToRemoteId) ?? null : undefined}
               reminder={reminders.get(m.id)} trLang={tr?.langName ? adjLang(tr.langName) : null}
               onAction={openMenu} onReact={react} onJump={jump}
-              onTranscribe={canTranscribe ? transcribe : undefined} />
+              onTranscribe={canTranscribe ? transcribe : undefined}
+              onSummarize={ai?.features.text ? summarizeVoice : undefined}
+              onDetect={ai?.features.text && ai.detectHints !== false ? detect : undefined} />
           </Fragment>
         ))}
         {pending.map((o) => <PendingBubble key={o.id} o={o} />)}
@@ -317,6 +344,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
                   ? <button onClick={() => { const m = menu.m; setMenu(null); const p = mine.find((x) => x.kind === 'remind' && x.messageId === m.id); if (p) guard(async () => { await api.unplan(p.id); flash(T('Erinnerung gelöscht')); }); }}><Icon name="alarm" size={18} />{T('Erinnerung löschen')}</button>
                   : <button onClick={() => { setRemindFor(menu.m); setMenu(null); }}><Icon name="alarm" size={18} />{T('Erinnern …')}</button>}
                 {ai?.features.text && !menu.m.deleted && !menu.m.translation && (menu.m.text || menu.m.transcript) && <button onClick={() => { const m = menu.m; setMenu(null); flash(T('Wird übersetzt …')); api.ai.translateOne(m.id).then((r) => { if (r.already) flash(T('Die Nachricht ist schon Deutsch.')); }).catch((e: any) => flash(e.message ?? T('Fehler'))); }}><Icon name="globe" size={18} />{T('Übersetzen')}</button>}
+                {ai?.features.text && !menu.m.deleted && (menu.m.text || menu.m.transcript) && <button onClick={() => { setOrganizeFor(menu.m); setMenu(null); }}><Icon name="sparkle" size={18} />{T('Termin, Aufgabe, Einkauf …')}</button>}
                 {menu.m.text && <button onClick={() => { navigator.clipboard?.writeText(menu.m.text); setMenu(null); flash(T('Kopiert')); }}><Icon name="copy" size={18} />{T('Text kopieren')}</button>}
                 {menu.m.attachments.map((a, i) => standalone || !['image', 'sticker', 'video'].includes(a.kind)
                   // Als Home-Bildschirm-App führt ein Download-Link auf eine Seite ohne Rückweg: in der eigenen Vorschau öffnen
@@ -338,6 +366,7 @@ export function ChatView({ chat, account, messages, onBack, loadOlder, onPatchCh
       {remindFor && <WhenPicker title={T('Erinnern')} confirm={T('Erinnern')} hint={T('Chorus erinnert dich an diese Nachricht, auch wenn die App geschlossen ist.')}
         onClose={() => setRemindFor(null)}
         onPick={(at) => { const m = remindFor; setRemindFor(null); guard(async () => { await api.plan({ kind: 'remind', chatId: m.chatId, at, messageId: m.id, text: previewOf(m).slice(0, 200) }); flash(T('Erinnerung {0}', whenLabel(at))); }); }} />}
+      {organizeFor && <OrganizeSheet m={organizeFor} chatTitle={chat.title} onClose={() => setOrganizeFor(null)} onInfo={flash} />}
       {forward && <ForwardSheet message={forward} onClose={() => setForward(null)} onDone={(t) => { setForward(null); flash(t); }} />}
       {toast && <div className="toast">{toast}</div>}
       {trSheet && <TranslateSheet chat={chat} onChat={onChat} onClose={() => setTrSheet(false)} onError={flash} />}
@@ -353,6 +382,9 @@ function menuPos(m: { x: number; y: number; picker?: boolean }): React.CSSProper
 }
 
 export { previewOf };
+
+/** Ab so vielen Ungelesenen bietet der Chat „Was hab ich verpasst?“ an */
+const CATCHUP_MIN = 8;
 
 /** Gemerkte Vorschläge je Chat und letzter Nachricht (der Server merkt sie sich ebenfalls) */
 const quickSeen = new Map<string, string[]>();

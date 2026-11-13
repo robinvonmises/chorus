@@ -44,7 +44,7 @@ export interface Reaction { emoji: string; senderId: string; senderName?: string
 export interface Message {
   id: string; chatId: string; remoteId: string; senderId: string; senderName: string; fromMe: boolean; ts: number;
   text: string; replyToRemoteId?: string | null; edited: boolean; deleted: boolean; attachments: Attachment[];
-  reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null;
+  reactions: Reaction[]; status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | 'received'; transcript?: string | null; summary?: string | null;
   /** Nur live bei fehlgeschlagenem Senden: Grund */
   error?: string;
   /** E-Mail: Original-HTML vorhanden */
@@ -83,7 +83,7 @@ export type MediaKind = 'media' | 'files' | 'voice' | 'links';
 export interface AiSettings {
   provider: 'anthropic' | 'openai'; hasOpenaiKey: boolean; openaiModel: string; openaiBase: string;
   model: string; models: { id: string; label: string }[]; hasAnthropicKey: boolean; hasElevenKey: boolean;
-  voiceId: string; voiceName: string; quickReplies: boolean; features: { text: boolean; transcribe: boolean; voice: boolean };
+  voiceId: string; voiceName: string; quickReplies: boolean; catchUp?: boolean; detectHints?: boolean; features: { text: boolean; transcribe: boolean; voice: boolean };
 }
 export interface Voice { id: string; name: string; category: string; previewUrl: string | null }
 
@@ -265,11 +265,31 @@ export const api = {
     compose: (id: string, instruction: string, mode: 'text' | 'voice') => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/compose`, { instruction, mode }),
     dictate: (audio: Blob) => { const fd = new FormData(); fd.append('file', audio, 'auftrag.' + (audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm')); return req<{ text: string }>('POST', '/api/ai/dictate', fd); },
     transcribe: (msgId: string) => req<Message>('POST', `/api/messages/${enc(msgId)}/transcribe`, {}),
+    catchUp: (id: string, unread: number) => req<{ text: string }>('POST', `/api/chats/${enc(id)}/ai/catchup`, { unread }),
+    voiceSummary: (msgId: string) => req<Message>('POST', `/api/messages/${enc(msgId)}/ai/voice-summary`, {}),
+    extract: (msgId: string) => req<Extracted>('POST', `/api/messages/${enc(msgId)}/ai/extract`, {}),
     translateOne: (msgId: string) => req<{ message: Message; already: boolean }>('POST', `/api/messages/${enc(msgId)}/translate`, {}),
   },
 };
 
 export const enc = encodeURIComponent;
+
+export interface CalEvent { title: string; start: string; end: string; allDay: boolean; location: string; note?: string }
+export interface Extracted { events: CalEvent[]; tasks: { title: string; due: string }[]; shopping: { name: string; spec: string }[] }
+export interface OrganizeSettings {
+  nextcloud: boolean; calendar: string; calendarName: string; tasks: string; tasksName: string;
+  bring: { email: string; hasPass: boolean; list: string; listName: string; enabled: boolean };
+}
+export const organize = {
+  get: () => req<OrganizeSettings>('GET', '/api/organize'),
+  set: (patch: Record<string, unknown>) => req<OrganizeSettings>('PUT', '/api/organize', patch),
+  calendars: () => req<{ href: string; name: string; events: boolean; tasks: boolean }[]>('GET', '/api/organize/calendars'),
+  bringLists: () => req<{ id: string; name: string }[]>('GET', '/api/organize/bring/lists'),
+  event: (e: CalEvent) => req<{ message: string }>('POST', '/api/organize/event', e),
+  ics: (e: CalEvent) => req<{ ics: string }>('POST', '/api/organize/ics', e),
+  task: (t: { title: string; due: string; note?: string; messageId?: string; chatId?: string }) => req<{ message: string; at?: number }>('POST', '/api/organize/task', t),
+  bring: (items: { name: string; spec: string }[]) => req<{ message: string }>('POST', '/api/organize/bring', { items }),
+};
 export type StorageTarget = 'immich' | 'nextcloud';
 export interface StorageSettings {
   immich: { enabled: boolean; url: string; hasKey: boolean };

@@ -25,6 +25,7 @@ import { whatsappFactory } from './adapters/whatsapp.js';
 import { emailFactory } from './adapters/email.js';
 import { Ai, AiError } from './ai.js';
 import { Storage, StorageError, type Target } from './storage.js';
+import { Organize, eventIcs, localToUtc } from './organize.js';
 import { GifError, fetchGif, gifPublic, gifSettings, searchGifs, setGifSettings } from './gifs.js';
 import { AutopilotRunner } from './autopilot.js';
 import { Translator, guessLang } from './translate.js';
@@ -784,6 +785,84 @@ app.post('/api/messages/:id/translate', async (req) => {
   if (upd) h.emit({ type: 'message', message: upd });
   return { message: upd ?? msg, already: false };
 });
+
+/** „Was hab ich verpasst?“: die ungelesenen Nachrichten kurz zusammengefasst (nur mit KI-Freigabe des Chats) */
+app.post('/api/chats/:id/ai/catchup', async (req) => {
+  const id = (req.params as any).id;
+  needAi(req, id);
+  return { text: await A(req).catchUp(id, Number((req.body as any)?.unread ?? 0)) };
+});
+
+/** Sprachnachricht in einem Satz. Wie Transkribieren eine ausdrückliche Aktion pro Nachricht, daher ohne KI-Freigabe des Chats. */
+app.post('/api/messages/:id/ai/voice-summary', async (req) => {
+  const h = H(req), ai = A(req);
+  let msg = h.store.getMessage((req.params as any).id);
+  if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
+  if (!ai.publicSettings().features.text) throw new AiError(400, 'Zum Zusammenfassen bitte zuerst in den Einstellungen einen KI-Schlüssel eintragen.');
+  if (!msg.transcript) {
+    if (!ai.publicSettings().features.transcribe) throw new AiError(400, 'Zum Zusammenfassen wird die Sprachnachricht erst transkribiert. Dafür bitte einen ElevenLabs-Schlüssel eintragen.');
+    const i = msg.attachments.findIndex((a) => a.kind === 'voice' || a.kind === 'audio' || a.kind === 'video');
+    if (i < 0) throw new AiError(400, 'Diese Nachricht enthält keine Sprachnachricht.');
+    const att = msg.attachments[i];
+    msg = h.setTranscript(msg.id, await ai.transcribe(await h.attachmentData(msg, i), att.mime, att.name)) ?? msg;
+  }
+  const summary = await ai.voiceSummary(msg.transcript ?? '', msg.fromMe ? 'mir' : msg.senderName || 'Kontakt');
+  const upd = h.store.patchMessage(msg.id, { summary });
+  if (upd) h.emit({ type: 'message', message: upd });
+  return upd ?? msg;
+});
+
+/** Termine, Aufgaben, Einkäufe aus einer Nachricht. Ausdrückliche Aktion: nur diese Nachricht geht an die KI,
+ *  ein paar vorige Nachrichten als Zusammenhang nur, wenn der Chat für die KI freigegeben ist. */
+app.post('/api/messages/:id/ai/extract', async (req) => {
+  const h = H(req), ai = A(req);
+  const msg = h.store.getMessage((req.params as any).id);
+  if (!msg) throw new AiError(404, 'Nachricht nicht gefunden');
+  if (!ai.publicSettings().features.text) throw new AiError(400, 'Bitte zuerst in den Einstellungen einen KI-Schlüssel eintragen.');
+  if (!msg.text && !msg.transcript) throw new AiError(400, 'Diese Nachricht enthält keinen Text.');
+  const chat = h.store.getChat(msg.chatId);
+  let context: string | null = null;
+  if (chat?.aiEnabled) {
+    const before = h.store.listMessages(msg.chatId, msg.ts, 8).filter((m) => !m.deleted);
+    context = before.map((m) => `${m.fromMe ? 'Ich' : m.senderName || 'Kontakt'}: ${(m.text || m.transcript || '').slice(0, 500)}`).join('\n') || null;
+  }
+  return ai.extract(msg, chat?.title ?? '', context);
+});
+
+const O = (req: FastifyRequest) => new Organize(H(req).store);
+app.get('/api/organize', async (req) => O(req).publicSettings());
+app.put('/api/organize', async (req) => O(req).update((req.body ?? {}) as any));
+app.get('/api/organize/calendars', async (req) => O(req).calendars());
+app.get('/api/organize/bring/lists', async (req) => O(req).bringLists());
+const evBody = (b: any) => ({ title: String(b?.title ?? '').slice(0, 200).trim(), start: String(b?.start ?? ''), end: String(b?.end ?? ''), allDay: !!b?.allDay, location: String(b?.location ?? '').slice(0, 200), note: String(b?.note ?? '').slice(0, 2000) });
+const okWhen = (v: string, allDay: boolean) => (allDay ? /^\d{4}-\d{2}-\d{2}$/ : /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/).test(v);
+function checkEvent(e: ReturnType<typeof evBody>) {
+  if (!e.title) throw new StorageError(400, 'Bitte einen Titel angeben.');
+  if (!okWhen(e.start, e.allDay)) throw new StorageError(400, 'Bitte Datum und Uhrzeit angeben.');
+  if (e.end && !okWhen(e.end, e.allDay)) e.end = '';
+  return e;
+}
+app.post('/api/organize/event', async (req) => ({ message: await O(req).addEvent(checkEvent(evBody(req.body))) }));
+/** Ohne Nextcloud: Termin als .ics-Datei zum Öffnen im Kalender des Geräts */
+app.post('/api/organize/ics', async (req) => ({ ics: eventIcs(checkEvent(evBody(req.body))) }));
+/** Aufgabe: Nextcloud Tasks, wenn eine Liste gewählt ist, sonst Chorus-Erinnerung an die Nachricht */
+app.post('/api/organize/task', async (req) => {
+  const b = (req.body ?? {}) as any;
+  const title = String(b.title ?? '').slice(0, 200).trim();
+  if (!title) throw new StorageError(400, 'Bitte einen Titel angeben.');
+  const due = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/.test(String(b.due ?? '')) ? String(b.due) : '';
+  const nc = await O(req).addTask({ title, due, note: String(b.note ?? '').slice(0, 2000) });
+  if (nc) return { message: nc };
+  const msg = b.messageId ? H(req).store.getMessage(String(b.messageId)) : null;
+  const chatId = msg?.chatId ?? String(b.chatId ?? '');
+  // Ohne Frist: morgen 9 Uhr; nur Datum: an dem Tag um 9 Uhr; schon vorbei: in einer Stunde
+  let at = due ? localToUtc(due.length === 10 ? `${due}T09:00` : due) : NaN;
+  if (!Number.isFinite(at)) { const d = new Date(Date.now() + 86400_000); at = localToUtc(`${d.toISOString().slice(0, 10)}T09:00`); }
+  if (at < Date.now() + 60_000) at = Date.now() + 3600_000;
+  const p = P(req).add({ kind: 'remind', chatId, at, messageId: msg?.id ?? null, text: msg ? (msg.text || msg.transcript || '').slice(0, 200) : title, note: title });
+  return { message: 'Erinnerung angelegt', at: p.at };
+});
+app.post('/api/organize/bring', async (req) => ({ message: await O(req).bringAdd(Array.isArray((req.body as any)?.items) ? (req.body as any).items : []) }));
 
 /** Anhang ausliefern; wird bei Bedarf erst beim Messenger abgeholt.
  *  ?play=1: Audio in einem Format, das jeder Browser abspielt (Opus/OGG → MP3 für Safari/iOS).

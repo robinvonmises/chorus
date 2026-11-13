@@ -56,6 +56,7 @@ export class Store {
     if (!mcols.includes('translation')) this.db.exec('ALTER TABLE messages ADD COLUMN translation TEXT');
     if (!mcols.includes('translation_from')) this.db.exec('ALTER TABLE messages ADD COLUMN translation_from TEXT');
     if (!mcols.includes('html')) this.db.exec('ALTER TABLE messages ADD COLUMN html TEXT');
+    if (!mcols.includes('summary')) this.db.exec('ALTER TABLE messages ADD COLUMN summary TEXT');
     if (!cols.includes('autopilot')) this.db.exec('ALTER TABLE chats ADD COLUMN autopilot TEXT');
     for (const [c, t] of [['archived', 'INTEGER NOT NULL DEFAULT 0'], ['alias', 'TEXT'], ['custom_avatar', 'TEXT'], ['info', 'TEXT'], ['note', 'TEXT'], ['translate', 'TEXT'], ['link', 'TEXT'], ['send_via', 'TEXT'], ['peer', 'TEXT']] as const)
       if (!cols.includes(c)) this.db.exec(`ALTER TABLE chats ADD COLUMN ${c} ${t}`);
@@ -238,7 +239,7 @@ export class Store {
       id: r.id, chatId: r.chat_id, remoteId: r.remote_id, senderId: r.sender_id, senderName: r.sender_name,
       fromMe: !!r.from_me, ts: r.ts, text: r.text, replyToRemoteId: r.reply_to, edited: !!r.edited, deleted: !!r.deleted,
       attachments: (JSON.parse(r.attachments) as Attachment[]).map(fixKind), reactions: JSON.parse(r.reactions), status: r.status, transcript: r.transcript, translation: r.translation ?? null,
-      translationFrom: r.translation_from ?? null, html: r.html ?? null,
+      translationFrom: r.translation_from ?? null, html: r.html ?? null, summary: r.summary ?? null,
     };
   }
   /** true, wenn die Nachricht neu war */
@@ -277,8 +278,8 @@ export class Store {
     return this.getMessage(newId);
   }
   removeMessage(id: string) { this.db.prepare('DELETE FROM messages WHERE id=?').run(id); }
-  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom'>>) {
-    const map: Record<string, string> = { translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
+  patchMessage(id: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status' | 'transcript' | 'reactions' | 'attachments' | 'translation' | 'translationFrom' | 'summary'>>) {
+    const map: Record<string, string> = { summary: 'summary', translation: 'translation', translationFrom: 'translation_from', text: 'text', edited: 'edited', deleted: 'deleted', status: 'status', transcript: 'transcript', reactions: 'reactions', attachments: 'attachments' };
     for (const [k, v] of Object.entries(patch)) {
       if (!map[k]) continue;
       const val = typeof v === 'boolean' ? Number(v) : Array.isArray(v) ? JSON.stringify(v) : v;

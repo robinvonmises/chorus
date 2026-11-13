@@ -1122,3 +1122,25 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .gif-setup p { margin: 0; }
 .gif-setup .row { gap: 8px; }
 .att-video.att-gif { cursor: pointer; }
+
+/* „Was hab ich verpasst?“ oben im Chat, Sprachnachricht-Kern, Erkennen-Hinweise */
+.catchup-pill, .catchup-card { position: absolute; left: 50%; top: 66px; transform: translateX(-50%); z-index: 6; display: flex; align-items: center; gap: 2px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); box-shadow: var(--shadow); animation: fade-in .25s var(--ease-out) both; }
+.catchup-pill { border-radius: 999px; padding: 2px 4px 2px 2px; }
+.catchup-pill > button:first-child { display: inline-flex; align-items: center; gap: 6px; border: 0; background: none; font: inherit; font-size: 14px; font-weight: 600; color: var(--accent); padding: 6px 8px 6px 12px; cursor: pointer; white-space: nowrap; }
+.catchup-pill small { font-weight: 400; opacity: .7; color: var(--ink); }
+.catchup-pill .spinner { width: 14px; height: 14px; border-width: 2px; }
+.catchup-card { width: min(560px, calc(100% - 24px)); align-items: flex-start; gap: 8px; padding: 10px 6px 10px 14px; border-radius: 16px; font-size: 14px; line-height: 1.45; }
+.catchup-card > .icon { flex: none; margin-top: 2px; color: var(--accent); }
+.catchup-card > span { flex: 1; }
+.voice-summary { margin-top: 6px; font-size: 13px; line-height: 1.4; font-weight: 600; display: flex; gap: 4px; }
+.voice-summary .icon { flex: none; margin-top: 2px; }
+.transcribe-row { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.detect-btn { display: flex; }
+.organize-sheet .org-card { display: flex; flex-direction: column; gap: 8px; padding: 12px; margin-bottom: 12px; border-radius: 14px; background: var(--bg-2); }
+.organize-sheet .org-card > .btn { align-self: flex-start; }
+.organize-sheet .row { display: flex; gap: 8px; align-items: center; }
+.organize-sheet .row .input { flex: 1; min-width: 0; }
+.org-allday, .org-item { display: flex; align-items: center; gap: 6px; font-size: 14px; white-space: nowrap; }
+.org-item { white-space: normal; padding: 2px 0; }
+.organize-sheet .spinner { width: 14px; height: 14px; border-width: 2px; }
