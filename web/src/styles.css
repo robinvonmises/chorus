@@ -116,6 +116,7 @@ input, textarea { font: inherit; color: inherit; }
 @media (hover: hover) { .rail-btn:hover { background: var(--bg-3); } }
 .rail-btn.on { background: var(--accent-soft); color: var(--accent); }
 .rail-badge, .rail-warn { position: absolute; top: 2px; right: 0; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-ink); font-size: 11px; font-weight: 700; display: grid; place-items: center; }
+.rail-badge { background: var(--unread, #ff3b30); color: #fff; }
 .rail-warn { background: #f59e0b; color: #fff; }
 .net-chip { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 9px; color: #fff; font-weight: 800; font-size: 13px; flex: none; }
 .net-chip.big { width: 52px; height: 52px; border-radius: 16px; font-size: 22px; }
@@ -144,7 +145,7 @@ input, textarea { font: inherit; color: inherit; }
 .chat-time.accent { color: var(--accent); font-weight: 600; }
 .chat-preview { flex: 1; font-size: 14px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .muted-icon { color: var(--ink-3); }
-.badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 12px; font-weight: 700; display: grid; place-items: center; flex: none; }
+.badge { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--unread, #ff3b30); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; flex: none; }
 .badge.muted { background: var(--ink-3); }
 .list-empty { padding: 40px 16px; text-align: center; color: var(--ink-3); }
 .avatar { position: relative; flex: none; display: grid; place-items: center; border-radius: 50%; font-weight: 700; letter-spacing: .5px; user-select: none; }
@@ -1080,24 +1081,6 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .swatch.auto { display: grid; place-items: center; color: #fff; }
 
 /* ===== Effekte (einzeln abschaltbar, nur transform/opacity) ===== */
-.fx-zero { position: absolute; left: 50%; top: 38%; z-index: 30; display: grid; justify-items: center; gap: 8px; pointer-events: none;
-  transform: translateX(-50%); animation: fx-zero-fade 2.2s ease forwards; }
-.fx-zero img { border-radius: 14px; box-shadow: 0 8px 24px rgba(0,0,0,.18); transform-origin: 50% 0; animation: fx-zero-swing 1.6s cubic-bezier(.3,.7,.4,1) both; }
-.fx-zero span { font-size: 14px; font-weight: 600; color: var(--ink-2); background: var(--bg); padding: 3px 12px; border-radius: 999px; box-shadow: 0 2px 10px rgba(0,0,0,.12); }
-@keyframes fx-zero-fade { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
-@keyframes fx-zero-swing {
-  0% { transform: scale(.6) rotate(0deg); } 20% { transform: scale(1) rotate(14deg); } 40% { transform: rotate(-10deg); }
-  60% { transform: rotate(6deg); } 80% { transform: rotate(-3deg); } 100% { transform: rotate(0deg); }
-}
-@media (prefers-reduced-motion: reduce) { .fx-zero, .fx-zero img { animation: none; display: none; } }
-
-/* Ruhemodus nachts: eine feste, durchklickbare Tönung über allem (keine Filter), Zähler atmen */
-html.fx-night body::after { content: ''; position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; background: rgba(120, 60, 0, .09); }
-@media (prefers-color-scheme: dark) { html.fx-night body::after { background: rgba(255, 140, 40, .06); } }
-html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite; }
-@keyframes fx-breathe { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { html.fx-night .badge { animation: none; } }
-
 /* Reaktions-Burst */
 .fx-burst { position: fixed; z-index: 2147482000; width: 0; height: 0; pointer-events: none; }
 .fx-burst span { position: absolute; left: -10px; top: -12px; font-size: 20px; line-height: 1; will-change: transform, opacity; }
@@ -1105,21 +1088,14 @@ html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite
 @keyframes fx-pop { 0% { transform: scale(.2); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
 @media (prefers-reduced-motion: reduce) { .reaction.fx-pop { animation: none; } }
 
-/* Chor-Wellen über der Chatliste */
-.fx-waves { height: 12px; overflow: hidden; color: var(--ink-3); opacity: .35; transform: scaleY(.45); margin: -2px 0 2px; pointer-events: none; }
-.fx-waves svg { display: block; }
-.fx-waves.go { animation: fx-wave-amp 1.8s ease-out both; }
-.fx-waves.go svg { animation: fx-wave-run 1.8s cubic-bezier(.2,.6,.3,1) both; }
-@keyframes fx-wave-amp { 0% { opacity: .35; transform: scaleY(.45); } 18% { opacity: 1; transform: scaleY(1.25); } 100% { opacity: .35; transform: scaleY(.45); } }
-@keyframes fx-wave-run { from { transform: translateX(0); } to { transform: translateX(-200px); } }
-@media (prefers-reduced-motion: reduce) { .fx-waves.go, .fx-waves.go svg { animation: none; } }
-
-/* Lebendige Avatare: Ring pulsiert, solange jemand tippt */
-.fx-typing-av { position: relative; display: grid; flex: none; border-radius: 50%; }
-.fx-typing-av::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2.5px solid var(--accent); opacity: 0; transform: scale(.9); pointer-events: none; transition: opacity .3s, transform .3s; }
-.fx-typing-av.on::after { opacity: 1; transform: scale(1); animation: fx-typing 1.4s ease-in-out infinite; }
-@keyframes fx-typing { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.08); opacity: .4; } }
-@media (prefers-reduced-motion: reduce) { .fx-typing-av.on::after { animation: none; } }
+/* Jemand tippt: drei hüpfende Punkte in einer Sprechblase */
+.typing-dots { display: flex; gap: 4px; align-items: center; min-width: 0; padding: 12px 14px; }
+.typing-dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); animation: typing-dot 1.2s ease-in-out infinite; }
+.typing-dots i:nth-child(2) { animation-delay: .15s; }
+.typing-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes typing-dot { 0%, 60%, 100% { transform: translateY(0); opacity: .45; } 30% { transform: translateY(-4px); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .typing-dots i { animation: none; } }
+.chat-preview.typing-text { color: var(--accent); font-style: italic; }
 
 /* GIFs */
 .gif-badge { font-size: 10px; font-weight: 800; letter-spacing: .03em; line-height: 1; padding: 3px 4px; border: 1.8px solid currentColor; border-radius: 5px; }

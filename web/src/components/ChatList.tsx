@@ -5,7 +5,7 @@ import { NETWORKS, askMailDelete, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { T } from '../i18n';
-import { reducedMotion, useFx, useTyping } from '../effects';
+import { useTyping } from '../effects';
 
 export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, onAdd, onSettings, onNew, online, problems, onFixAccount, onChats, onRemove, onOpenMessage, onGallery }: {
   onOpenMessage: (m: Message) => void; onGallery: () => void;
@@ -161,38 +161,8 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
     return () => ro.disconnect();
   });
 
-  // Chor-Wellen: neue eingehende Nachricht (Chat neuer und mehr Ungelesene) lässt das Band aufschwingen
-  const wavesOn = useFx('waves');
-  const lastSeen = useRef<Map<string, { ts: number; unread: number }> | null>(null);
-  const [wave, setWave] = useState<{ n: number; color: string } | null>(null);
-  useEffect(() => {
-    const prev = lastSeen.current;
-    const next = new Map<string, { ts: number; unread: number }>();
-    let hit: Chat | null = null;
-    for (const c of chats) {
-      next.set(c.id, { ts: c.lastTs, unread: c.unread });
-      const o = prev?.get(c.id);
-      if (prev && c.lastTs > (o?.ts ?? 0) && c.unread > (o?.unread ?? 0) && !c.muted && !c.archived && (!hit || c.lastTs > hit.lastTs)) hit = c;
-    }
-    lastSeen.current = next;
-    if (hit && wavesOn && !reducedMotion()) setWave({ n: Date.now(), color: NETWORKS[hit.network]?.color ?? 'var(--accent)' });
-  }, [chats, wavesOn]);
-
-  // Gelesen-Moment: fällt die Zahl ungelesener Chats auf 0, schwingt das Logo einmal aus
-  const zeroOn = useFx('inboxZero');
-  const unreadTotal = useMemo(() => chats.reduce((n, c) => n + (!c.archived && !c.muted && c.unread > 0 ? 1 : 0), 0), [chats]);
-  const prevUnread = useRef(unreadTotal);
-  const [zero, setZero] = useState(0);
-  useEffect(() => {
-    const before = prevUnread.current; prevUnread.current = unreadTotal;
-    if (!zeroOn || before === 0 || unreadTotal > 0 || reducedMotion()) return;
-    setZero(Date.now());
-  }, [unreadTotal, zeroOn]);
-  useEffect(() => { if (!zero) return; const t = window.setTimeout(() => setZero(0), 2200); return () => clearTimeout(t); }, [zero]);
-
   return (
     <section className="pane-list">
-      {zero > 0 && <div key={zero} className="fx-zero" aria-hidden="true"><img src="/icon.svg?v=3" alt="" width={56} height={56} /><span>{T('Alles gelesen')}</span></div>}
       {sel ? (
         <header className="list-head select-head">
           <button className="icon-btn" onClick={done} aria-label={T('Fertig')}><Icon name="close" /></button>
@@ -218,7 +188,6 @@ export function ChatList({ chats, accounts, filter, setFilter, active, onOpen, o
           </div>}
         </header>
       )}
-      {wavesOn && <Waves key={wave?.n ?? 0} color={wave?.color} />}
       <div className="search">
         <Icon name="search" size={18} />
         <input placeholder={T('Suchen')} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -343,14 +312,14 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
       onClick={() => { if (longFired.current) { longFired.current = false; return; } onClick(); }}
       onTouchStart={start} onTouchEnd={cancel} onTouchMove={cancel} onContextMenu={(e) => { e.preventDefault(); onLong(); }}>
       {selecting && <span className={`sel-check ${selected ? 'on' : ''}`}>{selected && <Icon name="check" size={14} />}</span>}
-      <TypingAvatar id={c.id}><Avatar name={c.peer?.name ?? c.title} src={c.avatar} /></TypingAvatar>
+      <Avatar name={c.peer?.name ?? c.title} src={c.avatar} />
       <span className="chat-main">
         <span className="chat-top">
           <span className="chat-title">{c.title}</span>
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">
-          <span className="chat-preview">{(c.lastText && T(c.lastText)) || ' '}</span>
+          <Preview id={c.id} text={(c.lastText && T(c.lastText)) || ' '} />
           {c.autopilot?.on && <span title={T('Autobot an')}>🤖</span>}
           {c.pinned && <Icon name="pin" size={14} className="muted-icon" />}
           {c.muted && <Icon name="belloff" size={14} className="muted-icon" />}
@@ -408,23 +377,8 @@ function SwipeRow({ children, left, right, far, disabled }: { children: React.Re
   );
 }
 
-/** Chor-Wellen: ruhiges Band; mit Farbe schwingt es einmal auf (nur transform/opacity) */
-const WAVE_PATH = (() => {
-  let d = 'M0 6';
-  for (let x = 0; x < 800; x += 20) d += ` Q${x + 5} 1 ${x + 10} 6 T${x + 20} 6`;
-  return d;
-})();
-function Waves({ color }: { color?: string }) {
-  return (
-    <div className={`fx-waves${color ? ' go' : ''}`} style={color ? { color } : undefined} aria-hidden="true">
-      <svg width="800" height="12" viewBox="0 0 800 12"><path d={WAVE_PATH} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
-    </div>
-  );
-}
-
-/** Lebendige Avatare: pulsierender Ring, solange jemand im Chat tippt */
-export function TypingAvatar({ id, children }: { id: string; children: React.ReactNode }) {
-  const on = useFx('typing');
+/** Vorschauzeile; solange jemand tippt, steht dort „schreibt …“ */
+function Preview({ id, text }: { id: string; text: string }) {
   const typing = useTyping(id);
-  return on ? <span className={`fx-typing-av${typing ? ' on' : ''}`}>{children}</span> : <>{children}</>;
+  return typing ? <span className="chat-preview typing-text">{T('schreibt …')}</span> : <span className="chat-preview">{text}</span>;
 }
