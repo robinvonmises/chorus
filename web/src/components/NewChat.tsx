@@ -1,15 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Account, type Chat } from '../api';
+import { api, serverText, type Account, type Chat } from '../api';
 import { NETWORKS } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
 import { T, lang, locale } from '../i18n';
+import { setBroadcast, useBroadcast } from '../broadcastState';
+
+const MAX_BULK = 50;
 
 /** „Neue Nachricht“: Kontakt oder Gruppe suchen oder an eine Nummer schreiben */
 export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
   chats: Chat[]; accounts: Account[]; onOpen: (id: string) => void; onClose: () => void; onFound: (cs: Chat[]) => void;
 }) {
   const [q, setQ] = useState('');
+  // Massen-Nachricht: mehrere Empfänger auswählen, jeder bekommt die Nachricht einzeln über seinen Messenger
+  const [bulk, setBulk] = useState(false);
+  const [picked, setPicked] = useState<Chat[]>([]);
+  const [text, setText] = useState('');
+  const job = useBroadcast();
+  useEffect(() => { api.broadcastJob().then(setBroadcast).catch(() => {}); }, []);
+  const toggle = (c: Chat) => setPicked((p) => p.some((x) => x.id === c.id) ? p.filter((x) => x.id !== c.id) : p.length >= MAX_BULK ? p : [...p, c]);
+  const sendBulk = async () => {
+    setBusy(true); setErr('');
+    try { setBroadcast(await api.broadcast(picked.map((c) => c.id), text.trim())); setPicked([]); setText(''); }
+    catch (e: any) { setErr(serverText(e.message)); }
+    finally { setBusy(false); }
+  };
+  const waSecs = picked.filter((c) => c.network === 'whatsapp').length * 6.5 + picked.filter((c) => c.network !== 'whatsapp').length * 2.5;
   // Kontakte ohne Nachrichten lädt die Chatliste nicht immer mit (Limit), daher zusätzlich auf dem Server suchen
   const [found, setFound] = useState<Chat[]>([]);
   useEffect(() => {
@@ -28,10 +45,11 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
     const s = q.trim().toLowerCase();
     const known = new Set(chats.map((c) => c.id));
     return [...chats, ...found.filter((c) => !known.has(c.id))]
+      .filter((c) => c.network !== 'notes' || !bulk)
       .filter((c) => !s || c.title.toLowerCase().includes(s) || c.remoteId.toLowerCase().includes(s))
       .sort((a, b) => Number(a.kind !== 'direct') - Number(b.kind !== 'direct') || a.title.localeCompare(b.title, locale))
       .slice(0, 300);
-  }, [chats, found, q]);
+  }, [chats, found, q, bulk]);
   const looksLikePhone = /^[+0][\d\s\-/()]{6,}$/.test(q.trim());
 
   const byPhone = async () => {
@@ -45,7 +63,8 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
     <div className="modal-bg" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={T('Neue Nachricht')}>
         <header className="modal-head">
-          <h2>{T('Neue Nachricht')}</h2>
+          <h2>{bulk ? T('Massen-Nachricht') : T('Neue Nachricht')}</h2>
+          <button className={`icon-btn${bulk ? ' on' : ''}`} onClick={() => { setBulk((v) => !v); setErr(''); }} aria-label={T('Massen-Nachricht')} title={T('Eine Nachricht einzeln an mehrere Kontakte')}><Icon name="megaphone" /></button>
           <button className="icon-btn" onClick={onClose} aria-label={T('Schließen')}><Icon name="close" /></button>
         </header>
         <div className="modal-body newchat">
@@ -53,7 +72,28 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
             <Icon name="search" size={18} />
             <input autoFocus autoComplete="off" autoCorrect="off" enterKeyHint="search" placeholder={T('Name, Gruppe oder Telefonnummer')} value={q} onChange={(e) => { setQ(e.target.value); setErr(''); }} />
           </div>
-          {looksLikePhone && (
+          {bulk && (
+            <div className="bc-compose">
+              {job && (job.running || job.done + job.failed > 0) && (
+                <div className="stack">
+                  <div className="bc-progress"><i style={{ width: `${((job.done + job.failed) / job.total) * 100}%` }} /></div>
+                  <small className="muted">{job.running ? T('Sende {0} von {1}{2} …', job.done + job.failed + 1, job.total, job.current ? ` · ${job.current}` : '') : T('Fertig: {0} gesendet{1}', job.done, job.failed ? T(', {0} fehlgeschlagen', job.failed) : '')}</small>
+                </div>
+              )}
+              {picked.length > 0 && (
+                <div className="bc-picked">
+                  {picked.map((c) => <button key={c.id} className="bc-chip" onClick={() => toggle(c)}><span className="dot" style={{ background: NETWORKS[c.network].color }} />{c.title}<Icon name="close" size={14} /></button>)}
+                </div>
+              )}
+              <textarea className="input" placeholder={T('Nachricht an alle – {name} wird durch den Vornamen ersetzt')} value={text} onChange={(e) => setText(e.target.value)} />
+              <div className="row gap">
+                <small className="muted" style={{ flex: 1 }}>{picked.length ? T('{0} Empfänger · jeder bekommt sie einzeln, mit kurzen Pausen (ca. {1} s)', picked.length, Math.round(waSecs)) : T('Wähle unten bis zu {0} Kontakte aus.', MAX_BULK)}</small>
+                <button className="btn primary" disabled={busy || !picked.length || !text.trim() || !!job?.running} onClick={sendBulk}>{busy ? <span className="spinner" /> : T('Senden')}</button>
+              </div>
+              {err && <div className="error">{err}</div>}
+            </div>
+          )}
+          {!bulk && looksLikePhone && (
             <div className="newchat-phone">
               {phoneAccounts.length ? (<>
                 <span>{T('An')}{' '}<b>{q.trim()}</b> {T('schreiben über')}</span>
@@ -72,12 +112,13 @@ export function NewChat({ chats, accounts, onOpen, onClose, onFound }: {
           <ul className="chats">
             {list.map((c) => (
               <li key={c.id}>
-                <button className="chat-item" onClick={() => { onFound([c]); onOpen(c.id); onClose(); }}>
+                <button className={`chat-item${bulk && picked.some((x) => x.id === c.id) ? ' picked' : ''}`} onClick={() => { if (bulk) return toggle(c); onFound([c]); onOpen(c.id); onClose(); }}>
                   <Avatar name={c.title} src={c.avatar} />
                   <span className="chat-main">
                     <span className="chat-top"><span className="chat-title">{c.title}</span></span>
                     <span className="chat-bottom"><span className="chat-preview">{c.kind === 'group' ? T('Gruppe') : c.kind === 'channel' ? T('Kanal') : T('Kontakt')} · {NETWORKS[c.network].name}</span></span>
                   </span>
+                  {bulk && picked.some((x) => x.id === c.id) && <Icon name="check" className="bc-tick" />}
                 </button>
               </li>
             ))}

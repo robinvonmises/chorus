@@ -17,13 +17,15 @@ import { fileURLToPath } from 'node:url';
 import { Vault } from './vault.js';
 import { ProfileRegistry, type ProfileEntry } from './profiles.js';
 import { Store } from './db.js';
-import { Hub, type AdapterFactory } from './hub.js';
+import { Hub, uiLang, type AdapterFactory } from './hub.js';
 import type { Network } from './types.js';
 import { telegramFactory } from './adapters/telegram.js';
 import { demoFactory } from './adapters/demo.js';
 import { signalFactory } from './adapters/signal.js';
 import { whatsappFactory } from './adapters/whatsapp.js';
 import { emailFactory } from './adapters/email.js';
+import { notesFactory } from './adapters/notes.js';
+import { computeStats } from './stats.js';
 import { Ai, AiError } from './ai.js';
 import { Storage, StorageError, type Target } from './storage.js';
 import { Organize, eventIcs, localToUtc } from './organize.js';
@@ -45,7 +47,7 @@ const WEB_DIR = resolve(process.env.WEB_DIR ?? join(dirname(fileURLToPath(import
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB ?? 100);
 mkdirSync(DATA_DIR, { recursive: true });
 
-const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory, email: emailFactory };
+const factories: Partial<Record<Network, AdapterFactory>> = { telegram: telegramFactory, signal: signalFactory, whatsapp: whatsappFactory, email: emailFactory, notes: notesFactory };
 if (process.env.DEMO === '1') factories.demo = demoFactory;
 
 const registry = new ProfileRegistry(DATA_DIR);
@@ -86,6 +88,7 @@ function ctxOf(p: ProfileEntry): Ctx {
     // Früher reichte ein offenes Gerät (z. B. der Desktop), um die Push-Nachricht an alle Geräte zu unterdrücken.
     hub.subscribe((e) => { if (e.type === 'notify') push.notify(store, e.chat, e.message, visibleEndpoints(ctx)); });
     await hub.startAll();
+    await hub.ensureNotes(uiLang(store) === 'de' ? 'Notizen an mich' : 'Notes to self').catch((e) => console.error('[notizen]', e));
     if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
       await hub.addAccount('demo', 'Demo', {});
     }
@@ -221,7 +224,7 @@ app.get('/api/state', async (req) => {
   const c = authed(req);
   return {
     version: VERSION,
-    networks: Object.keys(factories),
+    networks: Object.keys(factories).filter((n) => n !== 'notes'),
     profiles: registry.all().map(publicProfile),
     authed: !!c,
     profile: c ? { id: c.p.id, name: c.p.name, admin: c.p.admin, comfort: c.vault.comfortMode, totp: !!c.vault.totpSecret, avatar: publicProfile(c.p).avatar } : null,
@@ -652,6 +655,25 @@ app.post('/api/chats/:id/ai/quick', async (req) => {
 });
 // ---------- Geplant: zeitversetzt senden, Erinnerungen ----------
 const P = (req: FastifyRequest) => { const p = C(req).planner; if (!p) throw Object.assign(new Error('Nicht bereit'), { statusCode: 503 }); return p; };
+// ---------- Notizen an mich ----------
+app.get('/api/notes', async (req) => ({ ttl: H(req).notesTtl }));
+app.put('/api/notes', async (req) => { const h = H(req); h.notesTtl = Number((req.body as any)?.ttl) || 0; return { ttl: h.notesTtl }; });
+
+// ---------- Massen-Nachricht ----------
+app.get('/api/broadcast', async (req) => H(req).broadcastJob);
+app.post('/api/broadcast', async (req) => {
+  const { chatIds, text } = (req.body ?? {}) as { chatIds?: string[]; text?: string };
+  if (!Array.isArray(chatIds)) throw Object.assign(new Error('Keine Empfänger'), { statusCode: 400 });
+  return H(req).startBroadcast(chatIds.map(String), String(text ?? '').slice(0, 4000));
+});
+
+// ---------- Statistik ----------
+app.get('/api/stats', async (req) => {
+  const q = req.query as { year?: string; tz?: string };
+  const year = q.year && q.year !== 'all' ? Number(q.year) : null;
+  return computeStats(H(req).store, year && year > 1999 && year < 3000 ? year : null, Math.max(-900, Math.min(900, Number(q.tz) || 0)));
+});
+
 app.get('/api/planned', async (req) => P(req).list());
 app.post('/api/planned', async (req) => {
   const b = (req.body ?? {}) as any;
@@ -1252,7 +1274,7 @@ app.get('/api/admin/status', async (req) => {
     disk: fs ? { freeGB: +(fs.bavail * fs.bsize / 1e9).toFixed(1), totalGB: +(fs.blocks * fs.bsize / 1e9).toFixed(1) } : null,
     profiles: registry.all().map((p) => {
       const c = ctxs.get(p.id);
-      return { name: p.name, unlocked: !!c?.vault.unlocked, comfort: !!c?.vault.comfortMode, accounts: c?.hub ? c.hub.accounts().map((a) => ({ network: a.network, state: a.status.state })) : [] };
+      return { name: p.name, unlocked: !!c?.vault.unlocked, comfort: !!c?.vault.comfortMode, accounts: c?.hub ? c.hub.accounts().filter((a) => a.network !== 'notes').map((a) => ({ network: a.network, state: a.status.state })) : [] };
     }),
     ffmpeg: await has('ffmpeg', ['-version']),
     logs: recentLogs.slice(-60).reverse(),

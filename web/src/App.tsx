@@ -20,6 +20,7 @@ import { previewOf } from './components/Message';
 import { T } from './i18n';
 import { clearSnapshot, readSnapshot, writeSnapshot, type Snapshot } from './snapshot';
 import { setTyping } from './effects';
+import { setBroadcast } from './broadcastState';
 
 /**
  * Frisch geladene Liste mit der alten abgleichen: Unveränderte Einträge behalten ihr altes Objekt.
@@ -133,7 +134,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
   useEffect(() => {
     if (!live) return;
     api.planned().then(setPlanned).catch(() => {});
-    api.accounts().then((a) => { setAccounts(a); if (!a.length) setPanel('add'); });
+    api.accounts().then((a) => { setAccounts(a); if (!a.some((x) => x.network !== 'notes')) setPanel('add'); });
     api.chats().then(async (cs) => {
       setChats(new Map(cs.map((c) => [c.id, c])));
       // Die obersten Chats schon vorladen, damit sie beim Antippen sofort da sind
@@ -184,6 +185,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
     else if (e.type === 'message_removed') {
       setMessages((ms) => { const list = ms.get(e.chatId); return list ? new Map(ms).set(e.chatId, list.filter((m) => m.id !== e.id)) : ms; });
     } else if (e.type === 'planned') setPlanned(e.items);
+    else if (e.type === 'broadcast') setBroadcast(e.job);
     else if (e.type === 'reminder') {
       const c = e.chat;
       if (c) {
@@ -397,16 +399,18 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
 
   const chat = active ? chats.get(active) ?? null : null;
   const account = chat ? accounts.find((a) => a.id === chat.accountId) : undefined;
-  const problems = accounts.filter((a) => a.status.state !== 'connected' && a.status.state !== 'connecting');
+  // „Notizen an mich“ ist intern ein eigenes Konto: in Listen, Filtern und Einstellungen nicht als Messenger zeigen
+  const nets = useMemo(() => accounts.filter((a) => a.network !== 'notes'), [accounts]);
+  const problems = nets.filter((a) => a.status.state !== 'connected' && a.status.state !== 'connecting');
 
   const playing = !!usePlayer().track;
   const planned = usePlanned();
   return (
     <div className={`app ${chat ? 'has-chat' : ''} ${playing ? 'with-player' : ''}`}>
       <PlayerBar chatTitle={(id) => chats.get(id)?.title ?? ''} onOpen={openChat} />
-      <Rail filter={filter} setFilter={setFilter} accounts={accounts} chats={sortedChats} onSettings={() => setPanel('settings')} />
+      <Rail filter={filter} setFilter={setFilter} accounts={nets} chats={sortedChats} onSettings={() => setPanel('settings')} />
       <ChatList
-        chats={sortedChats} accounts={accounts} filter={filter} setFilter={setFilter} active={active} onOpen={openChat}
+        chats={sortedChats} accounts={nets} filter={filter} setFilter={setFilter} active={active} onOpen={openChat}
         onAdd={() => setPanel('add')} onSettings={() => setPanel('settings')} onNew={() => setPanel('new')} online={online} problems={problems}
         onFixAccount={() => setPanel('settings')} previewOf={previewOf}
         onChats={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) n.set(c.id, c); return n; })} onRemove={removeChats}
@@ -425,12 +429,12 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
             <img src="/icon.svg?v=4" width={72} alt="" />
             <h2>{T('Chorus')}</h2>
             <p>{T('Wähle links einen Chat aus.')}</p>
-            {!accounts.length && <button className="btn primary" onClick={() => setPanel('add')}>{T('Messenger verbinden')}</button>}
+            {!nets.length && <button className="btn primary" onClick={() => setPanel('add')}>{T('Messenger verbinden')}</button>}
           </div>
         )}
       </main>
-      {panel === 'add' && <AccountWizard server={server} accounts={accounts} onClose={() => setPanel(null)} />}
-      {panel === 'new' && <NewChat chats={sortedChats} accounts={accounts} onOpen={openChat} onClose={() => setPanel(null)}
+      {panel === 'add' && <AccountWizard server={server} accounts={nets} onClose={() => setPanel(null)} />}
+      {panel === 'new' && <NewChat chats={sortedChats} accounts={nets} onOpen={openChat} onClose={() => setPanel(null)}
         onFound={(cs) => setChats((m) => { const n = new Map(m); for (const c of cs) if (!n.has(c.id)) n.set(c.id, c); return n; })} />}
       <Lightbox />
       <FileViewer />
@@ -442,7 +446,7 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
         </button>
       )}
       {gallery && <Gallery chatIds={gallery.ids} title={gallery.title} chats={chats} onClose={() => setGallery(null)} onOpen={(m) => void openAt(m)} />}
-      {panel === 'settings' && <Settings server={server} accounts={accounts} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} onReload={reload} />}
+      {panel === 'settings' && <Settings server={server} accounts={nets} onOpenChat={(id) => { setPanel(null); openChat(id); }} onClose={() => setPanel(null)} onAdd={() => setPanel('add')} onLocked={onLocked} onProfileChanged={onRefresh} onReload={reload} />}
     </div>
   );
 }
