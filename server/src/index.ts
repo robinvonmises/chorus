@@ -8,6 +8,7 @@ import cookie from '@fastify/cookie';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
 import { thumbnail } from './thumbs.js';
+import { emojiCache } from './emoji.js';
 import fastifyStatic from '@fastify/static';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
@@ -878,6 +879,14 @@ app.get('/api/export', async (req, reply) => {
   });
   try { await exportZip(h, reply.raw, chat ? [chat.id] : null); }
   catch (e) { app.log.error(e); reply.raw.destroy(e as Error); }
+});
+// ---------- Animierte Emojis für Reaktionen ----------
+const emojiFile = emojiCache(DATA_DIR);
+app.get('/api/emoji/:file', async (req, reply) => {
+  const code = String((req.params as any).file).replace(/\.webp$/, '');
+  const b = await emojiFile(code);
+  if (!b) return reply.code(404).header('cache-control', 'max-age=86400').send({ error: 'Nicht gefunden' });
+  return reply.header('content-type', 'image/webp').header('cache-control', 'private, max-age=31536000, immutable').send(b);
 });
 // ---------- GIFs (GIPHY oder KLIPY) ----------
 app.get('/api/gifs/settings', async (req) => gifPublic(H(req).store));
