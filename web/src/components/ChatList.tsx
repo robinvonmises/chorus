@@ -5,6 +5,7 @@ import type { Filter } from '../App';
 import { NETWORKS, askMailDelete, dayLabel, listTime } from '../util';
 import { Avatar } from './Rail';
 import { Icon } from './Icon';
+import { StatusIcon } from './Message';
 import { T } from '../i18n';
 import { useTyping } from '../effects';
 
@@ -320,7 +321,7 @@ function ChatRow({ c, active, selecting, selected, onClick, onLong }: {
           <span className={`chat-time ${c.unread && !c.muted ? 'accent' : ''}`}>{listTime(c.lastTs)}</span>
         </span>
         <span className="chat-bottom">
-          <Preview id={c.id} text={(c.lastText && T(c.lastText)) || ' '} draft={!active && c.draft?.trim() ? c.draft : null} />
+          <Preview id={c.id} text={(c.lastText && T(c.lastText)) || ' '} draft={!active && c.draft?.trim() ? c.draft : null} mine={c.lastMine} />
           {c.autopilot?.on && <span title={T('Autobot an')}>🤖</span>}
           {c.pinned && <Icon name="pin" size={14} className="muted-icon" />}
           {c.muted && <Icon name="belloff" size={14} className="muted-icon" />}
@@ -379,9 +380,9 @@ function SwipeRow({ children, left, right, far, disabled }: { children: React.Re
 }
 
 /** Vorschauzeile; solange jemand tippt, steht dort „schreibt …“ */
-function Preview({ id, text, draft }: { id: string; text: string; draft?: string | null }) {
+function Preview({ id, text, draft, mine }: { id: string; text: string; draft?: string | null; mine?: Chat['lastMine'] }) {
   const typing = useTyping(id);
   if (typing) return <span className="chat-preview typing-text">{T('schreibt …')}</span>;
   if (draft) return <span className="chat-preview"><span className="draft-label">{T('Entwurf:')}</span> {draft.replace(/\s+/g, ' ')}</span>;
-  return <span className="chat-preview">{text}</span>;
+  return <span className="chat-preview">{mine && <span className="list-st"><StatusIcon s={mine} /></span>}{text}</span>;
 }

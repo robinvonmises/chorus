@@ -1132,6 +1132,8 @@ input.switch:checked::after { left: 2px; transform: translateX(20px); }
 .pin-bar-main b { font-size: 12px; font-weight: 600; color: var(--accent); }
 .pin-bar-main span { font-size: 13px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meta .mark-tag { display: inline-flex; opacity: .75; }
+.list-st { display: inline-flex; vertical-align: -3px; margin-right: 3px; color: var(--ink-3); }
+.list-st .st.failed { color: var(--danger); }
 .draft-label { color: var(--danger); font-weight: 600; }
 .gallery-starred-main { flex: 1; min-width: 0; display: grid; gap: 2px; background: none; border: 0; padding: 0; font: inherit; color: var(--ink); text-align: left; cursor: pointer; }
 .gallery-starred-main small { color: var(--ink-3); font-size: 12px; }

@@ -39,6 +39,8 @@ export interface Chat {
   kind: 'direct' | 'group' | 'channel';
   lastTs: number;
   lastText: string;
+  /** Status der letzten Nachricht, wenn sie von mir ist (für die Haken in der Chatliste) */
+  lastMine?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | null;
   unread: number;
   pinned: boolean;
   muted: boolean;

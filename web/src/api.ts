@@ -13,7 +13,9 @@ export interface AccountStatus {
 export interface Account { id: string; network: Network; label: string; status: AccountStatus; createdAt: number }
 export interface Chat {
   id: string; accountId: string; network: Network; remoteId: string; title: string;
-  kind: 'direct' | 'group' | 'channel'; lastTs: number; lastText: string; unread: number; pinned: boolean; muted: boolean;
+  kind: 'direct' | 'group' | 'channel'; lastTs: number; lastText: string; unread: number;
+  /** Status der letzten Nachricht, wenn sie von mir ist (Haken in der Chatliste) */
+  lastMine?: 'pending' | 'sent' | 'delivered' | 'read' | 'failed' | null; pinned: boolean; muted: boolean;
   aiEnabled?: boolean;
   autopilot?: Autopilot | null;
   translate?: { on: boolean; lang?: string | null; langName?: string | null; out?: boolean; fixed?: boolean } | null;

@@ -169,7 +169,7 @@ function DetectHint({ m, onDetect }: { m: Message; onDetect: (m: Message) => voi
   return <button className="transcribe-btn detect-btn" onClick={(e) => { e.stopPropagation(); onDetect(m); }}>{HINT_ICON[h]} {HINT_LABEL[h]()}</button>;
 }
 
-function StatusIcon({ s }: { s: Message['status'] }) {
+export function StatusIcon({ s }: { s: Message['status'] }) {
   if (s === 'pending') return <Icon name="clock" size={14} className="st" />;
   if (s === 'failed') return <span className="st failed" title={T('Nicht gesendet')}><Icon name="alert" size={14} /></span>;
   if (s === 'read') return <Icon name="checks" size={16} className="st read" />;
