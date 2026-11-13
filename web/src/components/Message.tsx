@@ -2,6 +2,7 @@ import { haptic } from '../haptics';
 import { memo, useEffect, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { openFile, openMail } from './FileViewer';
+import { MediaSpin, loaded } from './MediaSpin';
 import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
 import { NETWORKS, adjLang, duration, fileSize, hue, isOnlyEmoji, msgTime } from '../util';
 import type { Network } from '../api';
@@ -208,9 +209,10 @@ function Mosaic({ tiles, lead }: { tiles: { m: Message; a: Attachment; i: number
 /** Kleine Vorschau vom Server (?thumb=1); falls es keine gibt, das Original */
 export function MediaThumb({ m, a, i }: { m: Message; a: Attachment; i: number }) {
   const [failed, setFailed] = useState(false);
-  if (failed && a.kind === 'video') return <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" /><span className="gallery-play"><Icon name="play" size={18} /></span></>;
+  if (failed && a.kind === 'video') return <><video src={`${attachmentUrl(m, i)}#t=0.1`} muted playsInline preload="metadata" onLoadedData={loaded} onLoadedMetadata={loaded} onError={loaded} /><MediaSpin /><span className="gallery-play"><Icon name="play" size={18} /></span></>;
   return <>
-    <img src={failed ? attachmentUrl(m, i) : thumbUrl(m, i)} alt="" loading="lazy" decoding="async" onError={() => !failed && setFailed(true)} />
+    <img src={failed ? attachmentUrl(m, i) : thumbUrl(m, i)} alt="" loading="lazy" decoding="async" onLoad={loaded} onError={(e) => failed ? loaded(e) : setFailed(true)} />
+    <MediaSpin />
     {a.kind === 'video' && <span className="gallery-play"><Icon name="play" size={18} /></span>}
   </>;
 }
@@ -236,7 +238,7 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), ref: { m, i } }); }}>
-        {!pending && <img src={/^image\/gif/i.test(a.mime) ? url : thumbUrl(m, i)} alt={a.name} loading="lazy" decoding="async" onError={() => setFailed(true)} />}
+        {!pending && <><img src={/^image\/gif/i.test(a.mime) ? url : thumbUrl(m, i)} alt={a.name} loading="lazy" decoding="async" onLoad={loaded} onError={() => setFailed(true)} /><MediaSpin /></>}
       </a>
     );
   }
