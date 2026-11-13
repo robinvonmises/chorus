@@ -261,7 +261,7 @@ export class WhatsAppAdapter implements Adapter {
     const atts: Attachment[] = [];
     const ref = () => JSON.stringify({ key, message: m.message }, BufferJSON.replacer);
     if (content.imageMessage) { const i = content.imageMessage; text = i.caption ?? ''; atts.push({ fileId: null, remoteRef: ref(), name: `foto-${key.id}.jpg`, mime: i.mimetype ?? 'image/jpeg', size: Number(i.fileLength ?? 0), kind: 'image', width: i.width ?? undefined, height: i.height ?? undefined }); }
-    if (content.videoMessage) { const v = content.videoMessage; text = v.caption ?? ''; atts.push({ fileId: null, remoteRef: ref(), name: `video-${key.id}.mp4`, mime: v.mimetype ?? 'video/mp4', size: Number(v.fileLength ?? 0), kind: 'video', durationSec: v.seconds ?? undefined, width: v.width ?? undefined, height: v.height ?? undefined }); }
+    if (content.videoMessage) { const v = content.videoMessage; text = v.caption ?? ''; atts.push({ fileId: null, remoteRef: ref(), name: `video-${key.id}.mp4`, mime: v.mimetype ?? 'video/mp4', size: Number(v.fileLength ?? 0), kind: 'video', ...(v.gifPlayback ? { gif: true } : {}), durationSec: v.seconds ?? undefined, width: v.width ?? undefined, height: v.height ?? undefined }); }
     if (content.audioMessage) { const a = content.audioMessage; atts.push({ fileId: null, remoteRef: ref(), name: a.ptt ? 'sprachnachricht.ogg' : `audio-${key.id}`, mime: a.mimetype ?? 'audio/ogg', size: Number(a.fileLength ?? 0), kind: a.ptt ? 'voice' : 'audio', durationSec: a.seconds ?? undefined }); }
     if (content.documentMessage) { const d = content.documentMessage; text = d.caption ?? ''; atts.push({ fileId: null, remoteRef: ref(), name: d.fileName ?? 'datei', mime: d.mimetype ?? 'application/octet-stream', size: Number(d.fileLength ?? 0), kind: 'file' }); }
     if (content.stickerMessage) { const s = content.stickerMessage; atts.push({ fileId: null, remoteRef: ref(), name: 'sticker.webp', mime: s.mimetype ?? 'image/webp', size: Number(s.fileLength ?? 0), kind: 'sticker' }); }
@@ -318,7 +318,7 @@ export class WhatsAppAdapter implements Adapter {
     const content = f.voice
       ? { audio: f.data, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: Math.max(1, Math.round(f.durationSec ?? 1)), waveform: wave }
       : f.mime.startsWith('image/') && !f.mime.includes('svg') ? { image: f.data, caption, mimetype: f.mime }
-      : f.mime.startsWith('video/') ? { video: f.data, caption, mimetype: f.mime }
+      : f.mime.startsWith('video/') ? { video: f.data, caption, mimetype: f.mime, ...(f.gif ? { gifPlayback: true } : {}) }
       : f.mime.startsWith('audio/') ? { audio: f.data, mimetype: f.mime }
       : { document: f.data, fileName: f.name, mimetype: f.mime, caption };
     const r = await this.s.sendMessage(chat, content as any, { quoted });

@@ -244,7 +244,9 @@ export class TelegramAdapter implements Adapter {
       replyTo: replyTo ? Number(replyTo) : undefined,
       voiceNote: !!f.voice,
       forceDocument: !f.voice && !/^(image|video)\//.test(f.mime),
-      attributes: f.voice ? [new Api.DocumentAttributeAudio({ voice: true, duration: Math.round(f.durationSec ?? 0) })] : undefined,
+      attributes: f.voice ? [new Api.DocumentAttributeAudio({ voice: true, duration: Math.round(f.durationSec ?? 0) })]
+        : f.gif && f.mime === 'video/mp4' ? [new Api.DocumentAttributeVideo({ duration: 0, w: f.width ?? 0, h: f.height ?? 0, supportsStreaming: true }), new Api.DocumentAttributeAnimated()]
+        : undefined,
     });
     return String(r.id);
   }
@@ -327,16 +329,17 @@ function mediaToAttachments(m: Api.Message): Attachment[] {
     const d = media.document;
     let name = `datei-${m.id}`;
     let kind: Attachment['kind'] = 'file';
-    let durationSec: number | undefined, width: number | undefined, height: number | undefined;
+    let durationSec: number | undefined, width: number | undefined, height: number | undefined, gif = false;
     for (const a of d.attributes) {
       if (a instanceof Api.DocumentAttributeFilename) name = a.fileName;
       else if (a instanceof Api.DocumentAttributeAudio) { kind = a.voice ? 'voice' : 'audio'; durationSec = a.duration; }
       else if (a instanceof Api.DocumentAttributeVideo) { kind = a.roundMessage ? 'video' : 'video'; durationSec = a.duration; width = a.w; height = a.h; }
       else if (a instanceof Api.DocumentAttributeSticker) kind = 'sticker';
+      else if (a instanceof Api.DocumentAttributeAnimated) gif = true;
       else if (a instanceof Api.DocumentAttributeImageSize) { width = a.w; height = a.h; }
     }
     if (kind === 'file' && d.mimeType.startsWith('image/')) kind = 'image';
-    return [{ fileId: null, name, mime: d.mimeType, size: Number(d.size.toString()), kind, durationSec, width, height }];
+    return [{ fileId: null, name, mime: d.mimeType, size: Number(d.size.toString()), kind, durationSec, width, height, ...(gif && kind === 'video' ? { gif: true } : {}) }];
   }
   return [];
 }

@@ -1,4 +1,4 @@
-import { memo, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { openLightbox } from './Lightbox';
 import { openFile } from './FileViewer';
 import { attachmentUrl, thumbUrl, type Attachment, type Message } from '../api';
@@ -18,6 +18,7 @@ export function previewOf(m: Message): string {
   const a = m.attachments[0];
   if (m.text) return (a && a.kind !== 'sticker' ? ATT_ICON[a.kind] + ' ' : '') + m.text;
   if (!a) return '';
+  if (a.gif || /^image\/gif/i.test(a.mime)) return 'GIF';
   return { image: '📷 ' + T('Foto'), video: '🎬 ' + T('Video'), audio: '🎵 Audio', voice: '🎤 ' + T('Sprachnachricht'), file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
@@ -137,7 +138,7 @@ function StatusIcon({ s }: { s: Message['status'] }) {
 }
 
 /** Kommt ins Mosaik: Foto oder Video (keine Sticker, keine GIF-Animationen) */
-function isTile(a: Attachment) { const k = effKind(a); return (k === 'image' && !/gif/i.test(a.mime)) || k === 'video'; }
+function isTile(a: Attachment) { const k = effKind(a); return !a.gif && ((k === 'image' && !/gif/i.test(a.mime)) || k === 'video'); }
 
 /** Ist die Nachricht ein reines Foto/Video ohne Text, Zitat o. ä.? Dann darf sie sich einem Album anschließen. */
 export function albumable(m: Message, lead = false) {
@@ -196,14 +197,28 @@ export function AttachmentView({ m, a: raw, i }: { m: Message; a: Attachment; i:
     return (
       <a className={`att-img ${a.kind}`} href={pending ? undefined : url} style={sized}
         onClick={(e) => { e.preventDefault(); if (!pending) openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), ref: { m, i } }); }}>
-        {!pending && <img src={thumbUrl(m, i)} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
+        {!pending && <img src={/^image\/gif/i.test(a.mime) ? url : thumbUrl(m, i)} alt={a.name} loading="lazy" onError={() => setFailed(true)} />}
       </a>
     );
   }
+  // GIF als Video (WhatsApp, Telegram): stumm in Schleife wie ein Bild, Tippen öffnet die Großansicht
+  if (a.kind === 'video' && a.gif) return <GifVideo url={pending ? undefined : url} a={a} onOpen={() => !pending && openLightbox({ src: url, name: a.name, download: attachmentUrl(m, i, true), video: true, ref: { m, i } })} />;
   if (a.kind === 'video') return <video className="att-video" src={pending ? undefined : url} controls preload="none" playsInline
     style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined} />;
   if (a.kind === 'voice' || a.kind === 'audio') return <VoicePlayer m={m} i={i} url={pending ? null : `${url}&play=1`} dur={a.durationSec} voice={a.kind === 'voice'} name={a.name} />;
   return <FileCard m={m} a={a} i={i} />;
+}
+
+/** Läuft nur, solange es sichtbar ist (spart Akku und Speicher in langen Chats) */
+function GifVideo({ url, a, onOpen }: { url?: string; a: Attachment; onOpen: () => void }) {
+  const v = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const el = v.current; if (!el || !url) return;
+    const io = new IntersectionObserver((e) => { if (e[0].isIntersecting) el.play().catch(() => {}); else el.pause(); }, { rootMargin: '100px' });
+    io.observe(el); return () => io.disconnect();
+  }, [url]);
+  return <video ref={v} className="att-video att-gif" src={url} muted loop playsInline preload="metadata" disableRemotePlayback onClick={onOpen}
+    style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}`, width: a.width } : undefined} />;
 }
 
 function FileCard({ m, a, i, note }: { m: Message; a: Attachment; i: number; note?: string }) {

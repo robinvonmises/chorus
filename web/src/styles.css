@@ -1120,3 +1120,14 @@ html.fx-night .badge:not(.muted) { animation: fx-breathe 4s ease-in-out infinite
 .fx-typing-av.on::after { opacity: 1; transform: scale(1); animation: fx-typing 1.4s ease-in-out infinite; }
 @keyframes fx-typing { 0%, 100% { transform: scale(1); opacity: .95; } 50% { transform: scale(1.08); opacity: .4; } }
 @media (prefers-reduced-motion: reduce) { .fx-typing-av.on::after { animation: none; } }
+
+/* GIFs */
+.gif-badge { font-size: 10px; font-weight: 800; letter-spacing: .03em; line-height: 1; padding: 3px 4px; border: 1.8px solid currentColor; border-radius: 5px; }
+.im-sheet .center { text-align: center; }
+.gif-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); grid-auto-rows: 100px; gap: 4px; }
+.gif-tile { padding: 0; border: 0; background: var(--line); border-radius: 8px; overflow: hidden; cursor: pointer; }
+.gif-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gif-setup { display: grid; gap: 10px; }
+.gif-setup p { margin: 0; }
+.gif-setup .row { gap: 8px; }
+.att-video.att-gif { cursor: pointer; }

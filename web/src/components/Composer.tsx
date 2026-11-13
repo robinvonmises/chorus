@@ -11,6 +11,7 @@ import { previewOf } from './Message';
 import { useStorage } from '../storageState';
 import { NextcloudBrowser } from './NextcloudBrowser';
 import { ImmichPicker } from './ImmichPicker';
+import { GifPicker } from './GifPicker';
 import { useAi } from '../aiState';
 import { WhenPicker, whenLabel } from './WhenPicker';
 import { T, lang, locale } from '../i18n';
@@ -28,6 +29,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
   // Übersetzung an, aber noch keine Sprache bekannt: Hinweis zum Wählen
   const trUnknown = !!(tr?.on && tr.out !== false && !tr.lang);
   const [noTr, setNoTr] = useState(false);
+  const [gifPick, setGifPick] = useState(false);
   const [when, setWhen] = useState(false);
   const [text, setText] = useState(() => localStorage.getItem(draftKey) ?? '');
   const [emoji, setEmoji] = useState(false);
@@ -264,6 +266,10 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           {storage?.nextcloud.enabled && <button onClick={() => { setAttMenu(false); setNcPick(true); }}><Icon name="folder" size={18} />{T('Aus Nextcloud')}</button>}
         </div>
       </>}
+      {gifPick && <GifPicker onClose={() => setGifPick(false)} onPick={(g) => {
+        setGifPick(false); onSent();
+        api.sendGif(chat.id, g.id, replyTo?.remoteId).catch((e: any) => onError(e.message));
+      }} />}
       {imPick && <ImmichPicker onClose={() => setImPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
       {ncPick && <NextcloudBrowser mode="pick" onClose={() => setNcPick(false)} onPick={(add) => setFiles((f) => [...f, ...add])} />}
       {rec ? (
@@ -279,6 +285,7 @@ export function Composer({ chat, onPickLang, draftId, placeholder, onResize, dis
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>}
           {!editing && <button className={`icon-btn tool ${attMenu ? 'on' : ''}`} onClick={() => { if (storage?.immich.enabled || storage?.nextcloud.enabled) setAttMenu((v) => !v); else fileIn.current?.click(); }} aria-label={T('Anhängen')}><Icon name="attach" /></button>}
           <button className={`icon-btn tool ${emoji ? 'on' : ''}`} onClick={() => setEmoji((v) => !v)} aria-label="Emoji"><Icon name="smile" /></button>
+          {!editing && <button className="icon-btn tool gif-btn" onClick={() => { setEmoji(false); setGifPick(true); }} aria-label="GIF" title={T('GIF senden')}><span className="gif-badge">GIF</span></button>}
           <textarea ref={ta} rows={1} value={text} placeholder={disabled ? T('Nicht verbunden') : placeholder ?? T('Nachricht')} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
