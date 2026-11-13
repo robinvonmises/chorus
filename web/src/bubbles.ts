@@ -1,12 +1,12 @@
 import type { Network } from './api';
 import { T } from './i18n';
 
-/** App-Farbe (Knöpfe, Markierungen, eigene Sprechblasen). Standard: Smaragd */
+/** App-Farbe (Knöpfe, Markierungen, eigene Sprechblasen). Standard: Ozeanblau */
 export type Accent = { id: string; name: string; brand: string; soft: string; dark: string; darkSoft: string };
 export const ACCENTS: Accent[] = [
+  { id: 'ocean', name: T('Ozeanblau'), brand: '#2563eb', soft: '#eff6ff', dark: '#60a5fa', darkSoft: '#172340' },
   { id: 'emerald', name: T('Smaragd'), brand: '#059669', soft: '#ecfdf5', dark: '#34d399', darkSoft: '#0f2a22' },
   { id: 'petrol', name: T('Petrol'), brand: '#0d9488', soft: '#f0fdfa', dark: '#2dd4bf', darkSoft: '#0f2a29' },
-  { id: 'ocean', name: T('Ozeanblau'), brand: '#2563eb', soft: '#eff6ff', dark: '#60a5fa', darkSoft: '#172340' },
   { id: 'indigo', name: T('Indigo'), brand: '#4f46e5', soft: '#eef2ff', dark: '#818cf8', darkSoft: '#23264a' },
   { id: 'violet', name: T('Violett'), brand: '#9333ea', soft: '#faf5ff', dark: '#c084fc', darkSoft: '#2d1a45' },
   { id: 'coral', name: T('Koralle'), brand: '#e11d48', soft: '#fff1f2', dark: '#fb7185', darkSoft: '#3a1520' },
@@ -14,7 +14,15 @@ export const ACCENTS: Accent[] = [
   { id: 'graphite', name: T('Graphit'), brand: '#334155', soft: '#f1f5f9', dark: '#94a3b8', darkSoft: '#1f2630' },
 ];
 const ACCENT_KEY = 'inbox:accent';
-export function loadAccent(): Accent { const id = localStorage.getItem(ACCENT_KEY); return ACCENTS.find((a) => a.id === id) ?? ACCENTS[0]; }
+export function loadAccent(): Accent {
+  // Smaragd war nur kurz Standard (v1): wer es da gespeichert hat, bekommt einmalig den neuen Standard
+  if (localStorage.getItem('inbox:accentV') !== '2') {
+    if (localStorage.getItem(ACCENT_KEY) === 'emerald') localStorage.removeItem(ACCENT_KEY);
+    localStorage.setItem('inbox:accentV', '2');
+  }
+  const id = localStorage.getItem(ACCENT_KEY);
+  return ACCENTS.find((a) => a.id === id) ?? ACCENTS[0];
+}
 export function applyAccent(a = loadAccent()) {
   const st = document.documentElement.style;
   if (a.id === ACCENTS[0].id) { for (const k of ['--brand', '--brand-soft', '--brand-dark', '--brand-dark-soft']) st.removeProperty(k); return; }
