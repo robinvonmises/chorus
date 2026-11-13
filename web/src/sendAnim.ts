@@ -69,31 +69,45 @@ export function rise(msg: Element | null | undefined) {
     msg.style.opacity = '0';
     if (mo && list) mo.observe(list, { childList: true });
 
-    /* Ablauf nach Waynes iMessage-Aufnahme (16:05, 30 fps):
-       1. Im Feld, wie hinter Milchglas: blass und unscharf, feldbreit, schrumpft nach rechts.
-       2. Taucht oben hinter der Leiste auf, dabei kleiner (~82 %) und wird scharf.
-       3. Wächst an ihrem Platz auf volle Größe. */
+    /* Ablauf nach Waynes iMessage-Aufnahme (16:05, 30 fps) und Feinschliff (13.11.):
+       1. Im Feld, wie hinter Milchglas: blass und unscharf, feldbreit, wird schnell nach rechts gedrückt.
+       2. Noch während sie nach rechts ausläuft, steigt sie langsam auf (X und Y getrennt getaktet,
+          dadurch eine runde Bahn statt einer Ecke), dabei kleiner (~82 %) und scharf.
+       3. Wächst an ihrem Platz auf volle Größe.
+       Die Bahn wird vorab in dichte Schlüsselbilder gerechnet: weiterhin nur transform/filter/opacity
+       auf einem Element, Safari bekommt dasselbe wie vorher, nur mehr Stützpunkte. */
     const dy = Math.round((f.top + f.height / 2) - (b.top + b.height / 2));
     const dx = Math.round(Math.min(0, f.right - b.right));
     const bw0 = Math.max(b.width, f.width);
     const tx = Math.round(Math.min(0, f.left - (b.left + dx)));
-    const T = 850, A = 0.3; // Wayne: eher 0,8–1 s
-    const slide = 'cubic-bezier(.45, .05, .25, 1)', up = 'cubic-bezier(.25, .7, .3, 1)', grow = 'cubic-bezier(.3, .6, .3, 1)';
+    const T = 850; // Wayne: eher 0,8–1 s
+    const X1 = 0.26, Y0 = 0.1, Y1 = 0.66; // Anteile von T: nach rechts bis X1, Aufstieg von Y0 bis Y1, dann Wachsen
+    const push = bezier(0.2, 0.85, 0.35, 1), lift = bezier(0.45, 0, 0.2, 1), grow = bezier(0.3, 0.6, 0.3, 1);
+    const part = (t: number, a: number, z: number) => Math.min(1, Math.max(0, (t - a) / (z - a)));
+    const N = 40;
+    const frames: Keyframe[] = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      const px = push(part(t, 0, X1)), py = lift(part(t, Y0, Y1)), pg = grow(part(t, Y1, 1));
+      const s = 1 - 0.18 * px + 0.06 * py + 0.12 * pg;
+      frames.push({
+        offset: t,
+        transform: `translate(${(dx * (1 - px)).toFixed(1)}px, ${(dy * (1 - py)).toFixed(1)}px) scale(${s.toFixed(4)})`,
+        filter: `blur(${Math.max(0, 5 - 2 * px - 3 * py).toFixed(2)}px)`,
+        opacity: Math.min(1, 0.5 + 0.25 * px + 0.25 * py),
+      });
+    }
+    const pushCss = 'cubic-bezier(.2, .85, .35, 1)';
     const anims = [
-      layer.animate([
-        { transform: `translate(${dx}px, ${dy}px) scale(1)`, filter: 'blur(5px)', opacity: 0.5, easing: slide },
-        { offset: A, transform: `translate(0px, ${dy}px) scale(.82)`, filter: 'blur(3px)', opacity: 0.75, easing: up },
-        { offset: 0.62, transform: 'translate(0px, 0px) scale(.88)', filter: 'blur(0px)', opacity: 1, easing: grow },
-        { transform: 'translate(0px, 0px) scale(1)', filter: 'blur(0px)', opacity: 1 },
-      ], { duration: T }),
+      layer.animate(frames, { duration: T }),
       bg.animate([
-        { width: `${bw0}px`, easing: slide },
-        { offset: A, width: `${b.width}px` },
+        { width: `${bw0}px`, easing: pushCss },
+        { offset: X1, width: `${b.width}px` },
         { width: `${b.width}px` },
       ], { duration: T }),
       copy.animate([
-        { transform: `translateX(${tx}px)`, easing: slide },
-        { offset: A, transform: 'translateX(0px)' },
+        { transform: `translateX(${tx}px)`, easing: pushCss },
+        { offset: X1, transform: 'translateX(0px)' },
         { transform: 'translateX(0px)' },
       ], { duration: T }),
     ];
@@ -103,4 +117,18 @@ export function rise(msg: Element | null | undefined) {
   } catch {
     restore();
   }
+}
+
+/** CSS-cubic-bezier als Funktion (x → y), für die vorab gerechneten Schlüsselbilder. */
+function bezier(x1: number, y1: number, x2: number, y2: number) {
+  const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
+  const cy = 3 * y1, by = 3 * (y2 - y1) - cy, ay = 1 - cy - by;
+  const sx = (u: number) => ((ax * u + bx) * u + cx) * u;
+  return (x: number) => {
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    let lo = 0, hi = 1, u = x;
+    for (let i = 0; i < 30; i++) { u = (lo + hi) / 2; if (sx(u) < x) lo = u; else hi = u; }
+    return ((ay * u + by) * u + cy) * u;
+  };
 }
