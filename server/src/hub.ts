@@ -75,6 +75,8 @@ export class Hub {
   private account(id: string): Account | undefined { return this.accounts().find((a) => a.id === id); }
 
   async startAll() {
+    const ghosts = this.store.clearGhostDrafts();
+    if (ghosts) console.log(`[hub] ${ghosts} alte Entwürfe gelöscht (schon gesendet)`);
     for (const r of this.store.listAccountRows()) await this.startAccount(r.id).catch((e) => console.error('[hub] start', r.id, e));
   }
 
@@ -120,6 +122,7 @@ export class Hub {
           if (!msg.fromMe && Date.now() - msg.ts < 60_000 && !chat.muted && !chat.archived) this.emit({ type: 'notify', chat, message: msg });
           if (Date.now() - msg.ts < 5 * 60_000) this.fire(msg.fromMe ? this.own : this.incoming, chat, msg);
           if (msg.attachments.some((a) => !a.fileId)) this.queueMedia(msg.id);
+          this.draftSent(cid, msg);
         }
         this.emit({ type: 'message', message: msg });
       },
@@ -220,7 +223,13 @@ export class Hub {
       replyToRemoteId: replyTo ?? null, edited: false, deleted: false, attachments, status: 'pending',
     });
     this.emit({ type: 'message', message: msg });
+    this.draftSent(chat.id, msg);
     return msg;
+  }
+  /** Gesendet (aus Chorus oder vom Handy): passenden Entwurf löschen und den Geräten melden */
+  private draftSent(chatId: string, msg: Message) {
+    if (!msg.fromMe) return;
+    for (const id of this.store.clearSentDraft(chatId, [msg.text, msg.translation])) this.emitChat(id);
   }
 
   private async finish(chat: Chat, tmp: Message, send: () => Promise<string>): Promise<Message | null> {

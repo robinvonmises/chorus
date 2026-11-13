@@ -61,17 +61,30 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
   const [speaking, setSpeaking] = useState(false);
   const ai = useAi();
 
+  const serverTs = useRef(serverDraft?.ts ?? 0);
+  serverTs.current = Math.max(serverTs.current, serverDraft?.ts ?? 0);
   useEffect(() => {
+    if (editing) return; // Bearbeiten ist kein Entwurf
     localStorage.setItem(draftKey, text); if (!text) localStorage.removeItem(draftKey);
-    if (editing || text === synced.current) return;
-    const ts = Date.now(); localTs.current = ts; localStorage.setItem(draftTsKey, String(ts));
+    if (text === synced.current) return;
+    // Leeren (z. B. nach dem Senden) muss immer gewinnen, auch wenn die Uhr eines anderen Geräts vorgeht
+    const ts = text.trim() ? Date.now() : Math.max(Date.now(), serverTs.current + 1);
+    localTs.current = ts; localStorage.setItem(draftTsKey, String(ts));
     const id = draftId ?? chat.id, t = text;
-    pushDraft.current = () => { syncTimer.current = null; synced.current = t; void api.saveDraft(id, t.trim() ? t : '', ts).catch(() => {}); };
+    const save = (retry: boolean): void => void api.saveDraft(id, t.trim() ? t : '', ts).catch(() => { if (retry) setTimeout(() => save(false), 3000); });
+    pushDraft.current = () => { syncTimer.current = null; synced.current = t; save(true); };
     if (syncTimer.current) clearTimeout(syncTimer.current);
     if (!t.trim()) pushDraft.current(); else syncTimer.current = setTimeout(() => pushDraft.current(), 800);
   }, [text, draftKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // Beim Verlassen des Chats den letzten Stand sofort speichern
   useEffect(() => () => { if (syncTimer.current) { clearTimeout(syncTimer.current); pushDraft.current(); } }, []);
+  // Server hat noch einen älteren Entwurf als dieses Gerät (z. B. Leeren nach dem Senden ging verloren): nachziehen
+  useEffect(() => {
+    if (editing || !serverDraft?.text?.trim() || !serverDraft.ts || serverDraft.ts > localTs.current || serverDraft.text === text) return;
+    const ts = Math.max(localTs.current, serverDraft.ts + 1);
+    localTs.current = ts; localStorage.setItem(draftTsKey, String(ts)); synced.current = text;
+    void api.saveDraft(draftId ?? chat.id, text.trim() ? text : '', ts).catch(() => {});
+  }, [draftId, chat.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // Auf einem anderen Gerät weitergeschrieben: übernehmen, solange hier nicht gerade getippt wird
   useEffect(() => {
     if (!serverDraft?.ts || serverDraft.ts <= localTs.current || editing) return;
@@ -79,7 +92,12 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
     localTs.current = serverDraft.ts; localStorage.setItem(draftTsKey, String(serverDraft.ts));
     synced.current = serverDraft.text ?? ''; setText(serverDraft.text ?? '');
   }, [serverDraft?.ts]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (editing) { setText(editing.text); ta.current?.focus(); } }, [editing]);
+  // Bearbeiten beendet (auch über „Antworten“): bearbeiteten Text nicht als Entwurf stehen lassen
+  const editedText = useRef<string | null>(null);
+  useEffect(() => {
+    if (editing) { editedText.current = editing.text; setText(editing.text); ta.current?.focus(); }
+    else if (editedText.current !== null) { const was = editedText.current; editedText.current = null; setText((t) => (t === was ? '' : t)); }
+  }, [editing]);
   useEffect(() => { if (replyTo) ta.current?.focus(); }, [replyTo]);
   const empty = !text.trim();
   useEffect(() => { onEmpty?.(empty); }, [empty]); // eslint-disable-line react-hooks/exhaustive-deps

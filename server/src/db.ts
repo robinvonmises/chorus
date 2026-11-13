@@ -351,6 +351,34 @@ export class Store {
     const r = this.db.prepare('UPDATE chats SET draft=?, draft_ts=? WHERE id=? AND (draft_ts IS NULL OR draft_ts<?)').run(text.slice(0, 20000) || null, ts, id, ts);
     return r.changes > 0;
   }
+  /** Eigene Nachricht gesendet: Entwurf löschen, wenn er dieser Nachricht entspricht (auch in verknüpften Chats).
+   *  Der neue Zeitstempel liegt hinter dem alten Entwurf, damit verspätete Speicherungen ihn nicht zurückholen. */
+  clearSentDraft(chatId: string, texts: (string | null | undefined)[]): string[] {
+    const norm = (t: string) => t.replace(/\s+/g, ' ').trim().toLowerCase();
+    const sent = texts.filter((t): t is string => !!t?.trim()).map(norm);
+    if (!sent.length) return [];
+    const link = (this.db.prepare('SELECT link FROM chats WHERE id=?').get(chatId) as { link: string | null } | undefined)?.link;
+    const rows = this.db.prepare(`SELECT id, draft, draft_ts FROM chats WHERE (id=? ${link ? 'OR link=?' : ''}) AND draft IS NOT NULL`)
+      .all(...(link ? [chatId, link] : [chatId])) as { id: string; draft: string; draft_ts: number | null }[];
+    const done: string[] = [];
+    for (const r of rows) {
+      const d = norm(r.draft);
+      if (d && !sent.some((t) => t === d || t.includes(d))) continue;
+      this.db.prepare('UPDATE chats SET draft=NULL, draft_ts=? WHERE id=?').run(Math.max(Date.now(), (r.draft_ts ?? 0) + 1), r.id);
+      done.push(r.id);
+    }
+    return done;
+  }
+  /** Alte Geister-Entwürfe: Entwurf steht schon als eigene Nachricht im Chat */
+  clearGhostDrafts(): number {
+    const rows = this.db.prepare('SELECT id FROM chats WHERE draft IS NOT NULL').all() as { id: string }[];
+    let n = 0;
+    for (const r of rows) {
+      const own = (this.db.prepare('SELECT text FROM messages WHERE chat_id=? AND from_me=1 AND deleted=0 ORDER BY ts DESC LIMIT 30').all(r.id) as { text: string }[]).map((m) => m.text);
+      n += this.clearSentDraft(r.id, own).filter((id) => id === r.id).length;
+    }
+    return n;
+  }
   /** Anpinnen/Merken (nur in Chorus) */
   markMessage(id: string, patch: { pinned?: boolean; starred?: boolean }): Message | null {
     if (patch.pinned !== undefined) this.db.prepare('UPDATE messages SET pinned_at=? WHERE id=?').run(patch.pinned ? Date.now() : null, id);
