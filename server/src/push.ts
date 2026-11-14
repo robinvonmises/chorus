@@ -33,10 +33,11 @@ export class Push {
   preview(store: Store): boolean { return store.getSetting('pushPreview', true); }
 
   /** skip: Geräte, auf denen Chorus gerade offen und sichtbar ist. Die bekommen nichts, alle anderen schon. */
-  async send(store: Store, payload: Record<string, unknown>, only?: string, skip?: Set<string>) {
+  async send(store: Store, payload: Record<string, unknown>, only?: string | Set<string>, skip?: Set<string>) {
     let ok = 0, gone = 0, fail = 0, open = 0;
-    for (const s of this.subs(store)) {
-      if (only && s.endpoint !== only) continue;
+    const subs = this.subs(store).filter((s) => !only || (typeof only === 'string' ? s.endpoint === only : only.has(s.endpoint)));
+    if (!subs.length) return;
+    for (const s of subs) {
       if (skip?.has(s.endpoint)) { open++; continue; }
       try { await webpush.sendNotification(s, JSON.stringify(payload), { TTL: 6 * 3600, urgency: 'high' }); ok++; }
       catch (e: any) {
@@ -47,7 +48,7 @@ export class Push {
     console.log(`[push] gesendet ${ok}${open ? `, ${open} übersprungen (App dort offen)` : ''}${gone ? `, ${gone} abgelaufene Abos entfernt` : ''}${fail ? `, ${fail} fehlgeschlagen` : ''}`);
   }
 
-  notify(store: Store, chat: Chat, m: Message, skip?: Set<string>) {
+  notify(store: Store, chat: Chat, m: Message, skip?: Set<string>, only?: Set<string>) {
     if (!this.subs(store).length) { console.log('[push] übersprungen: keine Geräte angemeldet'); return; }
     const full = this.preview(store);
     const lang = uiLang(store);
@@ -59,6 +60,6 @@ export class Push {
       chatId: chat.id, tag: chat.id,
       // Vorschaubild (Foto/Video-Standbild). Der Service Worker lädt es selbst; iPhone/iPad zeigen keine Bilder in Benachrichtigungen
       ...(full && imgIdx >= 0 ? { image: `/api/attachment?m=${encodeURIComponent(m.id)}&i=${imgIdx}&thumb=1` } : {}),
-    }, undefined, skip);
+    }, only, skip);
   }
 }

@@ -83,12 +83,12 @@ function ctxOf(p: ProfileEntry): Ctx {
     ctx.autopilot = new AutopilotRunner(hub, ctx.ai);
     ctx.translator = new Translator(hub, ctx.ai);
     ctx.planner?.stop();
-    ctx.planner = new Planner(hub, (title, body, chatId) => { void push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }, undefined, visibleEndpoints(ctx)); },
+    ctx.planner = new Planner(hub, (title, body, chatId) => pushUnlessOpen(ctx, (only, skip) => push.send(store, { title, body, chatId, tag: 'reminder-' + chatId }, only, skip)),
       (p) => sendMaybeTranslated(hub, ctx.ai!, p.chatId, p.text, p.replyTo ?? null, !!p.translate));
     hub.subscribe((e) => broadcast(ctx, e));
     // Push an jedes Gerät, auf dem Chorus gerade nicht offen und sichtbar ist. Das offene Gerät zeigt selbst einen dezenten Hinweis.
     // Früher reichte ein offenes Gerät (z. B. der Desktop), um die Push-Nachricht an alle Geräte zu unterdrücken.
-    hub.subscribe((e) => { if (e.type === 'notify') push.notify(store, e.chat, e.message, visibleEndpoints(ctx)); });
+    hub.subscribe((e) => { if (e.type === 'notify') pushUnlessOpen(ctx, (only, skip) => push.notify(store, e.chat, e.message, skip, only)); });
     await hub.startAll();
     await hub.ensureNotes(uiLang(store) === 'de' ? 'Notizen an mich' : 'Notes to self').catch((e) => console.error('[notizen]', e));
     if (process.env.DEMO === '1' && !store.listAccountRows().some((a) => a.network === 'demo')) {
@@ -1215,13 +1215,36 @@ const visibleSince = new WeakMap<object, number>();
 /** Push-Abo (Endpoint) des Geräts hinter einer Verbindung, damit nur dieses Gerät keine Push-Nachricht bekommt. */
 const socketEndpoint = new WeakMap<object, string>();
 const VISIBLE_FRESH_MS = 45_000;
-function visibleEndpoints(c: Ctx) {
+function visibleEndpoints(c: Ctx, only?: object) {
   const now = Date.now(), out = new Set<string>();
   for (const ws of c.sockets) {
+    if (only && ws !== only) continue;
     const t = visibleSince.get(ws), ep = socketEndpoint.get(ws);
     if (ws.readyState === 1 && t && now - t < VISIBLE_FRESH_MS && ep) out.add(ep);
   }
   return out;
+}
+/** Wartende Rückfragen „bist du wirklich sichtbar?“ (Nummer → Antworten) */
+const visChecks = new Map<number, (ws: object) => void>();
+let visCheckNo = 0;
+/**
+ * Geräte, auf denen Chorus jetzt WIRKLICH offen ist. Die „sichtbar“-Meldung allein reicht nicht: iOS friert die App
+ * beim Wegwischen ein, bevor sie „unsichtbar“ melden kann, und bis zu 45 s lang gingen dann Push-Nachrichten verloren.
+ * Deshalb fragt der Server nach; nur wer binnen 1,5 s mit „sichtbar“ antwortet, bekommt keine Push. Eingefroren = keine Antwort = Push.
+ */
+function pushUnlessOpen(c: Ctx, send: (only?: Set<string>, skip?: Set<string>) => unknown) {
+  const cand = [...c.sockets].filter((ws) => visibleEndpoints(c, ws).size);
+  const eps = new Set(cand.map((ws) => socketEndpoint.get(ws)!));
+  void send(undefined, eps); // alle anderen Geräte sofort
+  if (!eps.size) return;
+  const n = ++visCheckNo, ok = new Set<string>();
+  visChecks.set(n, (ws) => { const ep = socketEndpoint.get(ws); if (ep && cand.includes(ws as any)) ok.add(ep); });
+  for (const ws of cand) { try { ws.send(JSON.stringify({ type: 'visCheck', n })); } catch { /* egal */ } }
+  setTimeout(() => {
+    visChecks.delete(n);
+    const rest = new Set([...eps].filter((ep) => !ok.has(ep)));
+    if (rest.size) { console.log(`[push] ${rest.size} Gerät(e) meldeten „sichtbar“, antworteten aber nicht (eingefroren): Push nachgeschickt`); void send(rest); }
+  }, 1500);
 }
 function broadcast(c: Ctx, e: unknown) {
   const s = JSON.stringify(e);
@@ -1240,6 +1263,7 @@ app.register(async (f) => {
           if (typeof m.endpoint === 'string' && m.endpoint.length < 2000) socketEndpoint.set(socket, m.endpoint);
           if (m.visible) visibleSince.set(socket, Date.now()); else visibleSince.delete(socket);
         }
+        if (m?.type === 'visAck' && typeof m.n === 'number') visChecks.get(m.n)?.(socket);
       } catch { /* ignorieren */ }
     });
     // Tote Verbindungen (Handy eingefroren, Netz weg) erkennen und schließen: wer auf zwei Pings nicht antwortet, fliegt raus
