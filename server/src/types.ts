@@ -157,7 +157,8 @@ export interface Message {
 export interface AdapterEvents {
   status(s: AccountStatus): void;
   chat(c: Omit<Chat, 'id' | 'accountId' | 'network' | 'unread' | 'pinned' | 'muted'> & { unread?: number }): void;
-  message(m: Omit<Message, 'id' | 'chatId' | 'reactions'> & { chatRemoteId: string; reactions?: Reaction[] }): void;
+  /** historic: aus dem Verlauf nachgeladen (keine neue Nachricht, keine Push-Benachrichtigung) */
+  message(m: Omit<Message, 'id' | 'chatId' | 'reactions'> & { chatRemoteId: string; reactions?: Reaction[]; historic?: boolean }): void;
   messageUpdate(chatRemoteId: string, remoteId: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status'>>): void;
   reactions(chatRemoteId: string, remoteId: string, reactions: Reaction[]): void;
   /** Einzelne Reaktion setzen/entfernen (ersetzt vorherige Reaktion desselben Absenders) */

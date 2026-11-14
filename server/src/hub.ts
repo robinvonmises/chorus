@@ -110,7 +110,7 @@ export class Hub {
         if (!store.getChat(cid)) {
           store.upsertChat({ accountId, network, remoteId: m.chatRemoteId, title: m.senderName || m.chatRemoteId, kind: 'direct', lastTs: 0, lastText: '' });
         }
-        const { chatRemoteId: _c, ...rest } = m;
+        const { chatRemoteId: _c, historic, ...rest } = m;
         rest.attachments = rest.attachments.map(fixKind);
         const prevLastTs = store.getChat(cid)!.lastTs;
         const { msg, isNew } = store.upsertMessage({ ...rest, chatId: cid });
@@ -122,12 +122,14 @@ export class Hub {
           const chat = store.getChat(cid)!;
           if (!chat.info?.fetchedAt) this.queueContact(cid);
           this.emit({ type: 'chat', chat });
-          // Push für jede neue eingehende Nachricht bis 30 Min. Alter. Früher nur bis 60 s: Nach einem Neustart (Auto-Update),
-          // einer Signal-/WhatsApp-Neuverbindung oder bei verspäteter Zustellung (Signal-Zeitstempel = Sendezeit beim Absender)
-          // kam dann gar keine Benachrichtigung. Doppelte gibt es nicht, weil nur neu gespeicherte Nachrichten hier ankommen.
+          // Push für jede neue eingehende Nachricht bis 30 Min. Alter (verspätete Zustellung nach Neustart/Neuverbindung).
+          // Keine Push für Nachgeladenes: WhatsApp-Verlauf (history/append), und Nachrichten, die älter sind als das,
+          // was der Chat schon kannte. Die hat man meist längst am Handy gelesen, sie tauchten sonst als „alte“ Push auf.
+          // Doppelte gibt es nicht, weil nur neu gespeicherte Nachrichten hier ankommen.
           const age = Date.now() - msg.ts;
           if (!msg.fromMe && !chat.muted && !chat.archived) {
-            if (age < NOTIFY_MAX_AGE) this.emit({ type: 'notify', chat, message: msg });
+            if (historic || msg.ts < prevLastTs) console.log(`[push] keine Benachrichtigung: nachgeladene Nachricht (${chat.id})`);
+            else if (age < NOTIFY_MAX_AGE) this.emit({ type: 'notify', chat, message: msg });
             else if (age < 6 * 3600_000) console.log(`[push] keine Benachrichtigung: Nachricht kam ${Math.round(age / 60_000)} Min. zu spät (${chat.id})`);
           }
           if (Date.now() - msg.ts < 5 * 60_000) this.fire(msg.fromMe ? this.own : this.incoming, chat, msg);

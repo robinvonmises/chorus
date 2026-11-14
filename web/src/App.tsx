@@ -415,22 +415,17 @@ function Main({ server, live, snap, onLocked, onRefresh }: { server: ServerState
     const n = navigator as any; // setAppBadge() ohne Zahl zeigt einen Punkt, deshalb bei 0 ausdrücklich löschen
     (unreadTotal ? n.setAppBadge?.(unreadTotal) : n.clearAppBadge?.())?.catch?.(() => {});
   }, [unreadTotal]);
-  // Gelesene Chats: ihre Benachrichtigungen aus der Mitteilungszentrale nehmen (Tag = Chat-ID, Erinnerungen bleiben).
-  // Nur bekannte Chats, damit nichts verschwindet, bevor die Liste geladen ist.
-  const readSig = useMemo(() => sortedChats.filter((c) => c.unread === 0 || c.id === active).map((c) => c.id).join('\n'), [sortedChats, active]);
+  // App offen: alle Benachrichtigungen aus der Mitteilungszentrale nehmen (Waynes Wunsch). Was neu ist, sieht man ja jetzt in der App.
   useEffect(() => {
-    const read = new Set(readSig ? readSig.split('\n') : []);
-    if (!read.size || !live) return; // gespeicherter Stand kann veraltet sein: keine Mitteilungen schließen
     const clean = () => {
       if (document.visibilityState !== 'visible') return;
-      navigator.serviceWorker?.ready.then((reg) => reg.getNotifications()).then((ns) => {
-        for (const x of ns) { const id = x.data?.chatId; if (id && x.tag === id && read.has(id)) x.close(); }
-      }).catch(() => {});
+      navigator.serviceWorker?.ready.then((reg) => reg.getNotifications()).then((ns) => { for (const x of ns) x.close(); }).catch(() => {});
     };
     clean();
     document.addEventListener('visibilitychange', clean);
-    return () => document.removeEventListener('visibilitychange', clean);
-  }, [readSig, live]);
+    window.addEventListener('focus', clean);
+    return () => { document.removeEventListener('visibilitychange', clean); window.removeEventListener('focus', clean); };
+  }, []);
 
   const chat = active ? chats.get(active) ?? null : null;
   const account = chat ? accounts.find((a) => a.id === chat.accountId) : undefined;

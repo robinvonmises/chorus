@@ -359,7 +359,14 @@ export function connectEvents(onEvent: (e: HubEvent) => void, onStatus: (online:
       if (opened) onReconnect?.();
       opened = true;
     };
-    sock.onmessage = (m) => { try { onEvent(JSON.parse(m.data)); } catch { /* ignore */ } };
+    sock.onmessage = (m) => {
+      try {
+        const e = JSON.parse(m.data);
+        // Server fragt vor dem Auslassen einer Push-Nachricht nach, ob die App wirklich offen ist. Eine eingefrorene App antwortet nicht.
+        if (e?.type === 'visCheck') { if (document.visibilityState === 'visible') sock.send(JSON.stringify({ type: 'visAck', n: e.n })); return; }
+        onEvent(e);
+      } catch { /* ignore */ }
+    };
     sock.onclose = (e) => {
       if (ws !== sock) return; // schon durch eine neue Verbindung ersetzt
       onStatus(false);

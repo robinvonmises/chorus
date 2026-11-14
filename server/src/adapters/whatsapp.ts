@@ -279,8 +279,8 @@ export class WhatsAppAdapter implements Adapter {
       chatRemoteId: chat, remoteId: key.id, senderId: senderJid, senderName, fromMe: !!key.fromMe, ts, text,
       replyToRemoteId: ctx?.stanzaId ?? null, edited: false, deleted: false, attachments: atts,
       status: key.fromMe ? (m.status != null && m.status >= 4 ? 'read' : m.status === 3 ? 'delivered' : 'sent') : 'received',
+      historic,
     });
-    void historic;
   }
 
   // ---------- Senden ----------
