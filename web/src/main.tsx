@@ -70,6 +70,14 @@ if (vv) {
     if (document.visibilityState === 'hidden' || vv.height < 150) return;
     maxH = Math.max(maxH, vv.height);
     const diff = maxH - vv.height;
+    // Ohne fokussiertes Textfeld kann auf dem Handy keine Tastatur offen sein. Meldet iOS trotzdem eine kleine Höhe
+    // (veraltet, z. B. wenn das Eingabefeld beim Start einer Sprachaufnahme verschwindet und kein focusout kommt),
+    // volle Höhe nehmen, statt unter der Leiste eine leere Fläche zu lassen.
+    if (touch && !typing() && diff > 120) {
+      set(maxH, false);
+      if (window.scrollY) window.scrollTo(0, 0);
+      return;
+    }
     if (diff > 120 && Math.abs(diff - kbH) > 4) { kbH = diff; localStorage.setItem('inbox:kbh', String(Math.round(diff))); }
     root.style.setProperty('--vvt', `${vv.offsetTop}px`);
     set(vv.height, window.innerHeight - vv.height > 120 || diff > 120 || typing());
@@ -97,6 +105,9 @@ if (vv) {
     else if (!typing()) snap();
   });
   window.addEventListener('pageshow', () => { if (touch && !typing()) snap(); });
+  // Verschwindet das fokussierte Feld aus der Seite (Aufnahme, Chatwechsel), meldet Safari kein focusout.
+  // Solange die App „Tastatur offen“ annimmt, deshalb kurz nachsehen, ob noch ein Textfeld den Fokus hat.
+  window.setInterval(() => { if (touch && root.classList.contains('kbd') && !typing()) fit(); }, 700);
   vv.addEventListener('resize', fit);
   vv.addEventListener('scroll', fit);
   fit();
