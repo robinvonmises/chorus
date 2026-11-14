@@ -2,7 +2,7 @@
   "name": "inbox-server",
   "private": true,
   "type": "module",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "scripts": {
     "build": "tsc -p .",
     "dev": "tsx watch src/index.ts",

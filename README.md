@@ -44,6 +44,7 @@ The interface is deliberately quiet and iOS-like: soft colours, smooth motion an
 ### Messaging
 - **One inbox** for Signal, WhatsApp, Telegram and **email** (IMAP/SMTP: each sender becomes a contact, each subject a chat), filterable by messenger (combine several) or "unread"
 - Replies, reactions, editing, deleting, forwarding (also across messengers), read receipts, pinned and muted chats, drafts per chat
+- **@-mentions** in groups: type @ to pick a member; Signal, WhatsApp and Telegram receive a real mention that notifies the person
 - **Swipe gestures** on the phone: left to delete, right to archive, far right for read/unread. Long-press for multi-select
 - **Archive** that stays quiet: archived chats don't count towards the badge and don't notify
 - **Contact profiles** with your own alias, picture and notes; number, status and members come from the messenger

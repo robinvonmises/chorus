@@ -39,6 +39,7 @@ Chorus läuft als Docker-Container auf deinem eigenen Server (Raspberry Pi, NAS,
 ### Nachrichten
 - **Ein Posteingang** für alle Chats, filterbar nach Messenger (auch mehrere) oder „Ungelesen“
 - Antworten, Reaktionen, Bearbeiten, Löschen, **Weiterleiten** (auch messengerübergreifend), Lesebestätigungen, angepinnte und stumme Chats, Entwürfe pro Chat
+- **@-Erwähnungen** in Gruppen: @ tippen und Mitglied auswählen; Signal, WhatsApp und Telegram stellen sie als echte Erwähnung zu, die Person wird benachrichtigt
 - **Wischen** am Handy: links löschen, rechts archivieren, weit rechts gelesen/ungelesen. Lange drücken für Mehrfachauswahl
 - **Archiv**, das still bleibt: archivierte Chats zählen nicht im Badge und melden sich nicht
 - **Kontaktprofile** mit eigenem Namen, Bild und Notiz; Nummer, Status und Mitglieder kommen vom Messenger
