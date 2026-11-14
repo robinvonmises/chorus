@@ -3,7 +3,8 @@ import makeWASocket, {
   jidNormalizedUser, isJidGroup, proto, type AuthenticationState, type SignalDataTypeMap, type WAMessage, type WAMessageKey, type WASocket,
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
-import type { Adapter, AdapterEvents, Attachment, OutgoingFile, Message } from '../types.js';
+import type { Adapter, AdapterEvents, Attachment, Mention, OutgoingFile, Message } from '../types.js';
+import { replaceMentions } from '../mentions.js';
 import type { AdapterFactory } from '../hub.js';
 import { waveform } from '../audio.js';
 
@@ -23,6 +24,10 @@ export class WhatsAppAdapter implements Adapter {
   private stopped = false;
   private names = new Map<string, string>();
   private keys = new Map<string, WAMessageKey>(); // id → key (für Reaktionen/Antworten)
+  // Für @-Erwähnungen: Telefonnummer-JID ↔ LID und welche Gruppen per LID adressiert werden
+  private lidOf = new Map<string, string>();
+  private pnOf = new Map<string, string>();
+  private lidGroups = new Set<string>();
   private waiting: ((v: string) => void) | null = null;
   private retry = 0;
   private phone: string | null = null; // für die Kopplung per Code
@@ -278,6 +283,7 @@ export class WhatsAppAdapter implements Adapter {
     }
     const ctx = content.extendedTextMessage?.contextInfo ?? content.imageMessage?.contextInfo ?? content.videoMessage?.contextInfo
       ?? content.audioMessage?.contextInfo ?? content.documentMessage?.contextInfo ?? content.stickerMessage?.contextInfo;
+    if (ctx?.mentionedJid?.length) text = this.namedMentions(text, ctx.mentionedJid);
     const ts = Number(m.messageTimestamp ?? Date.now() / 1000) * 1000;
     if (!isJidGroup(chat) && !this.names.has(chat) && !key.fromMe && m.pushName) this.setName(chat, m.pushName);
     this.ev.message({
@@ -286,6 +292,42 @@ export class WhatsAppAdapter implements Adapter {
       status: key.fromMe ? (m.status != null && m.status >= 4 ? 'read' : m.status === 3 ? 'delivered' : 'sent') : 'received',
       historic,
     });
+  }
+
+  /** WhatsApp schreibt Erwähnungen als „@4917…“ in den Text: durch „@Name“ ersetzen, soweit bekannt */
+  private namedMentions(text: string, jids: string[]) {
+    for (const j of jids) {
+      const jid = jidNormalizedUser(j);
+      const name = this.names.get(jid) ?? this.names.get(this.pnOf.get(jid) ?? '') ?? (this.isMe(jid) ? 'Ich' : undefined);
+      if (name) text = text.split('@' + jid.split('@')[0]).join('@' + name);
+    }
+    return text;
+  }
+  private isMe(jid: string) {
+    const u = this.sock?.user;
+    return !!u && (jid === jidNormalizedUser(u.id) || (!!u.lid && jid === jidNormalizedUser(u.lid)));
+  }
+  /** „@Name“ → „@Nummer“ plus mentions-Liste, wie WhatsApp es erwartet */
+  private withMentions(chat: string, text: string, mentions?: Mention[]): { text: string; mentions?: string[] } {
+    if (!mentions?.length) return { text };
+    const jidOf = (id: string) => (this.lidGroups.has(chat) && this.lidOf.get(id)) || id;
+    return { text: replaceMentions(text, mentions, (m) => '@' + jidOf(m.id).split('@')[0]), mentions: [...new Set(mentions.map((m) => jidOf(m.id)))] };
+  }
+
+  async members(chat: string) {
+    if (!isJidGroup(chat)) return [];
+    const md = await this.s.groupMetadata(chat);
+    if (md.addressingMode === 'lid') this.lidGroups.add(chat); else this.lidGroups.delete(chat);
+    const out: { id: string; name: string }[] = [];
+    for (const p of md.participants ?? []) {
+      const pn = [p.phoneNumber, p.id].find((x) => x?.endsWith('@s.whatsapp.net'));
+      const lid = [p.lid, p.id].find((x) => x?.endsWith('@lid'));
+      const id = jidNormalizedUser(pn ?? p.id);
+      if (pn && lid) { this.lidOf.set(jidNormalizedUser(pn), jidNormalizedUser(lid)); this.pnOf.set(jidNormalizedUser(lid), jidNormalizedUser(pn)); }
+      if (this.isMe(id) || (lid && this.isMe(jidNormalizedUser(lid)))) continue;
+      out.push({ id, name: this.names.get(id) ?? (lid ? this.names.get(jidNormalizedUser(lid)) : undefined) ?? (pn ? '+' + pn.split('@')[0] : '') });
+    }
+    return out.filter((m) => m.name);
   }
 
   // ---------- Senden ----------
@@ -311,21 +353,24 @@ export class WhatsAppAdapter implements Adapter {
     return { key: this.keyFor(chat, replyTo), message: { conversation: m?.text ?? '' } } as WAMessage;
   }
 
-  async sendText(chat: string, text: string, replyTo?: string | null) {
-    const r = await this.s.sendMessage(chat, { text }, { quoted: this.quoted(chat, replyTo) });
+  async sendText(chat: string, text: string, replyTo?: string | null, mentions?: Mention[]) {
+    const r = await this.s.sendMessage(chat, this.withMentions(chat, text, mentions), { quoted: this.quoted(chat, replyTo) });
     if (r?.key) this.keys.set(r.key.id!, r.key);
     return r!.key.id!;
   }
 
-  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
+  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null, mentions?: Mention[]) {
     const quoted = this.quoted(chat, replyTo);
+    const cap = caption ? this.withMentions(chat, caption, mentions) : null;
+    const ments = cap?.mentions ? { mentions: cap.mentions } : {};
+    if (cap) caption = cap.text;
     const wave = f.voice ? await waveform(f.data).catch(() => undefined) : undefined;
     const content = f.voice
       ? { audio: f.data, ptt: true, mimetype: 'audio/ogg; codecs=opus', seconds: Math.max(1, Math.round(f.durationSec ?? 1)), waveform: wave }
-      : f.mime.startsWith('image/') && !f.mime.includes('svg') ? { image: f.data, caption, mimetype: f.mime }
-      : f.mime.startsWith('video/') ? { video: f.data, caption, mimetype: f.mime, ...(f.gif ? { gifPlayback: true } : {}) }
+      : f.mime.startsWith('image/') && !f.mime.includes('svg') ? { image: f.data, caption, mimetype: f.mime, ...ments }
+      : f.mime.startsWith('video/') ? { video: f.data, caption, mimetype: f.mime, ...(f.gif ? { gifPlayback: true } : {}), ...ments }
       : f.mime.startsWith('audio/') ? { audio: f.data, mimetype: f.mime }
-      : { document: f.data, fileName: f.name, mimetype: f.mime, caption };
+      : { document: f.data, fileName: f.name, mimetype: f.mime, caption, ...ments };
     const r = await this.s.sendMessage(chat, content as any, { quoted });
     if (f.voice) {
       const a = r?.message?.audioMessage;

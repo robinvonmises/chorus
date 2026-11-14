@@ -190,14 +190,17 @@ export interface OutgoingFile {
   height?: number;
 }
 
+/** @-Erwähnung in ausgehendem Text: Bereich „@Name“ (JS-Zeichenindizes = UTF-16) und Teilnehmer-ID (wie senderId) */
+export interface Mention { start: number; length: number; id: string }
+
 export interface Adapter {
   readonly network: Network;
   start(): Promise<void>;
   stop(): Promise<void>;
   /** Eingabe aus dem Einrichtungsassistenten (Telefonnummer, Code …) */
   input(field: string, value: string): Promise<void>;
-  sendText(chatRemoteId: string, text: string, replyTo?: string | null): Promise<string>;
-  sendFile(chatRemoteId: string, file: OutgoingFile, caption?: string, replyTo?: string | null): Promise<string>;
+  sendText(chatRemoteId: string, text: string, replyTo?: string | null, mentions?: Mention[]): Promise<string>;
+  sendFile(chatRemoteId: string, file: OutgoingFile, caption?: string, replyTo?: string | null, mentions?: Mention[]): Promise<string>;
   react(chatRemoteId: string, remoteId: string, emoji: string | null): Promise<void>;
   edit(chatRemoteId: string, remoteId: string, text: string): Promise<void>;
   delete(chatRemoteId: string, remoteId: string, forEveryone: boolean): Promise<void>;
@@ -212,6 +215,8 @@ export interface Adapter {
   archiveChat?(chatRemoteId: string, archived: boolean): Promise<void>;
   /** E-Mail: Mails eines Chats in den Papierkorb */
   deleteChat?(chatRemoteId: string): Promise<void>;
+  /** Gruppen: aktuelle Mitglieder (ohne mich), für @-Erwähnungen */
+  members?(chatRemoteId: string): Promise<{ id: string; name: string }[]>;
   /** Chatliste neu vom Messenger holen */
   resync?(): Promise<void>;
   /** Neuen Einzelchat über Telefonnummer (internationales Format, nur Ziffern mit +) */

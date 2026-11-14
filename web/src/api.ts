@@ -198,6 +198,7 @@ export const api = {
   patchChat: (id: string, patch: Partial<Pick<Chat, 'pinned' | 'muted' | 'archived' | 'alias' | 'note'>>) => req<Chat>('PATCH', `/api/chats/${enc(id)}`, patch),
   markUnread: (id: string) => req<Chat>('POST', `/api/chats/${enc(id)}/unread`),
   /** Profilbilder der Absender in einer Gruppe (senderId → Bild-URL); pending: weitere werden gerade geholt */
+  members: (id: string) => req<{ id: string; name: string }[]>('GET', `/api/chats/${enc(id)}/members`),
   senderAvatars: (id: string) => req<{ avatars: Record<string, string>; pending: boolean }>('GET', `/api/chats/${enc(id)}/sender-avatars`),
   refreshContact: (id: string) => req<Chat>('POST', `/api/chats/${enc(id)}/contact`),
   adminStatus: () => req<{

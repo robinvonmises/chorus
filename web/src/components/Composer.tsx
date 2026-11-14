@@ -19,6 +19,19 @@ import { T, lang, locale } from '../i18n';
 
 const isTouch = () => matchMedia('(pointer: coarse)').matches;
 
+// Gruppenmitglieder für @-Erwähnungen, einmal pro Chat und App-Start geladen
+const memberCache = new Map<string, Promise<{ id: string; name: string }[]>>();
+/** „@abc“ direkt vor der Schreibmarke (Anfang oder Leerzeichen vor dem @, keine Zeilenumbrüche) */
+function mentionQuery(text: string, caret: number): { at: number; q: string } | null {
+  const before = text.slice(0, caret);
+  const at = before.lastIndexOf('@');
+  if (at < 0 || (at > 0 && !/[\s(]/.test(before[at - 1]))) return null;
+  const q = before.slice(at + 1);
+  // Leerzeichen am Ende: Erwähnung ist fertig (auch direkt nach dem Auswählen)
+  if (q.length > 30 || /\n/.test(q) || /\s$/.test(q)) return null;
+  return { at, q };
+}
+
 export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, onResize, disabled, replyTo, editing, inject, onAi, aiOpen, onCancel, onSent, onError, onInfo, onEmpty }: {
   chat: Chat; onPickLang?: () => void; draftId?: string; serverDraft?: { text: string | null; ts: number | null }; placeholder?: string; onResize?: () => void; disabled: boolean; onInfo?: (t: string) => void; replyTo: Message | null; editing: Message | null; inject?: { text: string; n: number } | null; onAi?: () => void; aiOpen?: boolean; onEmpty?: (empty: boolean) => void;
   onCancel: () => void; onSent: () => void; onError: (t: string) => void;
@@ -124,6 +137,35 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
   }, []);
 
   // Senden-Knopf darf dem Textfeld den Fokus nicht wegnehmen, sonst klappt am Handy die Tastatur zu
+  // @-Erwähnungen in Gruppen: Auswahlliste über dem Eingabefeld
+  const group = chat.kind === 'group';
+  const [caret, setCaret] = useState<number | null>(null);
+  const [members, setMembers] = useState<{ id: string; name: string }[] | null>(null);
+  const [mSel, setMSel] = useState(0);
+  const [mClosed, setMClosed] = useState<number | null>(null);
+  const mq = group && caret != null && !rec ? mentionQuery(text, caret) : null;
+  useEffect(() => {
+    if (!mq || members) return;
+    let p = memberCache.get(chat.id);
+    if (!p) { p = api.members(chat.id).catch(() => { memberCache.delete(chat.id); return []; }); memberCache.set(chat.id, p); }
+    p.then(setMembers);
+  }, [!!mq, chat.id]);
+  useEffect(() => { setMembers(null); }, [chat.id]);
+  const mMatches = mq && members && mClosed !== mq.at ? members.filter((m) => {
+    const q = mq.q.toLowerCase().trim(), n = m.name.toLowerCase();
+    return !q || n.startsWith(q) || n.split(/\s+/).some((w) => w.startsWith(q));
+  }).slice(0, 8) : [];
+  useEffect(() => { setMSel(0); if (!mq) setMClosed(null); }, [mq?.q, mq?.at]);
+  const pickMention = (m: { name: string }) => {
+    if (!mq) return;
+    const el = ta.current;
+    const end = mq.at + 1 + mq.q.length;
+    const ins = '@' + m.name + ' ';
+    const next = text.slice(0, mq.at) + ins + text.slice(end).replace(/^ /, '');
+    const pos = mq.at + ins.length;
+    setText(next); setCaret(pos); haptic();
+    requestAnimationFrame(() => { el?.focus(); el?.setSelectionRange(pos, pos); });
+  };
   const keepKeyboard = (e: React.SyntheticEvent) => { if (document.activeElement === ta.current) e.preventDefault(); };
   const send = async () => {
     const t = text.trim();
@@ -193,6 +235,11 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
   };
 
   const onKey = (e: React.KeyboardEvent) => {
+    if (mMatches.length) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setMSel((i) => (i + (e.key === 'ArrowDown' ? 1 : mMatches.length - 1)) % mMatches.length); return; }
+      if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') { e.preventDefault(); pickMention(mMatches[Math.min(mSel, mMatches.length - 1)]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setMClosed(mq!.at); return; }
+    }
     if (e.key === 'Enter' && !e.shiftKey && !isTouch()) { e.preventDefault(); send(); }
     if (e.key === 'Escape') { onCancel(); setEmoji(false); }
   };
@@ -302,6 +349,16 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
         <ImageEditor file={files[editIdx]} onCancel={() => setEditIdx(null)}
           onDone={(nf) => { setFiles((fs) => fs.map((x, j) => (j === editIdx ? nf : x))); setEditIdx(null); }} />
       )}
+      {mMatches.length > 0 && (
+        <div className="mention-menu menu-list" role="listbox">
+          {mMatches.map((m, i) => (
+            <button key={m.id} role="option" aria-selected={i === mSel} className={i === mSel ? 'sel' : ''}
+              onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => pickMention(m)}>
+              <span className="mention-av">{m.name.replace(/^\+/, '').slice(0, 1).toUpperCase()}</span><span>{m.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {emoji && <div className="att-menu-bg" onClick={() => setEmoji(false)} />}
       {emoji && <div className="composer-emoji"><EmojiPicker onPick={insertEmoji} /></div>}
       {attMenu && <>
@@ -331,7 +388,8 @@ export function Composer({ chat, onPickLang, draftId, serverDraft, placeholder, 
         <div className={`composer ${text.trim() ? 'compact' : ''}`}>
           <button className={`icon-btn plus-btn ${attMenu || emoji ? 'on' : ''}`} onPointerDown={keepKeyboard} onMouseDown={keepKeyboard} onClick={() => { setEmoji(false); setAttMenu((v) => !v); }} aria-label={T('Anhängen, Emoji, GIF')} title={T('Anhängen, Emoji, GIF')}><Icon name="plus" /></button>
           {onAi && <button className={`icon-btn tool ai-compose ${aiOpen ? 'on' : ''}`} onClick={onAi} aria-label={T('KI-Assistent')} title={T('KI: Nachricht schreiben lassen, zusammenfassen, Antworten vorschlagen')}><Icon name="robot" /></button>}
-          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? T('Nicht verbunden') : placeholder ?? T('Nachricht')} onChange={(e) => setText(e.target.value)} onKeyDown={onKey}
+          <textarea ref={ta} rows={1} value={text} placeholder={disabled ? T('Nicht verbunden') : placeholder ?? T('Nachricht')} onChange={(e) => { setText(e.target.value); setCaret(e.target.selectionStart); }} onKeyDown={onKey}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart)} onBlur={() => setCaret(null)}
             onPaste={(e) => { const fs = [...e.clipboardData.files]; if (fs.length) { e.preventDefault(); setFiles((f) => [...f, ...fs]); } }} />
           <input ref={fileIn} type="file" multiple hidden onChange={(e) => { const add = [...(e.target.files ?? [])]; setFiles((f) => [...f, ...add]); e.target.value = ""; }} />
           {ai?.features.voice && !editing && !files.length && text.trim() && (

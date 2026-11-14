@@ -4,7 +4,8 @@ import { toAac } from '../audio.js';
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { Adapter, AdapterEvents, Attachment, OutgoingFile } from '../types.js';
+import type { Adapter, AdapterEvents, Attachment, Mention, OutgoingFile } from '../types.js';
+import { replaceMentions } from '../mentions.js';
 import type { AdapterFactory } from '../hub.js';
 import { packDir, unpackDir, secureTmpDir } from '../tarball.js';
 
@@ -244,7 +245,7 @@ export class SignalAdapter implements Adapter {
       return;
     }
     if (editOf) {
-      this.ev.messageUpdate(chat, `${editOf}:${author}`, { text: d.message ?? '', edited: true });
+      this.ev.messageUpdate(chat, `${editOf}:${author}`, { text: this.withMentions(d), edited: true });
       return;
     }
     if (d.message == null && !d.attachments?.length && !d.sticker) return; // z.B. Profil-Updates
@@ -264,13 +265,25 @@ export class SignalAdapter implements Adapter {
       senderName: authorName,
       fromMe,
       ts: d.timestamp,
-      text: d.message ?? '',
+      text: this.withMentions(d),
       replyToRemoteId: d.quote ? `${d.quote.id}:${d.quote.authorUuid ?? d.quote.authorNumber}` : null,
       edited: false,
       deleted: false,
       attachments,
       status: fromMe ? 'sent' : 'received',
     });
+  }
+
+  /** Signal schickt Erwähnungen als Platzhalter (U+FFFC) plus Bereich: als „@Name“ anzeigen */
+  private withMentions(d: any): string {
+    const text: string = d.message ?? '';
+    if (!Array.isArray(d.mentions) || !d.mentions.length) return text;
+    const ms = d.mentions.filter((m: any) => Number.isInteger(m.start) && Number.isInteger(m.length) && m.start >= 0 && m.start + m.length <= text.length);
+    return replaceMentions(text, ms.map((m: any) => ({ start: m.start, length: m.length, id: m.uuid ?? m.number ?? '' })),
+      (m) => '@' + (this.names.get(m.id) ?? (m.id === this.me ? 'Ich' : ms.find((x: any) => (x.uuid ?? x.number) === m.id)?.number ?? 'Unbekannt')));
+  }
+  private mention(mentions?: Mention[]) {
+    return mentions?.length ? { mention: mentions.map((m) => `${m.start}:${m.length}:${m.id}`) } : {};
   }
 
   // ---------- Senden ----------
@@ -307,12 +320,12 @@ export class SignalAdapter implements Adapter {
     }
   }
 
-  async sendText(chat: string, text: string, replyTo?: string | null) {
-    const r = await this.sendRetry({ ...this.target(chat), message: text, ...this.quote(replyTo) });
+  async sendText(chat: string, text: string, replyTo?: string | null, mentions?: Mention[]) {
+    const r = await this.sendRetry({ ...this.target(chat), message: text, ...this.quote(replyTo), ...this.mention(mentions) });
     return `${r.timestamp}:${this.me}`;
   }
 
-  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
+  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null, mentions?: Mention[]) {
     if (f.voice) {
       // Echte Sprachnachricht (mit Abspielknopf beim Empfänger) statt „sprachnachricht.ogg“: AAC wie die Signal-Apps und Kennzeichen voiceNote
       const aac = await toAac(f.data);
@@ -327,7 +340,7 @@ export class SignalAdapter implements Adapter {
     const path = join(dir, f.name.replace(/[\/\\]/g, '_') || 'datei');
     writeFileSync(path, f.data, { mode: 0o600 });
     try {
-      const r = await this.sendRetry({ ...this.target(chat), message: caption ?? '', attachments: [path], ...this.quote(replyTo) }, 10 * 60_000);
+      const r = await this.sendRetry({ ...this.target(chat), message: caption ?? '', attachments: [path], ...this.quote(replyTo), ...this.mention(mentions) }, 10 * 60_000);
       return `${r.timestamp}:${this.me}`;
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -365,6 +378,16 @@ export class SignalAdapter implements Adapter {
     // Chorus hebt den Anhang ab jetzt selbst auf: Kopie im Arbeitsspeicher von signal-cli freigeben
     if (!/[/\\]|\.\./.test(att.remoteRef)) rmSync(join(this.dir, 'attachments', att.remoteRef), { force: true });
     return buf;
+  }
+
+  async members(chat: string) {
+    if (!chat.startsWith('g:')) return [];
+    const gid = chat.slice(2);
+    const gs = await this.call<any[]>('listGroups', { groupId: gid });
+    const g = Array.isArray(gs) ? gs.find((x) => x.id === gid) ?? gs[0] : null;
+    return ((g?.members ?? []) as { uuid?: string; number?: string }[])
+      .map((m) => ({ id: m.uuid ?? m.number ?? '', name: (m.uuid && this.names.get(m.uuid)) || m.number || '' }))
+      .filter((m) => m.id && m.id !== this.me && m.name);
   }
 
   async contactInfo(chat: string) {
