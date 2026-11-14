@@ -118,6 +118,8 @@ export function serverText(m: string): string {
 }
 export class ApiError extends Error { constructor(public status: number, msg: string, public data: any = null) { super(msg); } }
 
+export interface Receipt { who: string; name: string | null; deliveredAt: number | null; readAt: number | null; playedAt: number | null }
+
 async function req<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method,
@@ -271,6 +273,8 @@ export const api = {
   saveDraft: (chatId: string, text: string, ts: number) => req('PUT', `/api/chats/${enc(chatId)}/draft`, { text, ts }),
   linkPreview: (url: string) => req<LinkPreview>('GET', `/api/linkpreview?url=${enc(url)}`),
   retry: (msgId: string) => req('POST', `/api/messages/${enc(msgId)}/retry`),
+  /** Zustell-/Lesebestätigungen einer eigenen Nachricht, je Person (who '' = Messenger nennt keine Person) */
+  receipts: (msgId: string) => req<{ status: Message['status']; ts: number; receipts: Receipt[] }>('GET', `/api/messages/${enc(msgId)}/receipts`),
   discard: (msgId: string) => req('DELETE', `/api/messages/${enc(msgId)}/discard`),
   remove: (msgId: string, everyone: boolean) => req('DELETE', `/api/messages/${enc(msgId)}${everyone ? '?everyone=1' : ''}`),
   searchChats: (q: string) => req<Chat[]>('GET', `/api/chats/search?q=${encodeURIComponent(q)}`),

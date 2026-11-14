@@ -25,7 +25,10 @@ export function previewOf(m: Message): string {
   return { image: '📷 ' + T('Foto'), video: '🎬 ' + T('Video'), audio: '🎵 Audio', voice: '🎤 ' + T('Sprachnachricht'), file: '📎 ' + a.name, sticker: 'Sticker' }[a.kind];
 }
 
-export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onTranscribe, onSummarize, onDetect, reminder, trLang }: {
+/** Wischweg, ab dem eine Blase beim Loslassen auslöst */
+const SWIPE = 56;
+
+export const MessageBubble = memo(function MessageBubble({ m, album, group, showName, senderAvatar, replied, onAction, onReact, onJump, onSwipe, onTranscribe, onSummarize, onDetect, reminder, trLang }: {
   m: Message; group: boolean; showName: boolean; replied?: Message | null;
   /** Mehrere kurz nacheinander geschickte Foto-Nachrichten desselben Absenders, als eine Blase gezeigt (m = erste) */
   album?: Message[];
@@ -39,6 +42,8 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   onAction: (m: Message, anchor: { x: number; y: number }) => void;
   onReact: (m: Message, emoji: string | null) => void;
   onJump: (remoteId: string) => void;
+  /** Blase gewischt: nach rechts = antworten, nach links = Infos (wann zugestellt/gelesen, von wem) */
+  onSwipe?: (m: Message, dir: 'reply' | 'info') => void;
   onTranscribe?: (m: Message) => Promise<void>;
   /** Sprachnachricht in einem Satz (transkribiert bei Bedarf vorher) */
   onSummarize?: (m: Message) => Promise<void>;
@@ -64,6 +69,47 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   };
   const endPress = () => { if (press.current) clearTimeout(press.current); press.current = null; };
 
+  // Wischen: nur waagrecht (sonst scrollt der Verlauf), nicht vom linken Rand (Zurück-Geste von iOS).
+  // Bewegt wird die Zeile direkt per style (kein Neuzeichnen je Fingerbewegung), Rückweg mit kurzer Transition.
+  const row = useRef<HTMLDivElement>(null);
+  const sw = useRef<{ x: number; y: number; dir: 0 | 1 | 2; dx: number } | null>(null);
+  const swReset = useRef<number | null>(null);
+  const place = (dx: number, anim: boolean) => {
+    const el = row.current; if (!el) return;
+    if (swReset.current) { clearTimeout(swReset.current); swReset.current = null; }
+    el.style.transition = anim ? 'transform .2s cubic-bezier(.2,.8,.2,1)' : 'none';
+    el.style.transform = dx ? `translateX(${dx}px)` : '';
+    el.style.setProperty('--sw', String(Math.min(1, Math.abs(dx) / SWIPE)));
+    el.classList.toggle('sw-r', dx > 0); el.classList.toggle('sw-l', dx < 0); el.classList.toggle('sw-armed', Math.abs(dx) >= SWIPE);
+    if (anim && !dx) swReset.current = window.setTimeout(() => { el.style.transition = ''; el.classList.remove('sw-r', 'sw-l', 'sw-armed'); swReset.current = null; }, 220);
+  };
+  const swStart = (e: React.TouchEvent) => {
+    startPress(e);
+    const t = e.touches[0];
+    const skip = !onSwipe || e.touches.length > 1 || t.clientX < 28 || (e.target as HTMLElement).closest('input, textarea, .no-swipe');
+    sw.current = skip ? null : { x: t.clientX, y: t.clientY, dir: 0, dx: 0 };
+  };
+  const swMove = (e: React.TouchEvent) => {
+    endPress();
+    const s = sw.current; if (!s) return;
+    if (e.touches.length > 1) { sw.current = null; if (s.dir === 1) place(0, true); return; }
+    const t = e.touches[0]; const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (s.dir === 0) { if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy) * 1.5) s.dir = 1; else if (Math.abs(dy) > 10) s.dir = 2; }
+    if (s.dir !== 1) return;
+    if (dx > 0 && m.deleted) return; // auf Gelöschtes nicht antworten
+    const a = Math.abs(dx);
+    s.dx = Math.sign(dx) * Math.min(110, a < SWIPE ? a : SWIPE + (a - SWIPE) * 0.35);
+    place(s.dx, false);
+  };
+  const swEnd = () => {
+    endPress();
+    const s = sw.current; sw.current = null;
+    if (!s || s.dir !== 1) return;
+    place(0, true);
+    if (s.dx >= SWIPE) { haptic(); onSwipe!(m, 'reply'); }
+    else if (s.dx <= -SWIPE) { haptic(); onSwipe!(last, 'info'); }
+  };
+
   // Reaktionen gruppieren
   const groups = new Map<string, { n: number; mine: boolean }>();
   for (const r of msgs.flatMap((x) => x.reactions)) {
@@ -74,10 +120,12 @@ export const MessageBubble = memo(function MessageBubble({ m, album, group, show
   const myReaction = m.reactions.find((r) => r.fromMe)?.emoji ?? null;
 
   return (
-    <div className={`msg ${m.fromMe ? 'out' : 'in'}${showName ? ' first' : ''}${senderAvatar !== undefined ? ' with-av' : ''}`} data-remote={m.remoteId} data-id={m.id}
+    <div ref={row} className={`msg ${m.fromMe ? 'out' : 'in'}${showName ? ' first' : ''}${senderAvatar !== undefined ? ' with-av' : ''}`} data-remote={m.remoteId} data-id={m.id}
       onContextMenu={(e) => { e.preventDefault(); onAction(m, { x: e.clientX, y: e.clientY }); }}
-      onTouchStart={startPress} onTouchEnd={endPress} onTouchMove={endPress}
+      onTouchStart={swStart} onTouchEnd={swEnd} onTouchMove={swMove} onTouchCancel={swEnd}
       onDoubleClick={() => !m.deleted && onReact(m, myReaction === '❤️' ? null : '❤️')}>
+      {onSwipe && <span className="sw-hint reply" aria-hidden="true"><Icon name="reply" size={18} /></span>}
+      {onSwipe && <span className="sw-hint info" aria-hidden="true">{msgTime(last.ts)}</span>}
       {senderAvatar !== undefined && showName && <span className="msg-av"><Avatar name={m.senderName || '?'} src={senderAvatar} size={32} /></span>}
       <div className={`bubble ${big ? 'big-emoji' : ''} ${media && !m.text ? 'media-only' : ''} ${media && m.text ? 'has-media' : ''} ${m.deleted ? (kept ? 'kept-deleted' : 'deleted') : ''}`}>
         {showName && group && !m.fromMe && <div className="sender" style={{ color: `hsl(${hue(m.senderName)} 50% 42%)` }}>{m.senderName}</div>}

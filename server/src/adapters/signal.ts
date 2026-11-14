@@ -208,8 +208,10 @@ export class SignalAdapter implements Adapter {
 
     // Lesebestätigungen für eigene Nachrichten
     if (env.receiptMessage && this.me) {
-      const status = env.receiptMessage.isRead || env.receiptMessage.isViewed ? 'read' : 'delivered';
-      for (const ts of env.receiptMessage.timestamps ?? []) this.ev.messageUpdate(author, `${ts}:${this.me}`, { status });
+      const r = env.receiptMessage;
+      const status = r.isRead || r.isViewed ? 'read' : 'delivered';
+      const by = { id: author, name: authorName, ts: Number(r.when ?? env.timestamp) || undefined, played: !!r.isViewed };
+      for (const ts of r.timestamps ?? []) this.ev.messageUpdate(author, `${ts}:${this.me}`, { status }, by);
       return;
     }
 

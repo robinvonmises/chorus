@@ -1,0 +1,30 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { Store } from './db.js';
+
+test('Lesebestätigungen: je Person erster Zeitpunkt, Name aus dem Chat, folgt Umbenennen', () => {
+  const s = new Store(mkdtempSync(join(tmpdir(), 'chorus-rc-')), randomBytes(32));
+  const acc = s.createAccount('demo', 'Demo');
+  const chat = s.upsertChat({ accountId: acc, network: 'demo', remoteId: 'g1', title: 'Gruppe', kind: 'group', lastTs: 0, lastText: '' } as any);
+  const base = { chatId: chat.id, text: 'x', edited: false, deleted: false, attachments: [], status: 'sent' as const };
+  s.upsertMessage({ ...base, remoteId: 'in1', senderId: 'anna', senderName: 'Anna', fromMe: false, ts: 1 } as any);
+  const { msg } = s.upsertMessage({ ...base, remoteId: 'local-1', senderId: 'me', senderName: 'Ich', fromMe: true, ts: 2 } as any);
+  s.addReceipt(msg.id, 'anna', undefined, 'delivered', 100);
+  s.addReceipt(msg.id, 'anna', undefined, 'delivered', 150);
+  s.addReceipt(msg.id, 'anna', undefined, 'read', 200);
+  s.addReceipt(msg.id, 'ben', 'Ben', 'delivered', 120);
+  const real = s.renameMessage(msg.id, 'r1', chat.id)!;
+  const r = s.receipts(real.id);
+  assert.equal(r.length, 2);
+  const anna = r.find((x) => x.who === 'anna')!;
+  assert.equal(anna.name, 'Anna');
+  assert.equal(anna.deliveredAt, 100);
+  assert.equal(anna.readAt, 200);
+  assert.equal(r.find((x) => x.who === 'ben')!.name, 'Ben');
+  s.removeMessage(real.id);
+  assert.equal(s.receipts(real.id).length, 0);
+});

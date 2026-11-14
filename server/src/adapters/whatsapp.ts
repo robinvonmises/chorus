@@ -164,7 +164,7 @@ export class WhatsAppAdapter implements Adapter {
         if (update.status != null && key.fromMe) {
           const st = update.status >= 4 ? 'read' : update.status === 3 ? 'delivered' : 'sent';
           // Bestätigungen kommen oft mit der LID statt der Telefonnummer als Chat: dann über die Nachrichten-ID suchen
-          this.ev.messageUpdate(chat.endsWith('@lid') ? '*' : chat, key.id, { status: st });
+          this.ev.messageUpdate(chat.endsWith('@lid') ? '*' : chat, key.id, { status: st }, update.status >= 5 ? { played: true } : undefined);
         }
         if (update.message) this.onMessage({ key, ...update } as WAMessage, true);
       }
@@ -173,8 +173,13 @@ export class WhatsAppAdapter implements Adapter {
     sock.ev.on('message-receipt.update', (rs) => {
       for (const { key, receipt } of rs) {
         if (!key.id || !key.fromMe) continue;
-        const st = receipt.readTimestamp || receipt.playedTimestamp ? 'read' : receipt.receiptTimestamp ? 'delivered' : null;
-        if (st) this.ev.messageUpdate('*', key.id, { status: st });
+        // Je Person: zugestellt, gelesen, abgespielt (Sprachnachricht/Video) mit eigenem Zeitpunkt (Sekunden)
+        const who = receipt.userJid ? jidNormalizedUser(receipt.userJid) : undefined;
+        const name = who ? this.names.get(who) : undefined;
+        const sec = (t: unknown) => (t ? Number(t) * 1000 : 0);
+        if (receipt.receiptTimestamp) this.ev.messageUpdate('*', key.id, { status: 'delivered' }, { id: who, name, ts: sec(receipt.receiptTimestamp) });
+        if (receipt.readTimestamp) this.ev.messageUpdate('*', key.id, { status: 'read' }, { id: who, name, ts: sec(receipt.readTimestamp) });
+        if (receipt.playedTimestamp) this.ev.messageUpdate('*', key.id, { status: 'read' }, { id: who, name, ts: sec(receipt.playedTimestamp), played: true });
       }
     });
     sock.ev.on('messages.reaction', (rs) => {

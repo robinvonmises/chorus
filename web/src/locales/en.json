@@ -1057,5 +1057,20 @@
  "Ungültiger Kalender": "Invalid calendar",
  "Nextcloud: Eintrag ließ sich nicht anlegen": "Nextcloud: entry could not be created",
  "Animierte Emojis": "Animated emojis",
- "Nachrichten nur aus Emojis bewegen sich, solange sie zu sehen sind": "Emoji-only messages move while they're on screen"
+ "Nachrichten nur aus Emojis bewegen sich, solange sie zu sehen sind": "Emoji-only messages move while they're on screen",
+ "Nachrichten-Infos": "Message info",
+ "Gesendet": "Sent",
+ "Empfangen": "Received",
+ "Von {0}": "From {0}",
+ "Zugestellt": "Delivered",
+ "Abgespielt": "Played",
+ "abgespielt": "played",
+ "Noch nicht zugestellt": "Not delivered yet",
+ "Gelesen von": "Read by",
+ "Zugestellt an": "Delivered to",
+ "Zeit unbekannt": "Time unknown",
+ "Unbekannt": "Unknown",
+ "E-Mail meldet nicht, ob gelesen wurde.": "Email doesn't report whether a message was read.",
+ "Telegram meldet in Gruppen nicht, wer gelesen hat.": "Telegram doesn't report who read a message in groups.",
+ "Wer Lesebestätigungen abgeschaltet hat, taucht hier nicht als „gelesen“ auf.": "People who turned off read receipts won't show up as “read” here."
 }

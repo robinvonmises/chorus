@@ -154,12 +154,15 @@ export interface Message {
 }
 
 /** Ereignisse, die Adapter an die Zentrale melden */
+export interface ReceiptBy { id?: string; name?: string; ts?: number; played?: boolean }
+
 export interface AdapterEvents {
   status(s: AccountStatus): void;
   chat(c: Omit<Chat, 'id' | 'accountId' | 'network' | 'unread' | 'pinned' | 'muted'> & { unread?: number }): void;
   /** historic: aus dem Verlauf nachgeladen (keine neue Nachricht, keine Push-Benachrichtigung) */
   message(m: Omit<Message, 'id' | 'chatId' | 'reactions'> & { chatRemoteId: string; reactions?: Reaction[]; historic?: boolean }): void;
-  messageUpdate(chatRemoteId: string, remoteId: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status'>>): void;
+  /** by: wer bestätigt hat (Gruppen), wann und ob abgespielt (Sprachnachricht/Video); ohne by zählt die Bestätigung für den Chat */
+  messageUpdate(chatRemoteId: string, remoteId: string, patch: Partial<Pick<Message, 'text' | 'edited' | 'deleted' | 'status'>>, by?: ReceiptBy): void;
   reactions(chatRemoteId: string, remoteId: string, reactions: Reaction[]): void;
   /** Einzelne Reaktion setzen/entfernen (ersetzt vorherige Reaktion desselben Absenders) */
   reactionChange(chatRemoteId: string, remoteId: string, r: Reaction, remove: boolean): void;
