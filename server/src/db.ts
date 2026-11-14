@@ -50,6 +50,12 @@ export class Store {
         avatar_file_id TEXT, no_avatar INTEGER NOT NULL DEFAULT 0, fetched_at INTEGER NOT NULL DEFAULT 0,
         PRIMARY KEY (account_id, remote_id)
       );
+      -- Zustell-/Lesebestätigungen eigener Nachrichten, je Person (who = '' wenn der Messenger keine Person nennt)
+      CREATE TABLE IF NOT EXISTS receipts (
+        message_id TEXT NOT NULL REFERENCES messages(id) ON DELETE CASCADE ON UPDATE CASCADE,
+        who TEXT NOT NULL, name TEXT, delivered_at INTEGER, read_at INTEGER, played_at INTEGER,
+        PRIMARY KEY (message_id, who)
+      );
     `);
     const cols = (this.db.prepare('PRAGMA table_info(chats)').all() as { name: string }[]).map((c) => c.name);
     const mcols = (this.db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name);
@@ -285,6 +291,19 @@ export class Store {
   findByRemote(accountId: string, remoteId: string): string[] {
     return (this.db.prepare('SELECT m.id FROM messages m JOIN chats c ON c.id=m.chat_id WHERE c.account_id=? AND m.remote_id=?')
       .all(accountId, remoteId) as { id: string }[]).map((r) => r.id);
+  }
+  /** Bestätigung merken; je Art zählt der erste Zeitpunkt */
+  addReceipt(messageId: string, who: string, name: string | undefined, kind: 'delivered' | 'read' | 'played', ts: number) {
+    const col = kind === 'delivered' ? 'delivered_at' : kind === 'read' ? 'read_at' : 'played_at';
+    this.db.prepare(`INSERT INTO receipts(message_id, who, name, ${col}) VALUES(?,?,?,?)
+      ON CONFLICT(message_id, who) DO UPDATE SET name=COALESCE(excluded.name, name), ${col}=COALESCE(${col}, excluded.${col})`)
+      .run(messageId, who, name ?? null, ts);
+  }
+  receipts(messageId: string): { who: string; name: string | null; deliveredAt: number | null; readAt: number | null; playedAt: number | null }[] {
+    // Name fehlt (z. B. WhatsApp-Gruppe): zuletzt bekannter Absendername dieser Person im selben Chat
+    return this.db.prepare(`SELECT r.who, COALESCE(r.name, (SELECT x.sender_name FROM messages x WHERE x.chat_id=m.chat_id AND x.sender_id=r.who AND x.from_me=0 ORDER BY x.ts DESC LIMIT 1)) AS name,
+      r.delivered_at AS deliveredAt, r.read_at AS readAt, r.played_at AS playedAt
+      FROM receipts r JOIN messages m ON m.id=r.message_id WHERE r.message_id=? ORDER BY COALESCE(r.read_at, r.delivered_at)`).all(messageId) as any[];
   }
   getMessage(id: string): Message | null {
     const r = this.db.prepare('SELECT * FROM messages WHERE id=?').get(id);

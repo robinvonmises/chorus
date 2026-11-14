@@ -138,13 +138,19 @@ export class Hub {
         }
         this.emit({ type: 'message', message: msg });
       },
-      messageUpdate: (chatRemote, remoteId, patch) => {
+      messageUpdate: (chatRemote, remoteId, patch, by) => {
         // Sonderformen: '<=123' = alle eigenen bis ID 123 (Lesebestätigung), Chat '*' = Chat unbekannt
         const ids = remoteId.startsWith('<=')
           ? store.outgoingUpTo(chatId(chatRemote), Number(remoteId.slice(2)))
           : chatRemote === '*' || !store.getMessage(`${chatId(chatRemote)}:${remoteId}`) ? store.findByRemote(accountId, remoteId) : [`${chatId(chatRemote)}:${remoteId}`];
         if (patch.status && !remoteId.startsWith('<=')) console.log(`[status] ${remoteId} → ${patch.status} (${ids.length ? 'gefunden' : 'nicht gefunden'})`);
         for (const id of ids) {
+          // Wer wann gelesen hat (Wischen nach links auf eigener Nachricht), unabhängig vom Gesamtstatus
+          if (patch.status === 'delivered' || patch.status === 'read') {
+            try {
+              if (store.getMessage(id)?.fromMe) store.addReceipt(id, by?.id ?? '', by?.name, by?.played ? 'played' : patch.status, by?.ts && by.ts > 1e12 ? by.ts : Date.now());
+            } catch (e) { console.error('[receipt]', e); }
+          }
           // Status nie zurückstufen (z. B. „gelesen“ → „zugestellt“, wenn Bestätigungen in falscher Reihenfolge kommen)
           if (patch.status && rank[patch.status] > 0) {
             const cur = store.getMessage(id)?.status;

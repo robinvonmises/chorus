@@ -631,6 +631,13 @@ app.patch('/api/messages/:id', async (req) => {
   await H(req).edit((req.params as any).id, text);
   return { ok: true };
 });
+/** Wer wann zugestellt/gelesen hat (eigene Nachricht, Wischen nach links) */
+app.get('/api/messages/:id/receipts', async (req) => {
+  const h = H(req); const id = (req.params as any).id;
+  const m = h.store.getMessage(id);
+  if (!m) throw Object.assign(new Error('Nachricht nicht gefunden'), { statusCode: 404 });
+  return { status: m.status, ts: m.ts, receipts: m.fromMe ? h.store.receipts(id) : [] };
+});
 app.post('/api/messages/:id/retry', async (req) => {
   await H(req).retry((req.params as any).id);
   return { ok: true };
