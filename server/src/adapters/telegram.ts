@@ -4,7 +4,7 @@ import { NewMessage, type NewMessageEvent } from 'telegram/events/index.js';
 import { EditedMessage, type EditedMessageEvent } from 'telegram/events/EditedMessage.js';
 import { CustomFile } from 'telegram/client/uploads.js';
 import bigInt from 'big-integer';
-import type { Adapter, AdapterEvents, Attachment, OutgoingFile, Reaction } from '../types.js';
+import type { Adapter, AdapterEvents, Attachment, Mention, OutgoingFile, Reaction } from '../types.js';
 import type { AdapterFactory } from '../hub.js';
 
 /**
@@ -232,15 +232,36 @@ export class TelegramAdapter implements Adapter {
     return this.client;
   }
 
-  async sendText(chat: string, text: string, replyTo?: string | null) {
-    const r = await this.c.sendMessage(await this.peer(chat), { message: text, replyTo: replyTo ? Number(replyTo) : undefined });
+  /** @-Erwähnungen als Verweis auf den Nutzer (benachrichtigt auch Leute ohne Benutzernamen) */
+  private async entities(mentions?: Mention[]) {
+    if (!mentions?.length) return undefined;
+    const out: Api.TypeMessageEntity[] = [];
+    for (const m of mentions) {
+      try {
+        const userId = utils.getInputUser(await this.c.getInputEntity(bigInt(m.id)));
+        out.push(new Api.InputMessageEntityMentionName({ offset: m.start, length: m.length, userId }) as unknown as Api.TypeMessageEntity);
+      } catch { /* unbekannt: bleibt einfacher Text */ }
+    }
+    return out.length ? out : undefined;
+  }
+
+  async members(chat: string) {
+    const users = await this.c.getParticipants(await this.peer(chat), { limit: 300 });
+    return users.filter((u) => u instanceof Api.User && !u.self && !u.deleted && !u.bot)
+      .map((u) => ({ id: u.id.toString(), name: [u.firstName, u.lastName].filter(Boolean).join(' ') || (u.username ? u.username : '') }))
+      .filter((u) => u.name);
+  }
+
+  async sendText(chat: string, text: string, replyTo?: string | null, mentions?: Mention[]) {
+    const r = await this.c.sendMessage(await this.peer(chat), { message: text, replyTo: replyTo ? Number(replyTo) : undefined, formattingEntities: await this.entities(mentions) });
     return String(r.id);
   }
 
-  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null) {
+  async sendFile(chat: string, f: OutgoingFile, caption?: string, replyTo?: string | null, mentions?: Mention[]) {
     const r = await this.c.sendFile(await this.peer(chat), {
       file: new CustomFile(f.name, f.data.length, '', f.data),
       caption: caption ?? '',
+      formattingEntities: await this.entities(mentions),
       replyTo: replyTo ? Number(replyTo) : undefined,
       voiceNote: !!f.voice,
       forceDocument: !f.voice && !/^(image|video)\//.test(f.mime),

@@ -1026,6 +1026,12 @@ html.bubbles-net .chat-view[data-net="demo"] { --bubble-out: var(--bubble-demo);
 .im-albums b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .im-albums small { color: var(--ink-3); }
 
+/* @-Erwähnung: Auswahlliste der Gruppenmitglieder über dem Eingabefeld */
+.mention-menu { position: absolute; bottom: 100%; left: 8px; right: 8px; max-width: 360px; max-height: min(320px, 40vh); overflow-y: auto; -webkit-overflow-scrolling: touch; margin-bottom: 8px; padding: 6px; background: var(--bg); border-radius: 16px; box-shadow: var(--shadow); z-index: 6; animation: pop-in .14s var(--ease-out) both; }
+.mention-menu button { width: 100%; padding: 7px 10px; }
+.mention-menu button.sel { background: var(--bg-2); }
+.mention-av { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: 13px; font-weight: 600; color: var(--accent-ink); background: var(--accent); }
+
 /* Büroklammer-Menü: Gerät, Immich, Nextcloud */
 .composer .plus-btn { flex-shrink: 0; transition: transform .2s var(--ease-out); }
 .composer .plus-btn.on { transform: rotate(45deg); }

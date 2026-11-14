@@ -786,6 +786,7 @@ app.put('/api/chats/:id/autopilot', async (req) => {
   });
 });
 app.get('/api/chats/:id/participants', async (req) => H(req).store.participants((req.params as any).id));
+app.get('/api/chats/:id/members', async (req) => H(req).members((req.params as any).id));
 app.post('/api/chats/:id/ai/compose', async (req) => {
   const id = (req.params as any).id;
   const c = H(req).store.getChat(id);

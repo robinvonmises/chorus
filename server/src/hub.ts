@@ -32,6 +32,7 @@ export { fixKind } from './kinds.js';
 import { fixKind, sniffKind } from './kinds.js';
 import { imageSize } from './imagesize.js';
 import { thumbnail } from './thumbs.js';
+import { findMentions } from './mentions.js';
 
 /** Bildgröße nachtragen, wenn der Messenger keine geliefert hat: so kann die Oberfläche den Platz freihalten */
 function withSize<T extends { kind: string; width?: number; height?: number }>(a: T, data: Buffer): T {
@@ -221,6 +222,38 @@ export class Hub {
     await a.input(field, value);
   }
 
+  /** Gruppenmitglieder für @-Erwähnungen: vom Messenger (10 Min. zwischengespeichert), sonst wer im Chat geschrieben hat */
+  private memberCache = new Map<string, { at: number; list: { id: string; name: string }[] }>();
+  async members(chatId: string): Promise<{ id: string; name: string }[]> {
+    const chat = this.chatOrThrow(chatId);
+    if (chat.kind !== 'group') return [];
+    const known = this.store.participants(chatId).filter((p) => p.id && p.id !== 'me' && p.name);
+    const hit = this.memberCache.get(chatId);
+    if (hit && Date.now() - hit.at < 10 * 60_000) return hit.list;
+    const a = this.adapters.get(chat.accountId);
+    if (!a?.members || this.statuses.get(chat.accountId)?.state !== 'connected') return known;
+    try {
+      const ms = await Promise.race([a.members(chat.remoteId), new Promise<never>((_, rej) => setTimeout(() => rej(new Error('Zeitüberschreitung')), 8000))]);
+      if (!ms.length) return known;
+      const names = new Map(known.map((p) => [p.id, p.name]));
+      const order = new Map(known.map((p, i) => [p.id, i]));
+      // Wer zuletzt geschrieben hat, steht oben; die übrigen alphabetisch
+      const list = ms.map((m) => ({ id: m.id, name: names.get(m.id) || m.name })).filter((m) => m.name)
+        .sort((x, y) => (order.get(x.id) ?? 1e9) - (order.get(y.id) ?? 1e9) || x.name.localeCompare(y.name));
+      this.memberCache.set(chatId, { at: Date.now(), list });
+      return list;
+    } catch (e: any) {
+      console.error(`[${chat.network}] Mitglieder laden: ${e?.message ?? e}`);
+      return known;
+    }
+  }
+  private mentionsIn(chat: Chat, text: string) {
+    if (chat.kind !== 'group' || !text.includes('@')) return undefined;
+    const people = this.memberCache.get(chat.id)?.list ?? this.store.participants(chat.id);
+    const m = findMentions(text, people);
+    return m.length ? m : undefined;
+  }
+
   private adapterFor(chat: Chat): Adapter {
     const a = this.adapters.get(chat.accountId);
     if (!a) throw new Error('Konto ist nicht verbunden');
@@ -283,14 +316,15 @@ export class Hub {
     const chat = this.chatOrThrow(msg.chatId);
     const a = this.adapterFor(chat);
     let send: () => Promise<string>;
-    if (!msg.attachments.length) send = () => a.sendText(chat.remoteId, msg.text, msg.replyToRemoteId);
+    const mentions = this.mentionsIn(chat, msg.text);
+    if (!msg.attachments.length) send = () => a.sendText(chat.remoteId, msg.text, msg.replyToRemoteId, mentions);
     else {
       const att = msg.attachments[0];
       const data = att.fileId ? this.store.readFile(att.fileId) : null;
       if (!data) throw Object.assign(new Error('Anhang ist nicht mehr vorhanden'), { statusCode: 410 });
       const file: OutgoingFile = { data, name: att.name || 'datei', mime: att.mime || 'application/octet-stream', voice: att.kind === 'voice', gif: !!att.gif, durationSec: att.durationSec,
         ...(att.width && att.height ? { width: att.width, height: att.height } : {}) };
-      send = () => a.sendFile(chat.remoteId, file, msg.text || undefined, msg.replyToRemoteId);
+      send = () => a.sendFile(chat.remoteId, file, msg.text || undefined, msg.replyToRemoteId, mentions);
     }
     const tmp = this.store.patchMessage(msg.id, { status: 'pending' })!;
     this.emit({ type: 'message', message: tmp });
@@ -309,7 +343,8 @@ export class Hub {
     const chat = this.chatOrThrow(chatId);
     const a = this.adapterFor(chat);
     const tmp = this.pending(chat, text, replyTo, []);
-    return this.finish(chat, tmp, () => a.sendText(chat.remoteId, text, replyTo));
+    const mentions = this.mentionsIn(chat, text);
+    return this.finish(chat, tmp, () => a.sendText(chat.remoteId, text, replyTo, mentions));
   }
 
   async sendFile(chatId: string, file: OutgoingFile, caption?: string, replyTo?: string | null) {
@@ -325,7 +360,8 @@ export class Hub {
     const dims = kind === 'image' ? imageSize(file.data) : file.width && file.height ? { width: file.width, height: file.height } : null;
     const tmp = this.pending(chat, caption ?? '', replyTo, [{ fileId, name: file.name, mime: file.mime, size: file.data.length, kind, durationSec: file.durationSec, ...(file.gif ? { gif: true } : {}), ...(dims ?? {}) }]);
     // Nicht auf den Messenger warten: Die Nachricht steht ab jetzt im Chat und zeigt selbst „wird gesendet“, „gesendet“ oder „fehlgeschlagen“.
-    const done = this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo))
+    const mentions = caption ? this.mentionsIn(chat, caption) : undefined;
+    const done = this.finish(chat, tmp, () => a.sendFile(chat.remoteId, file, caption, replyTo, mentions))
       .catch((e) => { console.error(`[${chat.network}] Datei senden fehlgeschlagen: ${e?.message || e}`); return null; });
     return { pending: tmp, done };
   }
